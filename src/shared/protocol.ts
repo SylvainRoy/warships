@@ -1,0 +1,41 @@
+import type { FrigateInput, GameEvent, Frigate, Shell, Torpedo, PlayerScore } from "./sim.js";
+
+export type HostAction =
+  | { action: "regenerate" }
+  | { action: "resetScores" }
+  | { action: "kick"; target: string };
+
+export type ClientMessage =
+  | { type: "hello" }
+  | { type: "join"; name: string; token?: string }
+  | ({ type: "input" } & FrigateInput)
+  | ({ type: "host" } & HostAction);
+
+export type LobbyMessage = {
+  type: "lobby";
+  players: Array<{ playerId: string; name: string; slot: number; host: boolean; connected: boolean }>;
+  freeSlots: number;
+  full: boolean;
+};
+
+export type SnapshotFrigate = Pick<
+  Frigate,
+  "playerId" | "name" | "slot" | "x" | "y" | "heading" | "hp" | "status" | "sinkingStartedAt" | "spawnProtectedUntil"
+> & Partial<Omit<Frigate, "playerId" | "name" | "slot" | "x" | "y" | "heading" | "hp" | "status" | "sinkingStartedAt" | "spawnProtectedUntil">>;
+
+export type ServerMessage =
+  | LobbyMessage
+  | { type: "welcome"; playerId: string; token: string; slot: number; world: number[] }
+  | { type: "world"; world: number[] }
+  | {
+      type: "snapshot";
+      tick: number;
+      ackSeq: number;
+      serverTime: number;
+      frigates: SnapshotFrigate[];
+      shells: Shell[];
+      torpedoes: Torpedo[];
+      players: PlayerScore[];
+    }
+  | { type: "event"; event: GameEvent }
+  | { type: "error"; code: "name_taken" | "full" | "invalid_name" | "not_host" | "invalid_action" | "kicked" };

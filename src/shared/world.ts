@@ -1,0 +1,242 @@
+import { GAME_CONFIG } from "./config.js";
+import { mulberry32 } from "./rng.js";
+
+export interface World {
+  seed: number;
+  grid: Uint8Array;
+}
+
+const { columns, rows, tileSize } = GAME_CONFIG.world;
+const generation = GAME_CONFIG.world.generation;
+const cellCount = columns * rows;
+
+function makeNoiseLayer(random: () => number, width: number, height: number): Float32Array {
+  const values = new Float32Array(width * height);
+  for (let i = 0; i < values.length; i += 1) values[i] = random();
+  return values;
+}
+
+function sampleNoise(layer: Float32Array, width: number, height: number, x: number, y: number): number {
+  const x0 = Math.floor(x);
+  const y0 = Math.floor(y);
+  const tx0 = x - x0;
+  const ty0 = y - y0;
+  const tx = tx0 * tx0 * (3 - 2 * tx0);
+  const ty = ty0 * ty0 * (3 - 2 * ty0);
+  const at = (px: number, py: number) => layer[Math.min(height - 1, py) * width + Math.min(width - 1, px)] ?? 0;
+  const top = at(x0, y0) * (1 - tx) + at(x0 + 1, y0) * tx;
+  const bottom = at(x0, y0 + 1) * (1 - tx) + at(x0 + 1, y0 + 1) * tx;
+  return top * (1 - ty) + bottom * ty;
+}
+
+function buildField(seed: number): Float32Array {
+  const random = mulberry32(seed);
+  const scales = [160, 80, 40, 20];
+  const weights = [0.52, 0.27, 0.14, 0.07];
+  const layers = scales.map((scale) => {
+    const width = Math.ceil(GAME_CONFIG.world.width / scale) + 1;
+    const height = Math.ceil(GAME_CONFIG.world.height / scale) + 1;
+    return { scale, width, height, values: makeNoiseLayer(random, width, height) };
+  });
+  const field = new Float32Array(cellCount);
+  for (let y = 0; y < rows; y += 1) {
+    for (let x = 0; x < columns; x += 1) {
+      let value = 0;
+      for (let i = 0; i < layers.length; i += 1) {
+        const layer = layers[i];
+        if (layer) value += sampleNoise(layer.values, layer.width, layer.height, (x * tileSize) / layer.scale, (y * tileSize) / layer.scale) * (weights[i] ?? 0);
+      }
+      field[y * columns + x] = value;
+    }
+  }
+  const islands = mulberry32(seed ^ 0x51f15e);
+  for (let i = 0; i < 18; i += 1) {
+    const cx = 30 + islands() * (columns - 60);
+    const cy = 30 + islands() * (rows - 60);
+    const rx = 12 + islands() * 27;
+    const ry = 10 + islands() * 23;
+    paintIsland(field, cx, cy, rx, ry, 0.13 + islands() * 0.08);
+  }
+  for (let i = 0; i < 100; i += 1) {
+    const cx = 12 + islands() * (columns - 24);
+    const cy = 12 + islands() * (rows - 24);
+    const radius = 2 + islands() * 5;
+    paintIsland(field, cx, cy, radius, radius * (0.65 + islands() * 0.7), 0.1 + islands() * 0.08);
+  }
+  return field;
+}
+
+function paintIsland(field: Float32Array, cx: number, cy: number, rx: number, ry: number, lift: number): void {
+  const minX = Math.max(2, Math.floor(cx - rx));
+  const maxX = Math.min(columns - 3, Math.ceil(cx + rx));
+  const minY = Math.max(2, Math.floor(cy - ry));
+  const maxY = Math.min(rows - 3, Math.ceil(cy + ry));
+  for (let y = minY; y <= maxY; y += 1) {
+    for (let x = minX; x <= maxX; x += 1) {
+      const distance = ((x - cx) / rx) ** 2 + ((y - cy) / ry) ** 2;
+      if (distance < 1) field[y * columns + x] = (field[y * columns + x] ?? 0) + lift * (1 - distance * 0.35);
+    }
+  }
+}
+
+function enforceChannels(grid: Uint8Array): Uint8Array {
+  const wideWater = new Uint8Array(cellCount);
+  for (let y = 1; y < rows - 1; y += 1) {
+    for (let x = 1; x < columns - 1; x += 1) {
+      let allWater = true;
+      for (let by = -1; by <= 1 && allWater; by += 1) {
+        const rowOffset = (y + by) * columns;
+        for (let bx = -1; bx <= 1; bx += 1) {
+          if (grid[rowOffset + x + bx] !== 0) {
+            allWater = false;
+            break;
+          }
+        }
+      }
+      if (allWater) {
+        const rowOffset = y * columns;
+        wideWater[rowOffset + x] = 1;
+        wideWater[rowOffset + x - 1] = 1;
+        wideWater[rowOffset + x + 1] = 1;
+        wideWater[rowOffset - columns + x] = 1;
+        wideWater[rowOffset - columns + x - 1] = 1;
+        wideWater[rowOffset - columns + x + 1] = 1;
+        wideWater[rowOffset + columns + x] = 1;
+        wideWater[rowOffset + columns + x - 1] = 1;
+        wideWater[rowOffset + columns + x + 1] = 1;
+      }
+    }
+  }
+  const result = grid.slice();
+  for (let i = 0; i < cellCount; i += 1) if (grid[i] === 0 && wideWater[i] === 0) result[i] = 1;
+  return result;
+}
+
+function keepLargestWaterRegion(grid: Uint8Array): Uint8Array {
+  const visited = new Uint8Array(cellCount);
+  let largest: number[] = [];
+  const queue = new Int32Array(cellCount);
+  for (let start = 0; start < cellCount; start += 1) {
+    if (grid[start] !== 0 || visited[start] !== 0) continue;
+    let head = 0;
+    let tail = 0;
+    queue[tail++] = start;
+    visited[start] = 1;
+    while (head < tail) {
+      const index = queue[head++] ?? 0;
+      const x = index % columns;
+      const y = Math.floor(index / columns);
+      const left = index - 1;
+      const right = index + 1;
+      const up = index - columns;
+      const down = index + columns;
+      if (x > 0 && visited[left] === 0 && grid[left] === 0) {
+        visited[left] = 1;
+        queue[tail++] = left;
+      }
+      if (x < columns - 1 && visited[right] === 0 && grid[right] === 0) {
+        visited[right] = 1;
+        queue[tail++] = right;
+      }
+      if (y > 0 && visited[up] === 0 && grid[up] === 0) {
+        visited[up] = 1;
+        queue[tail++] = up;
+      }
+      if (y < rows - 1 && visited[down] === 0 && grid[down] === 0) {
+        visited[down] = 1;
+        queue[tail++] = down;
+      }
+    }
+    if (tail > largest.length) largest = Array.from(queue.subarray(0, tail));
+  }
+  const connected = new Uint8Array(cellCount);
+  for (const index of largest) connected[index] = 1;
+  const result = grid.slice();
+  for (let i = 0; i < cellCount; i += 1) if (grid[i] === 0 && connected[i] === 0) result[i] = 1;
+  return result;
+}
+
+function generateAtThreshold(field: Float32Array, threshold: number): Uint8Array {
+  const grid = new Uint8Array(cellCount);
+  for (let y = 0; y < rows; y += 1) {
+    for (let x = 0; x < columns; x += 1) {
+      const border = x < generation.borderTiles || y < generation.borderTiles
+        || x >= columns - generation.borderTiles || y >= rows - generation.borderTiles;
+      grid[y * columns + x] = border || (field[y * columns + x] ?? 0) > threshold ? 1 : 0;
+    }
+  }
+  return keepLargestWaterRegion(enforceChannels(grid));
+}
+
+export function generateWorld(seed: number): World {
+  const normalizedSeed = seed >>> 0;
+  const field = buildField(normalizedSeed);
+  let best: ReturnType<typeof generateAtThreshold> = new Uint8Array(cellCount);
+  let bestDifference = Number.POSITIVE_INFINITY;
+  let lowThreshold: number = generation.minNoiseThreshold;
+  let highThreshold: number = generation.maxNoiseThreshold;
+  for (let attempt = 0; attempt < generation.thresholdAttempts; attempt += 1) {
+    const threshold = (lowThreshold + highThreshold) / 2;
+    const candidate = generateAtThreshold(field, threshold);
+    let land = 0;
+    for (const cell of candidate) land += cell;
+    const coverage = land / cellCount;
+    const difference = coverage < generation.targetLandCoverage
+      ? generation.targetLandCoverage - coverage
+      : coverage - generation.targetLandCoverage;
+    if (difference < bestDifference) {
+      best = candidate;
+      bestDifference = difference;
+    }
+    if (coverage >= generation.minLandCoverage && coverage <= generation.maxLandCoverage) return { seed: normalizedSeed, grid: candidate };
+    if (coverage > generation.targetLandCoverage) lowThreshold = threshold;
+    else highThreshold = threshold;
+  }
+  let bestLand = 0;
+  for (const cell of best) bestLand += cell;
+  const bestCoverage = bestLand / cellCount;
+  if (bestCoverage < generation.minLandCoverage || bestCoverage > generation.maxLandCoverage) {
+    throw new Error(`Could not generate world coverage in range for seed ${normalizedSeed}: ${bestCoverage}`);
+  }
+  return { seed: normalizedSeed, grid: best };
+}
+
+export function isLandAt(world: World, x: number, y: number): boolean {
+  if (x < 0 || y < 0 || x >= GAME_CONFIG.world.width || y >= GAME_CONFIG.world.height) return true;
+  const column = Math.floor(x / tileSize);
+  const row = Math.floor(y / tileSize);
+  return world.grid[row * columns + column] === 1;
+}
+
+export function encodeWorld(grid: Uint8Array): number[] {
+  const encoded: number[] = [];
+  if (grid.length === 0) return encoded;
+  let value = grid[0] ?? 0;
+  let count = 0;
+  for (const cell of grid) {
+    if (cell === value && count < 0x7fffffff) count += 1;
+    else {
+      encoded.push(value, count);
+      value = cell;
+      count = 1;
+    }
+  }
+  encoded.push(value, count);
+  return encoded;
+}
+
+export function decodeWorld(encoded: readonly number[]): Uint8Array {
+  const grid = new Uint8Array(cellCount);
+  let offset = 0;
+  for (let i = 0; i < encoded.length; i += 2) {
+    const value = encoded[i];
+    const count = encoded[i + 1];
+    if ((value !== 0 && value !== 1) || !Number.isInteger(count) || (count ?? 0) <= 0 || offset + (count ?? 0) > cellCount) {
+      throw new Error("Invalid world RLE");
+    }
+    grid.fill(value, offset, offset + (count ?? 0));
+    offset += count ?? 0;
+  }
+  if (offset !== cellCount) throw new Error("Invalid world RLE length");
+  return grid;
+}
