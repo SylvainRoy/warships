@@ -10,7 +10,7 @@ Physical sizes like "2 cm" depend on the player's monitor, so the game uses an a
 
 ## Dimensions
 
-- World size: **10 × 10 screens = 16 000 u × 9 000 u** i.e. 10 reference screens horizontally and 10 vertically.
+- World size: **10 × 10 screens = 16 000 u × 9 000 u**, i.e. 10 reference screens horizontally and 10 vertically.
 - The world is bounded: its border is an impassable edge (rendered as a coastline/cliff). It does not wrap around.
 
 ## Terrain
