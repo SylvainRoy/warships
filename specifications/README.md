@@ -1,6 +1,6 @@
 # Warships — Specifications
 
-**Status: DRAFT v0.3 — all questions resolved, awaiting approval.** Implementation starts only once this file says *Approved*.
+**Status: APPROVED v1.0** (2026-10-16). Changes after approval must be recorded in the changelog.
 
 | # | Document | Content |
 |---|----------|---------|
@@ -22,6 +22,7 @@
 
 ## Changelog
 
+- v1.0 — approved.
 - v0.3 — all questions resolved: no minimap (Q7), land collisions cause 20 HP damage (Q9), defaults accepted for the rest.
 - v0.2 — integrated answers to Q0, Q8, Q10–Q13, Q15, Q16, Q24, Q25.
 - v0.1 — complete rewrite of the initial draft.
