@@ -4,7 +4,7 @@ import { applyFrigateInput, createGameState, createFrigate, createSeededRandom, 
 import type { World } from "../src/shared/world.js";
 
 const dt = 1 / GAME_CONFIG.network.tickRate;
-const quietInput: FrigateInput = { seq: 0, keys: 0, fireCannon: false, fireTorpedo: false };
+const quietInput: FrigateInput = { seq: 0, keys: 0, throttle: 0, fireCannon: false, fireTorpedo: false };
 
 function openWorld(): World {
   return { seed: 1, grid: new Uint8Array(GAME_CONFIG.world.columns * GAME_CONFIG.world.rows) };
@@ -23,82 +23,110 @@ function scores(...ships: Frigate[]) {
 }
 
 describe("frigate movement and land contact", () => {
-  it("reaches and respects forward/reverse caps, drags to a stop, turns on the spot, and cancels W+S", () => {
+  it("uses five throttle settings, clamps and rounds levels, and turns while stopped", () => {
     const world = openWorld();
     let ship = frigate("captain");
-    for (let tick = 0; tick < 90; tick += 1) ship = (awaitApply(ship, { ...quietInput, keys: INPUT_KEYS.forward }, dt, world, tick * dt));
-    expect(ship.speed).toBe(GAME_CONFIG.frigate.maxForwardSpeed);
-    expect(ship.x).toBeCloseTo(5322.67, 1);
+    for (let tick = 0; tick < 60; tick += 1) ship = awaitApply(ship, { ...quietInput, throttle: 3 }, dt, world, tick * dt);
+    expect(ship.speed).toBeCloseTo(80);
+    for (let tick = 60; tick < 120; tick += 1) ship = awaitApply(ship, { ...quietInput, throttle: 3 }, dt, world, tick * dt);
+    expect(ship.speed).toBe(80);
 
-    ship.speed = 0;
-    for (let tick = 0; tick < 60; tick += 1) ship = awaitApply(ship, { ...quietInput, keys: INPUT_KEYS.reverse }, dt, world, tick * dt);
-    expect(ship.speed).toBe(-GAME_CONFIG.frigate.maxReverseSpeed);
-    ship.speed = 160;
-    for (let tick = 0; tick < 120; tick += 1) ship = awaitApply(ship, quietInput, dt, world, tick * dt);
+    ship.speed = 80;
+    for (let tick = 0; tick < 60; tick += 1) ship = awaitApply(ship, quietInput, dt, world, tick * dt);
     expect(ship.speed).toBe(0);
 
-    ship.heading = 0;
-    for (let tick = 0; tick < 30; tick += 1) ship = awaitApply(ship, { ...quietInput, keys: INPUT_KEYS.turnRight }, dt, world, tick * dt);
-    expect(ship.heading).toBeCloseTo(Math.PI / 4, 5);
-    ship.speed = 75;
-    ship = awaitApply(ship, { ...quietInput, keys: INPUT_KEYS.forward | INPUT_KEYS.reverse }, dt, world, 2);
-    expect(ship.speed).toBe(75);
+    let reverse = frigate("reverse");
+    for (let tick = 0; tick < 60; tick += 1) reverse = awaitApply(reverse, { ...quietInput, throttle: -1 }, dt, world, tick * dt);
+    expect(reverse.speed).toBe(-25);
+
+    let oneThird = frigate("one-third");
+    for (let tick = 0; tick < 60; tick += 1) oneThird = awaitApply(oneThird, { ...quietInput, throttle: 1 }, dt, world, tick * dt);
+    expect(oneThird.speed).toBeCloseTo(80 / 3);
+
+    for (const throttle of [7, 2.6]) {
+      let clamped = frigate(`clamped-${throttle}`);
+      for (let tick = 0; tick < 60; tick += 1) clamped = awaitApply(clamped, { ...quietInput, throttle }, dt, world, tick * dt);
+      expect(clamped.speed).toBe(80);
+    }
+
+    let turning = frigate("turning");
+    for (let tick = 0; tick < 30; tick += 1) {
+      turning = awaitApply(turning, { ...quietInput, keys: INPUT_KEYS.turnRight }, dt, world, tick * dt);
+    }
+    expect(turning.heading).toBeCloseTo(Math.PI / 4, 5);
+    expect(turning.speed).toBe(0);
   });
 
-  it("stops at land, damages at contact and every second, and ignores contact during protection", () => {
+  it("scales head-on coast damage by impact speed and ignores shallow slides", () => {
     const world = openWorld();
     const wallColumn = 100;
     for (let row = 0; row < GAME_CONFIG.world.rows; row += 1) world.grid[row * GAME_CONFIG.world.columns + wallColumn] = 1;
     let ship = frigate("coast", 1970, 4500);
-    ship.speed = 160;
-    ship = awaitApply(ship, { ...quietInput, keys: INPUT_KEYS.forward }, dt, world, 0);
-    expect(ship.x).toBe(1970);
+    ship.speed = 80;
+    ship = awaitApply(ship, { ...quietInput, throttle: 3 }, dt, world, 0);
     expect(ship.hp).toBe(80);
-    for (let tick = 1; tick < GAME_CONFIG.network.tickRate; tick += 1) {
-      ship = awaitApply(ship, { ...quietInput, keys: INPUT_KEYS.forward }, dt, world, tick * dt);
-    }
-    expect(ship.hp).toBe(80);
-    ship = awaitApply(ship, { ...quietInput, keys: INPUT_KEYS.forward }, dt, world, 1);
-    expect(ship.hp).toBe(60);
 
-    let protectedShip = frigate("protected", 1970, 4500);
-    protectedShip.speed = 160;
-    protectedShip.spawnProtectedUntil = 3;
-    for (let tick = 0; tick < 90; tick += 1) {
-      protectedShip = awaitApply(protectedShip, { ...quietInput, keys: INPUT_KEYS.forward }, dt, world, tick * dt);
-    }
-    expect(protectedShip.hp).toBe(100);
-    protectedShip = awaitApply(protectedShip, { ...quietInput, keys: INPUT_KEYS.forward }, dt, world, 3);
-    expect(protectedShip.hp).toBe(80);
-  });
+    let slower = frigate("slower", 1970, 4500);
+    slower.speed = 80 / 3;
+    slower = awaitApply(slower, { ...quietInput, throttle: 1 }, dt, world, 0);
+    expect(slower.hp).toBe(93);
 
-  it("slides along a vertical wall without losing forward speed", () => {
-    const world = openWorld();
-    for (let row = 0; row < GAME_CONFIG.world.rows; row += 1) {
-      world.grid[row * GAME_CONFIG.world.columns + 100] = 1;
-    }
-    let ship = frigate("slider", 1970, 4500, Math.PI / 4);
-    ship.speed = 100;
-    const startY = ship.y;
+    let slider = frigate("slider", 1986, 4500, Math.acos(10 / 80));
+    slider.speed = 80;
     for (let tick = 0; tick < 8; tick += 1) {
-      ship = awaitApply(ship, { ...quietInput, keys: INPUT_KEYS.forward }, dt, world, tick * dt);
+      slider = awaitApply(slider, { ...quietInput, throttle: 3 }, dt, world, tick * dt);
     }
-    expect(ship.x).toBe(1970);
-    expect(ship.y).toBeGreaterThan(startY + 20);
-    expect(ship.speed).toBeGreaterThan(0);
+    expect(slider.y).toBeGreaterThan(4500);
+    expect(slider.hp).toBe(100);
+    expect(slider.speed).toBeGreaterThan(0);
   });
 
-  it("self-sinks on sustained land damage and applies the score penalty", () => {
+  it("preserves speed while a 45-degree heading slides along a vertical wall", () => {
+    const world = openWorld();
+    for (let row = 0; row < GAME_CONFIG.world.rows; row += 1) world.grid[row * GAME_CONFIG.world.columns + 100] = 1;
+    let ship = frigate("coast-slide", 1970, 4500, Math.PI / 4);
+    ship.speed = 80;
+    for (let tick = 0; tick < 8; tick += 1) {
+      ship = awaitApply(ship, { ...quietInput, throttle: 3 }, dt, world, tick * dt);
+    }
+    expect(ship.x).toBe(1970);
+    expect(ship.y).toBeGreaterThan(4500);
+    expect(ship.speed).toBe(80);
+  });
+
+  it("does no further damage while pushing against a coast after a head-on impact", () => {
+    const world = openWorld();
+    for (let row = 0; row < GAME_CONFIG.world.rows; row += 1) world.grid[row * GAME_CONFIG.world.columns + 100] = 1;
+    let ship = frigate("coast", 1970, 4500);
+    ship.speed = 80;
+    ship = awaitApply(ship, { ...quietInput, throttle: 3 }, dt, world, 0);
+    for (let tick = 1; tick <= 3 * GAME_CONFIG.network.tickRate; tick += 1) {
+      ship = awaitApply(ship, { ...quietInput, throttle: 3 }, dt, world, tick * dt);
+    }
+    expect(ship.hp).toBe(80);
+  });
+
+  it("ignores land damage during spawn protection", () => {
+    const world = openWorld();
+    for (let row = 0; row < GAME_CONFIG.world.rows; row += 1) world.grid[row * GAME_CONFIG.world.columns + 100] = 1;
+    let protectedShip = frigate("protected", 1970, 4500);
+    protectedShip.speed = 80;
+    protectedShip.spawnProtectedUntil = 3;
+    protectedShip = awaitApply(protectedShip, { ...quietInput, throttle: 3 }, dt, world, 0);
+    expect(protectedShip.hp).toBe(100);
+  });
+
+  it("self-sinks on a damaging land impact and applies the score penalty", () => {
     const world = openWorld();
     for (let row = 0; row < GAME_CONFIG.world.rows; row += 1) world.grid[row * GAME_CONFIG.world.columns + 100] = 1;
     const ship = frigate("coast", 1970, 4500);
-    ship.speed = 160;
+    ship.speed = 80;
     ship.hp = GAME_CONFIG.land.damage;
     const state = createGameState(world);
     state.frigates[ship.playerId] = ship;
     state.scores = scores(ship);
     for (let tick = 0; tick <= GAME_CONFIG.network.tickRate; tick += 1) {
-      stepGame(state, { coast: { ...quietInput, keys: INPUT_KEYS.forward } }, dt, tick * dt);
+      stepGame(state, { coast: { ...quietInput, throttle: 3 } }, dt, tick * dt);
     }
     expect(state.frigates.coast?.status).toBe("sinking");
     expect(state.scores.coast?.score).toBe(-1);
@@ -174,6 +202,7 @@ describe("torpedoes and scoring", () => {
     const shooter = frigate("shooter");
     const target = frigate("target", 5120, 4512);
     const state = createGameState(world);
+    expect(GAME_CONFIG.torpedo.spread).toBeCloseTo(Math.PI / 90);
     state.frigates.shooter = shooter;
     state.frigates.target = target;
     state.scores = scores(shooter, target);
@@ -181,6 +210,7 @@ describe("torpedoes and scoring", () => {
     expect(state.torpedoes).toHaveLength(3);
     const angles = state.torpedoes.map((torpedo) => torpedo.angle).sort((a, b) => a - b);
     expect(angles[0]).toBeCloseTo(-GAME_CONFIG.torpedo.spread);
+    expect(angles[1]).toBeCloseTo(0);
     expect(angles[2]).toBeCloseTo(GAME_CONFIG.torpedo.spread);
     state.torpedoes = [state.torpedoes[1]!];
     for (let tick = 1; tick <= 60; tick += 1) stepGame(state, { shooter: { ...quietInput, fireTorpedo: true }, target: quietInput }, dt, tick * dt);

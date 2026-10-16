@@ -17,7 +17,7 @@ import {
 import { encodeWorld, generateWorld, type World } from "../shared/world.js";
 
 const SLOT_COLOURS = ["#3b82f6", "#ef4444", "#facc15", "#a855f7"] as const;
-const EMPTY_INPUT: FrigateInput = { seq: 0, keys: 0, fireCannon: false, fireTorpedo: false };
+const EMPTY_INPUT: FrigateInput = { seq: 0, keys: 0, throttle: 0, fireCannon: false, fireTorpedo: false };
 
 interface PlayerSession {
   id: string;
@@ -104,6 +104,7 @@ export class Room {
       session.inputQueue.push({
         seq: message.seq,
         keys: message.keys >>> 0,
+        throttle: typeof message.throttle === "number" ? message.throttle : 0,
         fireCannon: Boolean(message.fireCannon),
         fireTorpedo: Boolean(message.fireTorpedo),
       });

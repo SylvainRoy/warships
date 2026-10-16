@@ -29,7 +29,7 @@ Rendering MAY smooth tile edges (e.g. marching squares) so coasts look natural; 
   - a dozen large islands / land masses,
   - many small islands (some just a few tiles), giving cover against torpedoes.
 - **Connectivity MUST be guaranteed**: after generation, a flood fill identifies water regions; every water region not connected to the largest one is turned into land (or connected by carving a channel). Result: all water is reachable by any frigate.
-- **Navigability**: channels between land MUST be at least 3 frigate widths wide (≈ 60 u), otherwise they are widened or filled. Prevents frigates getting stuck in slivers.
+- **Navigability**: channels between land MUST be at least 8 tiles (160 u) wide. Every water tile MUST belong to at least one all-water 8 × 8-tile square; narrower passages are filled. Prevents frigates getting stuck in slivers.
 - The host can regenerate the world at any time (new random seed), see [07-multiplayer.md](07-multiplayer.md).
 
 ## Camera

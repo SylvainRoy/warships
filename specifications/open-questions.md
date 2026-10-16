@@ -36,3 +36,11 @@ All questions raised during the specification phase are resolved. Each line give
 - **Q23 — Stack:** TypeScript + Canvas client, Node.js + WebSocket server.
 - **Q24 — Hosting:** local network first; GCP in a later phase.
 - **Q25 — Repository visibility:** public.
+
+## Playtest decisions — 2026-10-16
+
+- **Q26 — Throttle telegraph:** W/S step the throttle levels −1 full astern, 0 stop, 1 one-third ahead, 2 two-thirds ahead, and 3 full ahead; show all levels and highlight the selected setting in the HUD. Decided 2026-10-16 after playtest.
+- **Q27 — Speed-scaled land damage:** damage is zero below 20 u/s impact speed; otherwise round `20 × min(1, impact speed / 80)`, limited to once per second and disabled during spawn protection. Decided 2026-10-16 after playtest.
+- **Q28 — Channel width:** every water tile belongs to an all-water 8 × 8 tile square, giving channels a minimum width of 160 u. Decided 2026-10-16 after playtest.
+- **Q29 — Frigate speeds:** maximum forward speed 80 u/s, reverse speed 25 u/s, acceleration 40 u/s², with no drag. Decided 2026-10-16 after playtest.
+- **Q30 — Torpedo spread:** fire the three torpedoes at −2°, 0°, and +2°. Decided 2026-10-16 after playtest.

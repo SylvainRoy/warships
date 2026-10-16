@@ -51,6 +51,7 @@ let predictedOwn: Frigate | null = null;
 let snapshots: StoredSnapshot[] = [];
 let pendingInputs: PendingInput[] = [];
 let sequence = 0;
+let throttleLevel = 0;
 let lobbyState: LobbyMessage | null = null;
 let shouldAutoJoin = false;
 let joined = false;
@@ -141,6 +142,7 @@ function handleMessage(message: ServerMessage): void {
       sendJoin();
     }
   } else if (message.type === "welcome") {
+    throttleLevel = 0;
     ownId = message.playerId;
     sessionStorage.setItem("warships.token", message.token);
     sessionStorage.setItem("warships.sessionName", nameInput.value.trim());
@@ -155,6 +157,7 @@ function handleMessage(message: ServerMessage): void {
     predictedOwn = null;
     addFeed("Connected to the battle");
   } else if (message.type === "world") {
+    throttleLevel = 0;
     if (world) world = { ...world, grid: decodeWorld(message.world) };
     worldCache.clear();
     addFeed("World regenerated");
@@ -227,6 +230,7 @@ function renderLobby(state: LobbyMessage): void {
 }
 
 function sendJoin(): void {
+  throttleLevel = 0;
   const name = nameInput.value.trim();
   errorBox.textContent = "";
   if (name.length < 1 || name.length > 16) {
@@ -250,8 +254,6 @@ form.addEventListener("submit", (event) => {
 });
 
 const bindingToKey: Record<string, number> = {
-  KeyW: INPUT_KEYS.forward,
-  KeyS: INPUT_KEYS.reverse,
   KeyA: INPUT_KEYS.turnLeft,
   KeyD: INPUT_KEYS.turnRight,
   ArrowLeft: INPUT_KEYS.cannonLeft,
@@ -263,7 +265,7 @@ const bindingToKey: Record<string, number> = {
 };
 const gameCodes = new Set([
   ...Object.keys(bindingToKey),
-  "ShiftRight", "Backslash", "IntlBackslash", "Tab", "Escape", "F3",
+  "KeyW", "KeyS", "ShiftRight", "Backslash", "IntlBackslash", "Tab", "Escape", "F3",
 ]);
 
 window.addEventListener("keydown", (event) => {
@@ -284,6 +286,14 @@ window.addEventListener("keydown", (event) => {
     return;
   }
   if (event.repeat) return;
+  if (event.code === "KeyW") {
+    throttleLevel = Math.min(3, throttleLevel + 1);
+    return;
+  }
+  if (event.code === "KeyS") {
+    throttleLevel = Math.max(-1, throttleLevel - 1);
+    return;
+  }
   if (event.code === "ShiftRight") cannonFirePending = true;
   if (event.code === "Backslash" || event.code === "IntlBackslash") torpedoFirePending = true;
   pressed.add(event.code);
@@ -319,6 +329,7 @@ function onSnapshot(snapshot: Snapshot): void {
   snapshots = snapshots.slice(-6);
   const own = snapshot.frigates.find((frigate) => frigate.playerId === ownId) as Frigate | undefined;
   if (own) {
+    if (own.status !== "alive") throttleLevel = 0;
     const acknowledgedAt = pendingInputs.find((entry) => entry.input.seq === snapshot.ackSeq)?.sentAt;
     if (acknowledgedAt !== undefined) {
       ping = performance.now() - acknowledgedAt;
@@ -346,6 +357,7 @@ function nextInput(): FrigateInput {
   return {
     seq: ++sequence,
     keys,
+    throttle: throttleLevel,
     fireCannon: cannonFirePending,
     fireTorpedo: torpedoFirePending,
   };
@@ -776,20 +788,47 @@ function drawHud(snapshot: Snapshot, frigate: Frigate | undefined, now: number, 
   });
   if (frigate) {
     ctx.fillStyle = "rgba(5, 20, 29, .78)";
-    ctx.fillRect(20, logicalHeight - 86, 280, 66);
+    ctx.fillRect(20, logicalHeight - 130, 380, 110);
     ctx.fillStyle = "#90a8b0";
     ctx.font = "500 10px DM Mono, monospace";
-    ctx.fillText("HULL INTEGRITY", 34, logicalHeight - 72);
+    ctx.fillText("HULL INTEGRITY", 34, logicalHeight - 116);
     ctx.fillStyle = "rgba(215, 237, 238, .17)";
-    ctx.fillRect(34, logicalHeight - 52, 248, 7);
+    ctx.fillRect(34, logicalHeight - 96, 248, 7);
     ctx.fillStyle = frigate.hp > 35 ? "#62d3b2" : "#ff776c";
-    ctx.fillRect(34, logicalHeight - 52, 248 * Math.max(0, frigate.hp / GAME_CONFIG.player.maxHp), 7);
+    ctx.fillRect(34, logicalHeight - 96, 248 * Math.max(0, frigate.hp / GAME_CONFIG.player.maxHp), 7);
     ctx.fillStyle = "#e8f4f4";
     ctx.font = "600 11px DM Mono, monospace";
-    ctx.fillText(`${frigate.hp} HP`, 34, logicalHeight - 37);
+    ctx.fillText(`${frigate.hp} HP`, 34, logicalHeight - 81);
     ctx.fillStyle = "#91a8ae";
-    ctx.fillText(`CANNON ${Math.max(0, frigate.cannonReadyAt - now).toFixed(1)}s`, 111, logicalHeight - 37);
-    ctx.fillText(`TORPEDO ${Math.max(0, frigate.torpedoReadyAt - now).toFixed(1)}s`, 211, logicalHeight - 37);
+    ctx.fillText(`CANNON ${Math.max(0, frigate.cannonReadyAt - now).toFixed(1)}s`, 111, logicalHeight - 81);
+    ctx.fillText(`TORPEDO ${Math.max(0, frigate.torpedoReadyAt - now).toFixed(1)}s`, 211, logicalHeight - 81);
+    ctx.fillStyle = "#90a8b0";
+    ctx.font = "500 10px DM Mono, monospace";
+    ctx.textBaseline = "middle";
+    ctx.fillText("THROTTLE", 34, logicalHeight - 58);
+    const steps = ["ASTERN", "STOP", "1/3", "2/3", "FULL"];
+    const activeStep = throttleLevel + 1;
+    const stepX = 108;
+    const stepY = logicalHeight - 69;
+    const stepWidth = 52;
+    const stepGap = 4;
+    const stepHeight = 22;
+    ctx.textAlign = "center";
+    steps.forEach((label, index) => {
+      const x = stepX + index * (stepWidth + stepGap);
+      ctx.fillStyle = index === activeStep ? "rgba(100, 223, 202, .3)" : "rgba(215, 237, 238, .08)";
+      ctx.fillRect(x, stepY, stepWidth, stepHeight);
+      ctx.fillStyle = index === activeStep ? "#bfffee" : "#91a8ae";
+      ctx.font = "600 10px DM Mono, monospace";
+      ctx.fillText(label, x + stepWidth / 2, stepY + stepHeight / 2);
+    });
+    const throttleLabels = ["FULL ASTERN", "STOP", "1/3 AHEAD", "2/3 AHEAD", "FULL AHEAD"];
+    ctx.textAlign = "left";
+    ctx.textBaseline = "alphabetic";
+    ctx.fillStyle = "#d7e5e9";
+    ctx.font = "600 11px DM Mono, monospace";
+    ctx.fillText(throttleLabels[activeStep] ?? "STOP", 34, logicalHeight - 36);
+    ctx.textBaseline = "top";
   }
   const feedNow = performance.now();
   const visibleFeed = feed.filter((entry) => feedNow - entry.at < 5000).slice(-5);

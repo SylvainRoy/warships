@@ -101,7 +101,8 @@ async function main(): Promise<void> {
     players[0]!.send({
       type: "input",
       seq: ++seqA,
-      keys: INPUT_KEYS.forward,
+      keys: 0,
+      throttle: 3,
       fireCannon: false,
       fireTorpedo: false,
     });
@@ -109,6 +110,7 @@ async function main(): Promise<void> {
       type: "input",
       seq: ++seqB,
       keys: 0,
+      throttle: 0,
       fireCannon: tick === 0,
       fireTorpedo: tick === 0,
     });
@@ -164,7 +166,8 @@ async function main(): Promise<void> {
       player.send({
         type: "input",
         seq,
-        keys: INPUT_KEYS.forward | INPUT_KEYS.turnRight,
+        keys: INPUT_KEYS.turnRight,
+        throttle: 3,
         fireCannon,
         fireTorpedo,
       });

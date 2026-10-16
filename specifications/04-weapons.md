@@ -37,8 +37,8 @@ Underwater weapon: straight-line, fast, blocked by land.
 
 ### Firing
 
-- `\` fires a **spread of 3 torpedoes** simultaneously at bearing −1°, 0°, +1°. They start from the frigate's centre.
-- Torpedo speed **240 u/s** (1.5 × max frigate speed).
+- `\` fires a **spread of 3 torpedoes** simultaneously at bearing −2°, 0°, +2°. They start from the frigate's centre.
+- Torpedo speed **240 u/s** (3 × max frigate speed).
 - **Reload: 8 s**.
 - Torpedoes do not collide with the firer's own frigate during the first 0.5 s (arming delay); after that they can hit it.
 
@@ -46,4 +46,4 @@ Underwater weapon: straight-line, fast, blocked by land.
 
 - A torpedo travels in a straight line until it **touches land, a frigate, or the world edge**, where it explodes. There is no maximum range ("exit the screen" in the original draft means the world edge).
 - Torpedo vs torpedo, torpedo vs shell: no interaction.
-- Damage: **50 HP per torpedo** on the frigate it touches (no area damage). Because of the 1° spread, at close range several torpedoes of the same spread can hit the same frigate.
+- Damage: **50 HP per torpedo** on the frigate it touches (no area damage). Because of the 2° spread, at close range several torpedoes of the same spread can hit the same frigate.

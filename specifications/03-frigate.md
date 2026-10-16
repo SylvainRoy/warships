@@ -9,25 +9,26 @@
 
 ## Movement model
 
-The frigate has inertia: keys apply acceleration, not instant speed.
+The frigate has inertia: the throttle sets a target speed, and acceleration moves the frigate toward it.
 
 | Parameter | Value |
 |---|---|
-| Max forward speed | **160 u/s** — crosses a screen (1600 u) in 10 s |
-| Max reverse speed | 50 u/s |
-| Forward acceleration (W) | 80 u/s² — full speed in 2 s |
-| Reverse acceleration (S) | 80 u/s² (also acts as a brake while moving forward) |
-| Drag when no key pressed | speed decays to 0 in ≈ 4 s |
+| Maximum forward speed | **80 u/s** — crosses a screen (1600 u) in 20 s |
+| Maximum reverse speed | **25 u/s** |
+| Acceleration and braking | **40 u/s²** in either direction; from rest, full speed takes 2 s |
+| Throttle levels | −1 full astern; 0 stop; 1 one-third ahead; 2 two-thirds ahead; 3 full ahead |
+| Drag | None; at throttle 0, the frigate decelerates toward a stop at 40 u/s² |
 | Rotation (A / D) | 45 °/s, independent of speed: a stopped frigate can turn on the spot |
 
 - Velocity is always along the hull heading (no sideways drift).
-- W and S together cancel; A and D together cancel.
+- W and S each step the throttle setting by one level; key auto-repeat is ignored. The simulation clamps throttle levels to −1 through 3.
+- A and D together cancel.
 
 ## Collisions
 
-- **Frigate vs land / world edge**: the frigate stops at the shore (velocity component into the land is cancelled, it can slide along the coast) and takes **20 HP of damage**, the same as one cannon shell.
-  - Land damage is applied when contact starts, then at most once per second while contact continues (pushing against a coast costs 20 HP per second).
-  - Land damage applies at any speed, including in reverse, but not during spawn protection.
+- **Frigate vs land / world edge**: the frigate stops at the shore (velocity component into the land is cancelled, it can slide along the coast).
+  - Impact speed is the velocity component into the coast. Damage is 0 below 20 u/s; otherwise it is `round(20 × min(1, impact speed / 80))` HP.
+  - Damage is applied on new contact, then at most once per second while contact continues. Spawn protection prevents land damage.
   - A frigate sunk by land damage counts as sinking itself ([06-game-rules.md](06-game-rules.md#scoring)).
 - **Frigate vs frigate**: frigates cannot overlap; they are pushed apart and both lose their speed. No damage, i.e. no ramming.
 

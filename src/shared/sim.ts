@@ -3,16 +3,14 @@ import { mulberry32 } from "./rng.js";
 import { generateWorld, isLandAt, type World } from "./world.js";
 
 export const INPUT_KEYS = {
-  forward: 1 << 0,
-  reverse: 1 << 1,
-  turnLeft: 1 << 2,
-  turnRight: 1 << 3,
-  cannonLeft: 1 << 4,
-  cannonRight: 1 << 5,
-  rangeUp: 1 << 6,
-  rangeDown: 1 << 7,
-  torpedoLeft: 1 << 8,
-  torpedoRight: 1 << 9,
+  turnLeft: 1 << 0,
+  turnRight: 1 << 1,
+  cannonLeft: 1 << 2,
+  cannonRight: 1 << 3,
+  rangeUp: 1 << 4,
+  rangeDown: 1 << 5,
+  torpedoLeft: 1 << 6,
+  torpedoRight: 1 << 7,
 } as const;
 
 export type FrigateStatus = "alive" | "sinking" | "waiting";
@@ -21,6 +19,7 @@ export type ExplosionKind = "splash" | "land" | "hit";
 export interface FrigateInput {
   seq: number;
   keys: number;
+  throttle: number;
   fireCannon: boolean;
   fireTorpedo: boolean;
 }
@@ -169,44 +168,54 @@ export function applyFrigateInput(
   const torpedoTurn = Number(isPressed(keys, INPUT_KEYS.torpedoRight)) - Number(isPressed(keys, INPUT_KEYS.torpedoLeft));
   frigate.torpedoBearing = normalizeAngle(frigate.torpedoBearing + torpedoTurn * GAME_CONFIG.torpedo.bearingSpeed * dt);
 
-  const forward = isPressed(keys, INPUT_KEYS.forward);
-  const reverse = isPressed(keys, INPUT_KEYS.reverse);
-  if (forward !== reverse) {
-    const acceleration = forward ? GAME_CONFIG.frigate.acceleration : -GAME_CONFIG.frigate.acceleration;
-    frigate.speed += acceleration * dt;
-    frigate.speed = Math.max(-GAME_CONFIG.frigate.maxReverseSpeed, Math.min(GAME_CONFIG.frigate.maxForwardSpeed, frigate.speed));
-    if (forward && frigate.speed < 0) frigate.speed = Math.min(0, frigate.speed);
-    if (reverse && frigate.speed > 0) frigate.speed = Math.max(0, frigate.speed);
-  } else if (!forward) {
-    const amount = GAME_CONFIG.frigate.drag * dt;
-    frigate.speed = Math.abs(frigate.speed) <= amount ? 0 : frigate.speed - Math.sign(frigate.speed) * amount;
-  }
+  const level = Math.max(-1, Math.min(3, Math.round(input.throttle) || 0));
+  const targetSpeed = level < 0
+    ? -GAME_CONFIG.frigate.maxReverseSpeed
+    : GAME_CONFIG.frigate.maxForwardSpeed * level / 3;
+  const speedChange = GAME_CONFIG.frigate.acceleration * dt;
+  const speedDifference = targetSpeed - frigate.speed;
+  const tolerance = Number.EPSILON * GAME_CONFIG.frigate.maxForwardSpeed * 2;
+  frigate.speed = Math.abs(speedDifference) <= speedChange + tolerance
+    ? targetSpeed
+    : frigate.speed + Math.sign(speedDifference) * speedChange;
 
-  const dx = Math.cos(frigate.heading) * frigate.speed * dt;
-  const dy = Math.sin(frigate.heading) * frigate.speed * dt;
+  const vx = Math.cos(frigate.heading) * frigate.speed;
+  const vy = Math.sin(frigate.heading) * frigate.speed;
+  const dx = vx * dt;
+  const dy = vy * dt;
   let blocked = false;
+  let impactSpeed = 0;
   if (!canOccupy(frigate, frigate.x + dx, frigate.y + dy, frigate.heading, world)) {
     blocked = true;
-    if (canOccupy(frigate, frigate.x + dx, frigate.y, frigate.heading, world)) frigate.x += dx;
-    else if (canOccupy(frigate, frigate.x, frigate.y + dy, frigate.heading, world)) frigate.y += dy;
-    else frigate.speed = 0;
+    if (canOccupy(frigate, frigate.x + dx, frigate.y, frigate.heading, world)) {
+      frigate.x += dx;
+      impactSpeed = Math.abs(vy);
+    } else if (canOccupy(frigate, frigate.x, frigate.y + dy, frigate.heading, world)) {
+      frigate.y += dy;
+      impactSpeed = Math.abs(vx);
+    } else {
+      impactSpeed = Math.abs(frigate.speed);
+      frigate.speed = 0;
+    }
   } else {
     frigate.x += dx;
     frigate.y += dy;
   }
 
   if (blocked) {
-    if (!frigate.landContact || now - frigate.lastLandDamageAt >= GAME_CONFIG.land.damageInterval) {
-      if (now >= frigate.spawnProtectedUntil) {
-        frigate.hp = Math.max(0, frigate.hp - GAME_CONFIG.land.damage);
-        frigate.lastDamageSource = frigate.playerId;
-        frigate.lastLandDamageAt = now;
-      }
+    const damage = impactSpeed < GAME_CONFIG.land.grazeSpeed
+      ? 0
+      : Math.round(GAME_CONFIG.land.damage * Math.min(1, impactSpeed / GAME_CONFIG.frigate.maxForwardSpeed));
+    if (damage > 0
+      && now >= frigate.spawnProtectedUntil
+      && (!frigate.landContact || now - frigate.lastLandDamageAt >= GAME_CONFIG.land.damageInterval)) {
+      frigate.hp = Math.max(0, frigate.hp - damage);
+      frigate.lastDamageSource = frigate.playerId;
+      frigate.lastLandDamageAt = now;
     }
     frigate.landContact = true;
   } else {
     frigate.landContact = false;
-    frigate.lastLandDamageAt = now;
   }
   return frigate;
 }
@@ -408,7 +417,7 @@ export function stepGame(state: GameState, inputs: Record<string, FrigateInput |
     if (frigate.status === "sinking" && now >= frigate.sinkingStartedAt + GAME_CONFIG.player.sinkAnimation) {
       frigate.status = "waiting";
     }
-    const input = inputs[frigate.playerId] ?? { seq: 0, keys: 0, fireCannon: false, fireTorpedo: false };
+    const input = inputs[frigate.playerId] ?? { seq: 0, keys: 0, throttle: 0, fireCannon: false, fireTorpedo: false };
     if (frigate.status === "alive") {
       const updated = applyFrigateInput(frigate, input, dt, state.world, now);
       Object.assign(frigate, updated);

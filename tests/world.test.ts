@@ -42,35 +42,46 @@ function waterRegionCount(grid: Uint8Array): number {
   return regions;
 }
 
-function hasWater3x3(grid: Uint8Array, x: number, y: number): boolean {
-  for (let top = Math.max(0, y - 2); top <= Math.min(rows - 3, y); top += 1) {
-    for (let left = Math.max(0, x - 2); left <= Math.min(columns - 3, x); left += 1) {
-      let allWater = true;
-      for (let dy = 0; dy < 3 && allWater; dy += 1) {
-        for (let dx = 0; dx < 3; dx += 1) {
-          if (grid[(top + dy) * columns + left + dx] !== 0) {
-            allWater = false;
-            break;
-          }
-        }
-      }
-      if (allWater) return true;
+function landSummedArea(grid: Uint8Array): Int32Array {
+  const stride = columns + 1;
+  const area = new Int32Array(stride * (rows + 1));
+  for (let y = 0; y < rows; y += 1) {
+    let rowTotal = 0;
+    for (let x = 0; x < columns; x += 1) {
+      rowTotal += grid[y * columns + x] ?? 0;
+      area[(y + 1) * stride + x + 1] = area[y * stride + x + 1]! + rowTotal;
+    }
+  }
+  return area;
+}
+
+function hasWaterSquare(area: Int32Array, x: number, y: number, size: number): boolean {
+  const stride = columns + 1;
+  for (let top = Math.max(0, y - size + 1); top <= Math.min(rows - size, y); top += 1) {
+    for (let left = Math.max(0, x - size + 1); left <= Math.min(columns - size, x); left += 1) {
+      const land = area[(top + size) * stride + left + size]!
+        - area[top * stride + left + size]!
+        - area[(top + size) * stride + left]!
+        + area[top * stride + left]!;
+      if (land === 0) return true;
     }
   }
   return false;
 }
 
 describe("procedural world", () => {
-  it("keeps coverage, connectivity, and three-tile channels for five seeds", () => {
+  it("keeps coverage, connectivity, and eight-tile channels for five seeds", () => {
     for (const seed of [1, 2, 3, 17, 123456]) {
       const world = generateWorld(seed);
       const coverage = countLand(world.grid) / world.grid.length;
+      const landArea = landSummedArea(world.grid);
+      const channelSize = GAME_CONFIG.world.generation.minChannelTiles;
       expect(coverage).toBeGreaterThanOrEqual(0.2);
       expect(coverage).toBeLessThanOrEqual(0.3);
       expect(waterRegionCount(world.grid)).toBe(1);
       for (let y = 0; y < rows; y += 1) {
         for (let x = 0; x < columns; x += 1) {
-          if (world.grid[y * columns + x] === 0) expect(hasWater3x3(world.grid, x, y)).toBe(true);
+          if (world.grid[y * columns + x] === 0) expect(hasWaterSquare(landArea, x, y, channelSize)).toBe(true);
         }
       }
     }

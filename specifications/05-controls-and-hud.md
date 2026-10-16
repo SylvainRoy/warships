@@ -11,8 +11,8 @@ The game MUST work on both **Mac and PC** keyboards (Windows/Linux). Implementat
 
 | Action | Code | QWERTY key |
 |---|---|---|
-| Accelerate forward | `KeyW` | W |
-| Accelerate backward / brake | `KeyS` | S |
+| Increase throttle one level | `KeyW` | W |
+| Decrease throttle one level | `KeyS` | S |
 | Rotate hull left | `KeyA` | A |
 | Rotate hull right | `KeyD` | D |
 | Cannon bearing left | `ArrowLeft` | ← |
@@ -27,6 +27,7 @@ The game MUST work on both **Mac and PC** keyboards (Windows/Linux). Implementat
 | Host menu | `Escape` | Esc |
 
 - Holding a fire key does not auto-fire: one press = one salvo.
+- Each non-repeating W press increases throttle by one level; each non-repeating S press decreases it. The five levels are full astern, stop, one-third ahead, two-thirds ahead, and full ahead.
 - Default browser behaviour of these keys (scrolling, focus change) MUST be suppressed while the game has focus.
 - Key remapping: out of scope for v1.
 
@@ -39,6 +40,6 @@ The game MUST work on both **Mac and PC** keyboards (Windows/Linux). Implementat
 ## HUD (screen space)
 
 - Top-right: compact scoreboard (name, colour, score) for all connected players, own line highlighted.
-- Bottom-left: own HP bar, cannon and torpedo reload status.
+- Bottom-left: own HP bar, cannon and torpedo reload status, plus a throttle telegraph with the selected level highlighted and its full label.
 - Event feed (top-left): short messages "Alice sank Bob", "Carol joined", "World regenerated", fading after 5 s.
 - Death screen: "Sunk by *X*" + respawn countdown.

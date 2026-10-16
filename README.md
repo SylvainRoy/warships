@@ -18,7 +18,7 @@ Share `http://<server-computer-LAN-IP>:8080` with players on the same network. T
 
 | Action | Key (`KeyboardEvent.code`) |
 | --- | --- |
-| Forward / brake and reverse | `KeyW` / `KeyS` |
+| Throttle up / down one level | `KeyW` / `KeyS` |
 | Turn hull | `KeyA` / `KeyD` |
 | Aim cannon | `ArrowLeft` / `ArrowRight` |
 | Cannon range | `ArrowUp` / `ArrowDown` |

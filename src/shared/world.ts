@@ -79,36 +79,51 @@ function paintIsland(field: Float32Array, cx: number, cy: number, rx: number, ry
   }
 }
 
+function summedArea(values: Uint8Array, width: number, height: number): Int32Array {
+  const stride = width + 1;
+  const result = new Int32Array(stride * (height + 1));
+  for (let y = 0; y < height; y += 1) {
+    let rowTotal = 0;
+    for (let x = 0; x < width; x += 1) {
+      rowTotal += values[y * width + x] ?? 0;
+      result[(y + 1) * stride + x + 1] = result[y * stride + x + 1]! + rowTotal;
+    }
+  }
+  return result;
+}
+
+function rectangleSum(area: Int32Array, stride: number, left: number, top: number, right: number, bottom: number): number {
+  return area[bottom * stride + right]!
+    - area[top * stride + right]!
+    - area[bottom * stride + left]!
+    + area[top * stride + left]!;
+}
+
 function enforceChannels(grid: Uint8Array): Uint8Array {
-  const wideWater = new Uint8Array(cellCount);
-  for (let y = 1; y < rows - 1; y += 1) {
-    for (let x = 1; x < columns - 1; x += 1) {
-      let allWater = true;
-      for (let by = -1; by <= 1 && allWater; by += 1) {
-        const rowOffset = (y + by) * columns;
-        for (let bx = -1; bx <= 1; bx += 1) {
-          if (grid[rowOffset + x + bx] !== 0) {
-            allWater = false;
-            break;
-          }
-        }
-      }
-      if (allWater) {
-        const rowOffset = y * columns;
-        wideWater[rowOffset + x] = 1;
-        wideWater[rowOffset + x - 1] = 1;
-        wideWater[rowOffset + x + 1] = 1;
-        wideWater[rowOffset - columns + x] = 1;
-        wideWater[rowOffset - columns + x - 1] = 1;
-        wideWater[rowOffset - columns + x + 1] = 1;
-        wideWater[rowOffset + columns + x] = 1;
-        wideWater[rowOffset + columns + x - 1] = 1;
-        wideWater[rowOffset + columns + x + 1] = 1;
+  const channelSize = generation.minChannelTiles;
+  const stride = columns + 1;
+  const landArea = summedArea(grid, columns, rows);
+  const eroded = new Uint8Array(cellCount);
+  for (let top = 0; top <= rows - channelSize; top += 1) {
+    for (let left = 0; left <= columns - channelSize; left += 1) {
+      if (rectangleSum(landArea, stride, left, top, left + channelSize, top + channelSize) === 0) {
+        eroded[top * columns + left] = 1;
       }
     }
   }
+  const erodedArea = summedArea(eroded, columns, rows);
   const result = grid.slice();
-  for (let i = 0; i < cellCount; i += 1) if (grid[i] === 0 && wideWater[i] === 0) result[i] = 1;
+  for (let y = 0; y < rows; y += 1) {
+    for (let x = 0; x < columns; x += 1) {
+      const index = y * columns + x;
+      if (grid[index] !== 0) continue;
+      const left = Math.max(0, x - channelSize + 1);
+      const right = Math.min(x, columns - channelSize) + 1;
+      const top = Math.max(0, y - channelSize + 1);
+      const bottom = Math.min(y, rows - channelSize) + 1;
+      if (left >= right || top >= bottom || rectangleSum(erodedArea, stride, left, top, right, bottom) === 0) result[index] = 1;
+    }
+  }
   return result;
 }
 
