@@ -10,12 +10,12 @@ Physical sizes like "2 cm" depend on the player's monitor, so the game uses an a
 
 ## Dimensions
 
-- World size: **10 × 10 screens = 16 000 u × 9 000 u** (proposed, Q4: the draft said "10 screens horizontally and vertically"; with a 16:9 screen this makes a non-square world. Alternative: a square 16 000 × 16 000 u world).
+- World size: **10 × 10 screens = 16 000 u × 9 000 u** i.e. 10 reference screens horizontally and 10 vertically.
 - The world is bounded: its border is an impassable edge (rendered as a coastline/cliff). It does not wrap around.
 
 ## Terrain
 
-Two terrain types, stored as a grid of **tiles of 20 u × 20 u** (800 × 450 tiles) (proposed):
+Two terrain types, stored as a grid of **tiles of 20 u × 20 u** (800 × 450 tiles):
 
 - **Water** — navigable; torpedoes travel through it.
 - **Land** — islands and larger land masses (including coasts along the world border). Blocks frigates and torpedoes. Cannon balls fly over it.
@@ -25,7 +25,7 @@ Rendering MAY smooth tile edges (e.g. marching squares) so coasts look natural; 
 ## Generation
 
 - The world is generated procedurally from a **seed** (integer) on the server. Clients receive the seed + generation algorithm version, or the tile grid itself (implementation choice).
-- Target land coverage: **20–30 %** of the world (proposed, Q5), made of:
+- Target land coverage: **20–30 %** of the world, made of:
   - a dozen large islands / land masses,
   - many small islands (some just a few tiles), giving cover against torpedoes.
 - **Connectivity MUST be guaranteed**: after generation, a flood fill identifies water regions; every water region not connected to the largest one is turned into land (or connected by carving a channel). Result: all water is reachable by any frigate.
@@ -34,10 +34,10 @@ Rendering MAY smooth tile edges (e.g. marching squares) so coasts look natural; 
 
 ## Camera
 
-- The camera is centred on the player's own frigate and does not rotate (north is always up) (proposed, Q6).
+- The camera is centred on the player's own frigate and does not rotate (north is always up).
 - Near world edges the camera clamps so it never shows outside the world (the frigate is then off-centre).
-- A **minimap** (bottom-right corner, ≈ 200 × 112 px) shows land, the player's position and viewport rectangle (proposed). Whether it also shows enemies: Q7 (proposed: no).
+- There is **no minimap**: players only know the part of the world they can see.
 
 ## Visibility
 
-No fog of war: anything inside the player's viewport is visible (proposed).
+No fog of war: anything inside the player's viewport is visible.

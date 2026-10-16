@@ -10,7 +10,7 @@
 |---|---|
 | Players per game | 1 to 4, first come first served |
 | Games per server | Exactly one, running indefinitely |
-| Mode | Free-for-all deathmatch, no teams (proposed, Q1) |
+| Mode | Free-for-all deathmatch, no teams |
 | View | 2D top-down, camera follows own frigate |
 | Platform | Desktop web browser, keyboard only. No installation for players |
 | Session control | First connected player is the **host**: can regenerate the world and reset scores |
@@ -26,10 +26,10 @@
 
 - Mobile / touch controls, gamepads.
 - Accounts, persistence of scores across server restarts, matchmaking, multiple rooms per server.
-- AI-controlled boats (bots). (Q2)
+- AI-controlled boats (bots).
 - Power-ups, ship upgrades, different ship classes.
 - Chat.
-- Sound and music (proposed out of scope, Q3).
+- Sound and music.
 
 ## Glossary
 

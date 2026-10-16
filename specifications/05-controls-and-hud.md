@@ -23,23 +23,22 @@ The game MUST work on both **Mac and PC** keyboards (Windows/Linux). Implementat
 | Torpedo bearing left | `BracketLeft` | [ |
 | Torpedo bearing right | `BracketRight` | ] |
 | Fire torpedoes | `Backslash` (or `IntlBackslash`) | \ |
-| Show full scoreboard (hold) | `Tab` | Tab (proposed) |
-| Host menu | `Escape` | Esc (proposed) |
+| Show full scoreboard (hold) | `Tab` | Tab |
+| Host menu | `Escape` | Esc |
 
-- Holding a fire key does not auto-fire: one press = one salvo (proposed).
+- Holding a fire key does not auto-fire: one press = one salvo.
 - Default browser behaviour of these keys (scrolling, focus change) MUST be suppressed while the game has focus.
-- Key remapping: out of scope for v1 (proposed).
+- Key remapping: out of scope for v1.
 
 ## In-world indicators
 
-- **Cannon target**: a green "modern" reticle (circle with four ticks and a centre dot) drawn on the map at the aim point, rendered above terrain. Its radius equals the damage radius (60 u), so the player sees the impact zone. While reloading it is dimmed and shows the reload progress as a circular arc (proposed).
-- **Torpedo arrow**: a green arrow drawn on a circle of radius ≈ 50 u around the frigate, pointing to the torpedo bearing. Dimmed with progress indicator while reloading (proposed).
-- Indicators are visible **only to their owner** (proposed, Q17).
+- **Cannon target**: a green "modern" reticle (circle with four ticks and a centre dot) drawn on the map at the aim point, rendered above terrain. Its radius equals the damage radius (60 u), so the player sees the impact zone. While reloading it is dimmed and shows the reload progress as a circular arc.
+- **Torpedo arrow**: a green arrow drawn on a circle of radius ≈ 50 u around the frigate, pointing to the torpedo bearing. Dimmed with progress indicator while reloading.
+- Indicators are visible **only to their owner**.
 
 ## HUD (screen space)
 
 - Top-right: compact scoreboard (name, colour, score) for all connected players, own line highlighted.
 - Bottom-left: own HP bar, cannon and torpedo reload status.
-- Bottom-right: minimap ([02-world.md](02-world.md#camera)).
 - Event feed (top-left): short messages "Alice sank Bob", "Carol joined", "World regenerated", fading after 5 s.
 - Death screen: "Sunk by *X*" + respawn countdown.

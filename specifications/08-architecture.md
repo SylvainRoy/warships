@@ -1,6 +1,6 @@
 # 08 — Technical architecture
 
-## Stack (proposed, Q23)
+## Stack
 
 | Part | Choice | Rationale |
 |---|---|---|
@@ -14,11 +14,11 @@ The server serves the static client files **and** the WebSocket endpoint on the 
 ## Networking model
 
 - **Server-authoritative** simulation: clients send only their inputs (pressed keys + sequence number); the server computes positions, hits, scores. Prevents cheating and keeps all players consistent.
-- Server tick: **30 Hz**. State snapshots broadcast at **20 Hz** (proposed).
+- Server tick: **30 Hz**. State snapshots broadcast at **20 Hz**.
 - Client renders at the display refresh rate (target 60 fps) and **interpolates** other frigates and projectiles between snapshots (≈ 100 ms buffer).
 - Own frigate: **client-side prediction** with server reconciliation, so controls feel instant even with latency.
 - Snapshots contain only dynamic state (frigates, projectiles, scores). The world is sent once on join and on regeneration.
-- Messages: JSON for v1 (proposed); binary encoding only if bandwidth requires it.
+- Messages: JSON for v1; binary encoding only if bandwidth requires it.
 - Target playable latency: up to 150 ms round-trip.
 
 ## Deployment
