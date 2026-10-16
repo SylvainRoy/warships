@@ -791,10 +791,11 @@ function drawHud(snapshot: Snapshot, frigate: Frigate | undefined, now: number, 
     ctx.fillText(`CANNON ${Math.max(0, frigate.cannonReadyAt - now).toFixed(1)}s`, 111, logicalHeight - 37);
     ctx.fillText(`TORPEDO ${Math.max(0, frigate.torpedoReadyAt - now).toFixed(1)}s`, 211, logicalHeight - 37);
   }
-  const visibleFeed = feed.filter((entry) => now - entry.at < 5000).slice(-5);
+  const feedNow = performance.now();
+  const visibleFeed = feed.filter((entry) => feedNow - entry.at < 5000).slice(-5);
   ctx.textAlign = "left";
   visibleFeed.forEach((entry, index) => {
-    const alpha = Math.min(1, (5000 - (now - entry.at)) / 1000);
+    const alpha = Math.min(1, (5000 - (feedNow - entry.at)) / 1000);
     ctx.globalAlpha = alpha;
     ctx.font = "500 12px Manrope, sans-serif";
     ctx.fillStyle = "#e4f2f3";
