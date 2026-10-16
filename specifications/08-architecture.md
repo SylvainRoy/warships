@@ -24,7 +24,8 @@ The server serves the static client files **and** the WebSocket endpoint on the 
 ## Deployment
 
 - Run with a single command (e.g. `npm start`, or a Docker image), configurable port.
-- Where the server runs is an open question (Q24): your own machine on a LAN, your own machine exposed to the internet, or a hosted service. HTTPS/WSS is needed if exposed publicly.
+- **Phase 1 — local network**: the server runs on a machine of the LAN; players open `http://<server-ip>:<port>`. Plain HTTP/WS is acceptable. The README MUST document how to start it and find the URL.
+- **Phase 2 — Google Cloud (GCP)**, later: same server packaged as a Docker image, exposed over HTTPS/WSS. The architecture MUST NOT preclude this (e.g. configurable port, a single container, no local-file dependencies). The exact GCP service is chosen in phase 2.
 - No database; all state is in memory and lost when the server restarts.
 
 ## Performance targets

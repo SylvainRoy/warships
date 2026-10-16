@@ -2,7 +2,12 @@
 
 ## Key bindings
 
-Keys are bound by **physical position** (`KeyboardEvent.code`), not by printed character, so the layout works on QWERTY and AZERTY keyboards alike (e.g. on a French AZERTY keyboard, "W A S D" are the keys printed Z Q S D). See Q16.
+Keys are bound by **physical position** (`KeyboardEvent.code`), not by printed character, so the layout works on QWERTY and AZERTY keyboards alike (e.g. on a French AZERTY keyboard, "W A S D" are the keys printed Z Q S D; on a French PC keyboard `[ ] \` are the keys printed `^ $ *`).
+
+The game MUST work on both **Mac and PC** keyboards (Windows/Linux). Implementation notes:
+- On Mac and PC ISO keyboards the key left of Enter reports `Backslash`; on some layouts the key left of Z reports `IntlBackslash`. Both MUST be accepted as "fire torpedoes".
+- Right Shift MUST be distinguished from Left Shift (`ShiftRight`), which browsers support on both platforms.
+- The bindings MUST be verified on at least: Mac French AZERTY, PC French AZERTY, PC US QWERTY.
 
 | Action | Code | QWERTY key |
 |---|---|---|
@@ -12,12 +17,12 @@ Keys are bound by **physical position** (`KeyboardEvent.code`), not by printed c
 | Rotate hull right | `KeyD` | D |
 | Cannon bearing left | `ArrowLeft` | ← |
 | Cannon bearing right | `ArrowRight` | → |
-| Cannon range + (proposed, Q12) | `ArrowUp` | ↑ |
-| Cannon range − (proposed, Q12) | `ArrowDown` | ↓ |
+| Cannon range + | `ArrowUp` | ↑ |
+| Cannon range − | `ArrowDown` | ↓ |
 | Fire cannons | `ShiftRight` | Right Shift |
 | Torpedo bearing left | `BracketLeft` | [ |
 | Torpedo bearing right | `BracketRight` | ] |
-| Fire torpedoes | `Backslash` | \ |
+| Fire torpedoes | `Backslash` (or `IntlBackslash`) | \ |
 | Show full scoreboard (hold) | `Tab` | Tab (proposed) |
 | Host menu | `Escape` | Esc (proposed) |
 

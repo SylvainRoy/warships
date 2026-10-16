@@ -1,6 +1,6 @@
 # Warships — Specifications
 
-**Status: DRAFT v0.1 — not approved.** Implementation starts only once this file says *Approved*.
+**Status: DRAFT v0.2 — not approved.** Implementation starts only once this file says *Approved*.
 
 | # | Document | Content |
 |---|----------|---------|
@@ -22,4 +22,5 @@
 
 ## Changelog
 
+- v0.2 — integrated answers to Q0, Q8, Q10–Q13, Q15, Q16, Q24, Q25.
 - v0.1 — complete rewrite of the initial draft.

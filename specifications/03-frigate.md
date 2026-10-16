@@ -18,7 +18,7 @@ The frigate has inertia: keys apply acceleration, not instant speed.
 | Forward acceleration (W) | 80 u/s² — full speed in 2 s (proposed) |
 | Reverse acceleration (S) | 80 u/s² (also acts as a brake while moving forward) |
 | Drag when no key pressed | speed decays to 0 in ≈ 4 s (proposed) |
-| Rotation (A / D) | 45 °/s (proposed, Q8: should turning require speed, like a real ship?) |
+| Rotation (A / D) | 45 °/s, independent of speed: a stopped frigate can turn on the spot (rotation rate proposed) |
 
 - Velocity is always along the hull heading (no sideways drift) (proposed).
 - W and S together cancel; A and D together cancel.
@@ -30,6 +30,6 @@ The frigate has inertia: keys apply acceleration, not instant speed.
 
 ## Hull points
 
-- Each frigate has **100 hull points (HP)** (proposed, Q10).
+- Each frigate has **100 hull points (HP)**.
 - Damage values are defined in [04-weapons.md](04-weapons.md). At 0 HP the frigate sinks ([06-game-rules.md](06-game-rules.md)).
-- No regeneration of HP while alive (proposed, Q10).
+- No regeneration of HP while alive.
