@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#071b2a" />
+    <title>Warships</title>
+    <link rel="stylesheet" href="/style.css" />
+  </head>
+  <body>
+    <canvas id="game" aria-label="Warships game"></canvas>
+    <main id="lobby" class="panel lobby" hidden>
+      <div class="eyebrow">OPEN WATERS · FREE-FOR-ALL</div>
+      <h1>Warships</h1>
+      <p class="muted">Command your frigate. Make every salvo count.</p>
+      <form id="join-form">
+        <label for="player-name">Captain name</label>
+        <input id="player-name" maxlength="16" autocomplete="nickname" placeholder="1–16 characters" />
+        <button id="join-button" type="submit">Join the battle <span>→</span></button>
+      </form>
+      <div id="lobby-error" class="error" aria-live="polite"></div>
+      <section class="lobby-roster">
+        <div class="section-heading"><span>ON THE WATER</span><span id="free-slots"></span></div>
+        <ul id="lobby-players"></ul>
+      </section>
+      <div id="server-full" class="full-note" hidden>All berths occupied · checking for an opening…</div>
+      <div class="lobby-footer">WASD to steer · Right Shift to fire · Esc for host controls</div>
+    </main>
+    <script type="module" src="/app.ts"></script>
+  </body>
+</html>
