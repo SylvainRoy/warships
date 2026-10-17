@@ -516,7 +516,7 @@ function renderTerrain(
   worldScale: number,
   dpr: number,
 ): void {
-  const resolution = Math.max(1, Math.min(2, worldScale * dpr));
+  const resolution = Math.max(1, Math.min(2, Math.ceil(worldScale * dpr)));
   if (resolution !== worldCacheResolution) {
     worldCache.clear();
     worldCacheResolution = resolution;
