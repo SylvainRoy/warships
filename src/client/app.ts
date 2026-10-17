@@ -59,6 +59,7 @@ let shouldAutoJoin = false;
 let joined = false;
 let tabHeld = false;
 let hostMenuOpen = false;
+let hostPending: { action: "regenerate" } | { action: "resetScores" } | { action: "kickSelect" } | { action: "kick"; playerId: string; name: string } | null = null;
 let debugVisible = false;
 let cannonFirePending = false;
 let torpedoFirePending = false;
@@ -202,6 +203,7 @@ function showKickedMessage(): void {
   cannonFirePending = false;
   torpedoFirePending = false;
   hostMenuOpen = false;
+  hostPending = null;
   errorBox.textContent = "You were removed from the battle by the host.";
   lobby.hidden = false;
 }
@@ -284,7 +286,14 @@ window.addEventListener("keydown", (event) => {
     return;
   }
   if (event.code === "Escape" && !event.repeat) {
-    if (latestSnapshot?.players.find((player) => player.playerId === ownId)?.host) hostMenuOpen = !hostMenuOpen;
+    if (hostPending) {
+      hostPending = null;
+      return;
+    }
+    if (latestSnapshot?.players.find((player) => player.playerId === ownId)?.host) {
+      hostMenuOpen = !hostMenuOpen;
+      if (!hostMenuOpen) hostPending = null;
+    }
     return;
   }
   if (event.repeat) return;
@@ -928,25 +937,52 @@ function drawHostMenu(snapshot: Snapshot, width: number, height: number): void {
   const host = snapshot.players.find((player) => player.playerId === ownId)?.host;
   if (!host) {
     hostMenuOpen = false;
+    hostPending = null;
     return;
   }
+  const left = width / 2 - 184;
+  const centerY = height / 2;
   ctx.fillStyle = "rgba(3, 13, 20, .88)";
   ctx.fillRect(width / 2 - 220, height / 2 - 175, 440, 350);
   ctx.fillStyle = "#eff8f6";
   ctx.font = "800 20px Manrope, sans-serif";
   ctx.textAlign = "left";
-  ctx.fillText("HOST CONTROL", width / 2 - 184, height / 2 - 142);
+  ctx.fillText("HOST CONTROL", left, centerY - 142);
   ctx.fillStyle = "#9bb4bb";
   ctx.font = "12px Manrope, sans-serif";
-  ctx.fillText("Actions are shared with every captain.", width / 2 - 184, height / 2 - 112);
-  ctx.fillStyle = "#6be0cf";
-  ctx.fillText("R  Regenerate world", width / 2 - 184, height / 2 - 65);
-  ctx.fillText("X  Reset scores", width / 2 - 184, height / 2 - 35);
-  ctx.fillStyle = "#e4ad80";
-  ctx.fillText("K  Kick player (press K)", width / 2 - 184, height / 2 - 5);
+  ctx.fillText("Actions are shared with every captain.", left, centerY - 112);
+  if (hostPending?.action === "kickSelect") {
+    ctx.fillStyle = "#e4ad80";
+    ctx.fillText("Select a player to kick:", left, centerY - 65);
+    snapshot.players
+      .filter((player) => player.playerId !== ownId)
+      .sort((a, b) => a.slot - b.slot)
+      .forEach((player, index) => {
+        ctx.fillText(`${index + 1}  ${player.name}`, left, centerY - 35 + index * 24);
+      });
+  } else if (hostPending) {
+    ctx.fillStyle = hostPending.action === "kick" ? "#e4ad80" : "#6be0cf";
+    const question = hostPending.action === "regenerate"
+      ? "Regenerate the world? All frigates respawn; scores are kept."
+      : hostPending.action === "resetScores"
+        ? "Reset all scores and sunk counts?"
+        : `Kick ${hostPending.name}?`;
+    ctx.fillText(question, left, centerY - 65);
+  } else {
+    ctx.fillStyle = "#6be0cf";
+    ctx.fillText("R  Regenerate world", left, centerY - 65);
+    ctx.fillText("X  Reset scores", left, centerY - 35);
+    ctx.fillStyle = "#e4ad80";
+    ctx.fillText("K  Kick player", left, centerY - 5);
+  }
   ctx.fillStyle = "#8ea9b0";
   ctx.font = "10px DM Mono, monospace";
-  ctx.fillText("ESC TO CLOSE", width / 2 - 184, height / 2 + 140);
+  const footer = hostPending?.action === "kickSelect"
+    ? "ESC BACK"
+    : hostPending
+      ? "ENTER CONFIRM · ESC CANCEL"
+      : "ESC TO CLOSE";
+  ctx.fillText(footer, left, centerY + 140);
 }
 
 function sendHost(action: "regenerate" | "resetScores" | "kick", target?: string): void {
@@ -956,24 +992,31 @@ function sendHost(action: "regenerate" | "resetScores" | "kick", target?: string
 
 window.addEventListener("keydown", (event) => {
   if (!joined || event.repeat || event.target instanceof HTMLInputElement) return;
-  if (event.code === "KeyR" && hostMenuOpen) {
-    const confirmed = confirm("Regenerate the world? All frigates will respawn; scores are kept.");
-    clearPressedAndSendNeutral();
-    if (confirmed) sendHost("regenerate");
+  if (!hostMenuOpen) return;
+  const digit = /^(?:Digit|Numpad)([1-3])$/.exec(event.code);
+  const isEnter = event.code === "Enter" || event.code === "NumpadEnter";
+  if (isEnter || digit) event.preventDefault();
+  if (hostPending) {
+    if (hostPending.action === "kickSelect" && digit && latestSnapshot) {
+      const target = latestSnapshot.players
+        .filter((player) => player.playerId !== ownId)
+        .sort((a, b) => a.slot - b.slot)[Number(digit[1]) - 1];
+      if (target) hostPending = { action: "kick", playerId: target.playerId, name: target.name };
+      return;
+    }
+    if (hostPending.action !== "kickSelect" && isEnter) {
+      if (hostPending.action === "kick") sendHost("kick", hostPending.playerId);
+      else sendHost(hostPending.action);
+      hostPending = null;
+      hostMenuOpen = false;
+    }
+    return;
   }
-  if (event.code === "KeyX" && hostMenuOpen) {
-    const confirmed = confirm("Reset all scores and sunk counts?");
-    clearPressedAndSendNeutral();
-    if (confirmed) sendHost("resetScores");
-  }
-  if (event.code === "KeyK" && hostMenuOpen && latestSnapshot) {
-    const others = latestSnapshot.players.filter((player) => player.playerId !== ownId);
-    const choice = prompt(`Kick which player?\n${others.map((player) => player.name).join(", ")}`);
-    clearPressedAndSendNeutral();
-    if (choice && others.some((player) => player.name === choice)) {
-      const confirmed = confirm(`Kick ${choice} from the battle?`);
-      clearPressedAndSendNeutral();
-      if (confirmed) sendHost("kick", choice);
+  if (event.code === "KeyR") hostPending = { action: "regenerate" };
+  else if (event.code === "KeyX") hostPending = { action: "resetScores" };
+  else if (event.code === "KeyK" && latestSnapshot) {
+    if (latestSnapshot.players.some((player) => player.playerId !== ownId)) {
+      hostPending = { action: "kickSelect" };
     }
   }
 });

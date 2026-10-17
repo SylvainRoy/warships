@@ -127,6 +127,21 @@ function hullTouchesLand(x: number, y: number, heading: number, world: World, cl
   return false;
 }
 
+function hasSpawnClearance(world: World, x: number, y: number): boolean {
+  const radius = Math.hypot(GAME_CONFIG.frigate.length / 2, GAME_CONFIG.frigate.beam / 2) + GAME_CONFIG.land.clearance;
+  const { tileSize, columns, rows, width, height } = GAME_CONFIG.world;
+  if (x - radius < 0 || y - radius < 0 || x + radius > width || y + radius > height) return false;
+  for (let row = Math.floor((y - radius) / tileSize); row <= Math.floor((y + radius) / tileSize); row += 1) {
+    for (let column = Math.floor((x - radius) / tileSize); column <= Math.floor((x + radius) / tileSize); column += 1) {
+      if (row >= rows || column >= columns) continue;
+      const nearestX = Math.min(Math.max(x, column * tileSize), (column + 1) * tileSize);
+      const nearestY = Math.min(Math.max(y, row * tileSize), (row + 1) * tileSize);
+      if (Math.hypot(nearestX - x, nearestY - y) < radius && world.grid[row * columns + column] === 1) return false;
+    }
+  }
+  return true;
+}
+
 export function pointToHullDistance(x: number, y: number, frigate: Frigate): number {
   const dx = x - frigate.x;
   const dy = y - frigate.y;
@@ -249,7 +264,7 @@ export function spawnFrigate(
   attempts: number = GAME_CONFIG.player.spawnAttempts,
 ): Frigate {
   let best: { x: number; y: number; nearest: number } | undefined;
-  const validPoint = (x: number, y: number) => !hullTouchesLand(x, y, 0, world, GAME_CONFIG.land.clearance);
+  const validPoint = (x: number, y: number) => hasSpawnClearance(world, x, y);
   for (let attempt = 0; attempt < attempts; attempt += 1) {
     const x = GAME_CONFIG.world.width * random();
     const y = GAME_CONFIG.world.height * random();

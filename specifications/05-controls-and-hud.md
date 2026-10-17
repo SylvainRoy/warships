@@ -31,6 +31,10 @@ The game MUST work on both **Mac and PC** keyboards (Windows/Linux). Implementat
 - Default browser behaviour of these keys (scrolling, focus change) MUST be suppressed while the game has focus.
 - Key remapping: out of scope for v1.
 
+## Host menu
+
+The host opens the menu with Esc. R requests world regeneration, X requests a score reset, and K opens a numbered list of captains to kick. Select a kick target with `Digit1`–`Digit3` or `Numpad1`–`Numpad3`. Enter or NumpadEnter confirms a pending action; Esc cancels it or returns from kick selection. Confirmations are shown in-game, not in browser dialogs.
+
 ## In-world indicators
 
 - **Cannon target**: a green "modern" reticle (circle with four ticks and a centre dot) drawn on the map at the aim point, rendered above terrain. Its radius equals the damage radius (60 u), so the player sees the impact zone. The ticks are oriented along the line of fire from the frigate to the aim point. While reloading it is dimmed and shows the reload progress as a circular arc starting at that bearing.
