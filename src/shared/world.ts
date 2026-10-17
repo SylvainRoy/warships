@@ -183,7 +183,7 @@ function generateAtThreshold(field: Float32Array, threshold: number): Uint8Array
   return keepLargestWaterRegion(enforceChannels(grid));
 }
 
-export function generateWorld(seed: number): World {
+export function generateWorld(seed: number, landCoverage: number = generation.targetLandCoverage): World {
   const normalizedSeed = seed >>> 0;
   const field = buildField(normalizedSeed);
   let best: ReturnType<typeof generateAtThreshold> = new Uint8Array(cellCount);
@@ -196,24 +196,39 @@ export function generateWorld(seed: number): World {
     let land = 0;
     for (const cell of candidate) land += cell;
     const coverage = land / cellCount;
-    const difference = coverage < generation.targetLandCoverage
-      ? generation.targetLandCoverage - coverage
-      : coverage - generation.targetLandCoverage;
+    const difference = Math.abs(coverage - landCoverage);
     if (difference < bestDifference) {
       best = candidate;
       bestDifference = difference;
     }
-    if (coverage >= generation.minLandCoverage && coverage <= generation.maxLandCoverage) return { seed: normalizedSeed, grid: candidate };
-    if (coverage > generation.targetLandCoverage) lowThreshold = threshold;
+    if (coverage >= landCoverage - generation.landCoverageTolerance && coverage <= landCoverage + generation.landCoverageTolerance) {
+      return { seed: normalizedSeed, grid: candidate };
+    }
+    if (coverage > landCoverage) lowThreshold = threshold;
     else highThreshold = threshold;
   }
   let bestLand = 0;
   for (const cell of best) bestLand += cell;
   const bestCoverage = bestLand / cellCount;
-  if (bestCoverage < generation.minLandCoverage || bestCoverage > generation.maxLandCoverage) {
+  if (
+    bestCoverage < landCoverage - generation.landCoverageTolerance
+    || bestCoverage > landCoverage + generation.landCoverageTolerance
+  ) {
     throw new Error(`Could not generate world coverage in range for seed ${normalizedSeed}: ${bestCoverage}`);
   }
   return { seed: normalizedSeed, grid: best };
+}
+
+export function generateWorldWithFallback(seed: number, landCoverage: number): World {
+  let lastError: unknown;
+  for (let offset = 0; offset < 8; offset += 1) {
+    try {
+      return generateWorld(seed + offset, landCoverage);
+    } catch (error) {
+      lastError = error;
+    }
+  }
+  throw lastError;
 }
 
 export function isLandAt(world: World, x: number, y: number): boolean {

@@ -69,3 +69,6 @@ All questions raised during the specification phase are resolved. Each line give
 - **Q50 — Aim rotation settings:** add host settings for cannon rotation and torpedo rotation (50–200%, 10% steps, default 100%); at 100% both bearings turn at 54 °/s, 60% of the previous 90 °/s. Decided 2026-10-17 after playtest.
 - **Q51 — Camera framing (revised):** the camera stays centred on the own frigate, clamped to the world edges; the cannon reticle no longer moves it and may be off screen. Replaces Q34. Decided 2026-10-17 after playtest.
 - **Q52 — Cannon bearing arrow:** a filled triangle in the sight colour, 120–140 u from the frigate centre, just beyond the torpedo arrow tip, always shown and dimmed while the cannons reload. Decided 2026-10-17 after playtest.
+- **Q53 — Land coverage setting:** coverage is the real share of the map; the host setting ranges from 5–40% in 5% steps, default 25%; generation fails above 40%. Decided 2026-10-17 after playtest.
+- **Q54 — Applying land coverage:** changing the setting immediately regenerates the map while keeping scores. Decided 2026-10-17 after playtest.
+- **Q55 — Land coverage tolerance:** generated coverage may differ from the target by ±2.5 percentage points, replacing the previous 20–30% band. Decided 2026-10-17 after playtest.

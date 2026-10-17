@@ -1,7 +1,7 @@
 import { GAME_CONFIG } from "./config.js";
 import { mulberry32 } from "./rng.js";
 import { DEFAULT_SETTINGS, type GameSettings } from "./settings.js";
-import { generateWorld, isLandAt, type World } from "./world.js";
+import { generateWorldWithFallback, isLandAt, type World } from "./world.js";
 
 export const INPUT_KEYS = {
   turnLeft: 1 << 0,
@@ -539,7 +539,7 @@ export function stepGame(state: GameState, inputs: Record<string, FrigateInput |
 }
 
 export function regenerateGameWorld(state: GameState, seed: number, now: number, random: () => number): void {
-  state.world = generateWorld(seed);
+  state.world = generateWorldWithFallback(seed, state.settings.landCoveragePct / 100);
   state.shells = [];
   state.torpedoes = [];
   const frigates = Object.values(state.frigates);

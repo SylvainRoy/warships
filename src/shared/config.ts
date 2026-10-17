@@ -7,8 +7,7 @@ export const GAME_CONFIG = {
     columns: 800,
     rows: 450,
     generation: {
-      minLandCoverage: 0.2,
-      maxLandCoverage: 0.3,
+      landCoverageTolerance: 0.025,
       targetLandCoverage: 0.25,
       borderTiles: 2,
       thresholdAttempts: 18,

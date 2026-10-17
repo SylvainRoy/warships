@@ -3,6 +3,7 @@ import { DEFAULT_SETTINGS, describeSettingsChanges, sanitizeSettings } from "../
 
 describe("game settings", () => {
   it("accepts defaults and valid edge values as fresh objects", () => {
+    expect(DEFAULT_SETTINGS.landCoveragePct).toBe(25);
     const defaults = sanitizeSettings(DEFAULT_SETTINGS);
     expect(defaults).toEqual(DEFAULT_SETTINGS);
     expect(defaults).not.toBe(DEFAULT_SETTINGS);
@@ -16,6 +17,7 @@ describe("game settings", () => {
       torpedoSpeedPct: 200,
       cannonReload: 0.5,
       torpedoReload: 20,
+      landCoveragePct: 5,
     })).toEqual({
       boatSpeedPct: 50,
       rotationPct: 200,
@@ -25,6 +27,7 @@ describe("game settings", () => {
       torpedoSpeedPct: 200,
       cannonReload: 0.5,
       torpedoReload: 20,
+      landCoveragePct: 5,
     });
     expect(sanitizeSettings({ ...DEFAULT_SETTINGS, cannonReload: 10, torpedoReload: 1 })).toEqual({
       ...DEFAULT_SETTINGS,
@@ -47,19 +50,16 @@ describe("game settings", () => {
     expect(sanitizeSettings({ ...DEFAULT_SETTINGS, cannonReload: 0.7 })).toBeNull();
     expect(sanitizeSettings({ ...DEFAULT_SETTINGS, rotationPct: Number.NaN })).toBeNull();
     expect(sanitizeSettings({ ...DEFAULT_SETTINGS, shellSpeedPct: "150" })).toBeNull();
+    expect(sanitizeSettings({ ...DEFAULT_SETTINGS, landCoveragePct: 2.5 })).toBeNull();
+    expect(sanitizeSettings({ ...DEFAULT_SETTINGS, landCoveragePct: 45 })).toBeNull();
+    expect(sanitizeSettings({ ...DEFAULT_SETTINGS, landCoveragePct: 12 })).toBeNull();
 
     const missing = { ...DEFAULT_SETTINGS } as Record<string, unknown>;
     delete missing.torpedoReload;
     expect(sanitizeSettings(missing)).toBeNull();
     expect(sanitizeSettings({ ...DEFAULT_SETTINGS, unexpected: 1 })).toBeNull();
-    const oldSettings = {
-      boatSpeedPct: 100,
-      rotationPct: 100,
-      shellSpeedPct: 100,
-      torpedoSpeedPct: 100,
-      cannonReload: DEFAULT_SETTINGS.cannonReload,
-      torpedoReload: DEFAULT_SETTINGS.torpedoReload,
-    };
+    const oldSettings = { ...DEFAULT_SETTINGS } as Record<string, unknown>;
+    delete oldSettings.landCoveragePct;
     expect(sanitizeSettings(oldSettings)).toBeNull();
   });
 
@@ -73,6 +73,7 @@ describe("game settings", () => {
       torpedoSpeedPct: 200,
       cannonReload: 2,
       torpedoReload: 2.5,
+      landCoveragePct: 15,
     })).toEqual([
       "boat speed 150%",
       "rotation 120%",
@@ -81,6 +82,7 @@ describe("game settings", () => {
       "torpedo speed 200%",
       "cannon reload 2 s",
       "torpedo reload 2.5 s",
+      "land coverage 15%",
     ]);
   });
 });
