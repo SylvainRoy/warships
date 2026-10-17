@@ -44,6 +44,7 @@ The host opens the menu with Esc. R requests world regeneration, X requests a sc
 
 ## HUD (screen space)
 
+- HUD panels and overlays are anchored to the browser window edges, not the 16:9 reference frame; positions and sizing remain in reference units and scale with the reference scale.
 - Top-right: compact scoreboard (name, colour, score) for all connected players, own line highlighted.
 - Bottom-left: own HP bar, cannon and torpedo reload status, plus a throttle telegraph with the selected level highlighted and its full label.
 - Event feed (top-left): short messages "Alice sank Bob", "Carol joined", "World regenerated", fading after 5 s.

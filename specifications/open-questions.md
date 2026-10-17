@@ -57,3 +57,4 @@ All questions raised during the specification phase are resolved. Each line give
 - **Q38 — Spawn clearance:** a spawn point is valid only if no land tile lies within 60 u of the frigate hull at any heading (disc of radius hull half-diagonal + 60 u), checked tile by tile. Decided 2026-10-17 after playtest.
 - **Q39 — Shell speed:** cannon shells travel at 800 u/s (was 500); max-range flight is 1.0 s, with range unchanged. Decided 2026-10-17 after playtest.
 - **Q40 — Shell look:** shells are pointed black projectiles with a thin pale outline, nose along the flight direction, keeping the parabolic size and shadow. Decided 2026-10-17 after playtest.
+- **Q41 — HUD anchoring:** HUD is laid out in the full browser window, scaled by the reference scale, so the Q35 8 px margins hold at any aspect ratio. Decided 2026-10-17 after playtest.
