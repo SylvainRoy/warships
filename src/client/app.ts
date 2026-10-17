@@ -722,7 +722,7 @@ function drawReticle(frigate: Frigate, now: number): void {
   ctx.arc(x, y, 2.5, 0, Math.PI * 2);
   ctx.fill();
   for (let i = 0; i < 4; i += 1) {
-    const a = frigate.heading + i * Math.PI / 2;
+    const a = angle + i * Math.PI / 2;
     ctx.beginPath();
     ctx.moveTo(x + Math.cos(a) * 45, y + Math.sin(a) * 45);
     ctx.lineTo(x + Math.cos(a) * 55, y + Math.sin(a) * 55);
@@ -731,7 +731,7 @@ function drawReticle(frigate: Frigate, now: number): void {
   if (reloading > 0) {
     ctx.lineWidth = 4;
     ctx.beginPath();
-    ctx.arc(x, y, GAME_CONFIG.cannon.damageRadius + 7, frigate.heading, frigate.heading + Math.PI * 2 * progress);
+    ctx.arc(x, y, GAME_CONFIG.cannon.damageRadius + 7, angle, angle + Math.PI * 2 * progress);
     ctx.stroke();
   }
   const torpedoAngle = frigate.heading + frigate.torpedoBearing;

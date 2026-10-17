@@ -33,7 +33,7 @@ The game MUST work on both **Mac and PC** keyboards (Windows/Linux). Implementat
 
 ## In-world indicators
 
-- **Cannon target**: a green "modern" reticle (circle with four ticks and a centre dot) drawn on the map at the aim point, rendered above terrain. Its radius equals the damage radius (60 u), so the player sees the impact zone. The ticks are oriented with the frigate heading. While reloading it is dimmed and shows the reload progress as a circular arc starting at the frigate heading.
+- **Cannon target**: a green "modern" reticle (circle with four ticks and a centre dot) drawn on the map at the aim point, rendered above terrain. Its radius equals the damage radius (60 u), so the player sees the impact zone. The ticks are oriented along the line of fire from the frigate to the aim point. While reloading it is dimmed and shows the reload progress as a circular arc starting at that bearing.
 - **Torpedo arrow**: a green, segmented radar-style arrow along the torpedo bearing: five equal shaft dashes from 38 u to 96 u radius, separated by 3 u gaps; an open chevron from a 112 u tip to points at 98 u radius and ±9 u perpendicular; and a 12 u base tick at 38 u. While reloading, completed dashes fill in, remaining dashes and the chevron dim, and the base tick dims; there is no reload arc.
 - **Frigate HP bars**: the small bar below a frigate is shown for enemies only; own hull integrity remains in the bottom-left HUD.
 - Indicators are visible **only to their owner**.

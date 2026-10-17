@@ -22,7 +22,7 @@
 
 ## Changelog
 
-- v1.2 — hide the own frigate HP bar, replace the torpedo indicator with a segmented arrow, align cannon reticle ticks with the heading, and keep the cannon reticle on screen; approved 2026-10-17 after playtest.
+- v1.2 — hide the own frigate HP bar, replace the torpedo indicator with a segmented arrow, align cannon reticle ticks with the line of fire, and keep the cannon reticle on screen; approved 2026-10-17 after playtest.
 - v1.1 — easier throttle controls, speed-scaled land damage, wider channels, reduced frigate speeds, and a wider torpedo spread; approved 2026-10-16 after playtest.
 - v1.0 — approved.
 - v0.3 — all questions resolved: no minimap (Q7), land collisions cause 20 HP damage (Q9), defaults accepted for the rest.
