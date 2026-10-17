@@ -28,7 +28,7 @@ export const GAME_CONFIG = {
     collisionCircleOffsets: [-20, 0, 20],
   },
   cannon: {
-    bearingSpeed: Math.PI / 2,
+    bearingSpeed: Math.PI * 0.3,
     rangeSpeed: 400,
     minRange: 100,
     maxRange: 800,
@@ -39,7 +39,7 @@ export const GAME_CONFIG = {
     reload: 1.5,
   },
   torpedo: {
-    bearingSpeed: Math.PI / 2,
+    bearingSpeed: Math.PI * 0.3,
     spread: Math.PI / 90,
     speed: 120,
     reload: 4,

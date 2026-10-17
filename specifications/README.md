@@ -1,6 +1,6 @@
 # Warships — Specifications
 
-**Status: APPROVED v1.5** (2026-10-17). Changes after approval must be recorded in the changelog.
+**Status: APPROVED v1.7** (2026-10-17). Changes after approval must be recorded in the changelog.
 
 | # | Document | Content |
 |---|----------|---------|
@@ -22,6 +22,7 @@
 
 ## Changelog
 
+- v1.7 — host-adjustable cannon and torpedo aim rotation settings (Q50); approved 2026-10-17.
 - v1.5 — host game settings: boat/rotation/shell/torpedo speed percentages and reload times (Q42–Q47); new base values (Q48); approved 2026-10-17.
 - v1.4 — faster shells drawn as pointed black shells; HUD anchored to window corners; approved 2026-10-17 after playtest.
 - v1.3 — fix spawns overlapping land (exact clearance check) and replace browser confirmation dialogs with in-game host-menu confirmation; approved 2026-10-17 after playtest.

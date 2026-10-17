@@ -178,14 +178,18 @@ export function applyFrigateInput(
   if (rotation === 0 || canOccupy(frigate, frigate.x, frigate.y, rotatedHeading, world)) frigate.heading = rotatedHeading;
 
   const cannonTurn = Number(isPressed(keys, INPUT_KEYS.cannonRight)) - Number(isPressed(keys, INPUT_KEYS.cannonLeft));
-  frigate.cannonBearing = normalizeAngle(frigate.cannonBearing + cannonTurn * GAME_CONFIG.cannon.bearingSpeed * dt);
+  frigate.cannonBearing = normalizeAngle(
+    frigate.cannonBearing + cannonTurn * GAME_CONFIG.cannon.bearingSpeed * settings.cannonRotationPct / 100 * dt,
+  );
   const rangeChange = Number(isPressed(keys, INPUT_KEYS.rangeUp)) - Number(isPressed(keys, INPUT_KEYS.rangeDown));
   frigate.cannonRange = Math.max(
     GAME_CONFIG.cannon.minRange,
     Math.min(GAME_CONFIG.cannon.maxRange, frigate.cannonRange + rangeChange * GAME_CONFIG.cannon.rangeSpeed * dt),
   );
   const torpedoTurn = Number(isPressed(keys, INPUT_KEYS.torpedoRight)) - Number(isPressed(keys, INPUT_KEYS.torpedoLeft));
-  frigate.torpedoBearing = normalizeAngle(frigate.torpedoBearing + torpedoTurn * GAME_CONFIG.torpedo.bearingSpeed * dt);
+  frigate.torpedoBearing = normalizeAngle(
+    frigate.torpedoBearing + torpedoTurn * GAME_CONFIG.torpedo.bearingSpeed * settings.torpedoRotationPct / 100 * dt,
+  );
 
   const level = Math.max(-1, Math.min(3, Math.round(input.throttle) || 0));
   const speedScale = settings.boatSpeedPct / 100;

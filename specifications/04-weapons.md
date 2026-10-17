@@ -8,7 +8,7 @@ Ballistic weapon: shells fly in the air, over water and land, and land on the ai
 
 ### Aiming
 
-- **Bearing**: Left / Right arrow rotate the cannon bearing at 90 °/s. Full 360° allowed.
+- **Bearing**: Left / Right arrow rotate the cannon bearing at 54 °/s at the default setting, scaled by the host's cannon rotation setting. Full 360° allowed.
 - **Range**: Up / Down arrows increase / decrease range at 400 u/s, between **100 u** and the **maximum range**.
 - **Maximum range: 800 u** (half a screen width); the camera shifts to keep it on screen (see [02-world.md#camera](02-world.md#camera)).
 - The aim point is shown by a **green target reticle** drawn on the map (see [05-controls-and-hud.md](05-controls-and-hud.md)).
@@ -33,7 +33,7 @@ Underwater weapon: straight-line, fast, blocked by land.
 
 ### Aiming
 
-- `[` / `]` rotate the torpedo bearing left / right at 90 °/s. Full 360° allowed.
+- `[` / `]` rotate the torpedo bearing left / right at 54 °/s at the default setting, scaled by the host's torpedo rotation setting. Full 360° allowed.
 - The bearing is shown by a **green arrow around the frigate** (see [05-controls-and-hud.md](05-controls-and-hud.md)).
 
 ### Firing
