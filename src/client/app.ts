@@ -286,6 +286,8 @@ const gameCodes = new Set([
 const settingsRows: Array<{ key: keyof GameSettings; label: string }> = [
   { key: "boatSpeedPct", label: "Boat speed" },
   { key: "rotationPct", label: "Rotation speed" },
+  { key: "cannonRotationPct", label: "Cannon rotation" },
+  { key: "torpedoRotationPct", label: "Torpedo rotation" },
   { key: "shellSpeedPct", label: "Shell speed" },
   { key: "torpedoSpeedPct", label: "Torpedo speed" },
   { key: "cannonReload", label: "Cannon reload" },

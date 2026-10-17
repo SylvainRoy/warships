@@ -3,6 +3,8 @@ import { GAME_CONFIG } from "./config.js";
 export interface GameSettings {
   boatSpeedPct: number;
   rotationPct: number;
+  cannonRotationPct: number;
+  torpedoRotationPct: number;
   shellSpeedPct: number;
   torpedoSpeedPct: number;
   cannonReload: number;
@@ -12,6 +14,8 @@ export interface GameSettings {
 export const DEFAULT_SETTINGS: GameSettings = {
   boatSpeedPct: 100,
   rotationPct: 100,
+  cannonRotationPct: 100,
+  torpedoRotationPct: 100,
   shellSpeedPct: 100,
   torpedoSpeedPct: 100,
   cannonReload: GAME_CONFIG.cannon.reload,
@@ -21,6 +25,8 @@ export const DEFAULT_SETTINGS: GameSettings = {
 export const SETTINGS_LIMITS: Record<keyof GameSettings, { min: number; max: number; step: number }> = {
   boatSpeedPct: { min: 50, max: 200, step: 10 },
   rotationPct: { min: 50, max: 200, step: 10 },
+  cannonRotationPct: { min: 50, max: 200, step: 10 },
+  torpedoRotationPct: { min: 50, max: 200, step: 10 },
   shellSpeedPct: { min: 50, max: 200, step: 10 },
   torpedoSpeedPct: { min: 50, max: 200, step: 10 },
   cannonReload: { min: 0.5, max: 10, step: 0.5 },
@@ -30,6 +36,8 @@ export const SETTINGS_LIMITS: Record<keyof GameSettings, { min: number; max: num
 const SETTINGS_KEYS: readonly (keyof GameSettings)[] = [
   "boatSpeedPct",
   "rotationPct",
+  "cannonRotationPct",
+  "torpedoRotationPct",
   "shellSpeedPct",
   "torpedoSpeedPct",
   "cannonReload",
@@ -39,6 +47,8 @@ const SETTINGS_KEYS: readonly (keyof GameSettings)[] = [
 const SETTING_LABELS: Record<keyof GameSettings, string> = {
   boatSpeedPct: "boat speed",
   rotationPct: "rotation",
+  cannonRotationPct: "cannon rotation",
+  torpedoRotationPct: "torpedo rotation",
   shellSpeedPct: "shell speed",
   torpedoSpeedPct: "torpedo speed",
   cannonReload: "cannon reload",
