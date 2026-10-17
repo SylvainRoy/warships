@@ -13,8 +13,8 @@ All questions raised during the specification phase are resolved. Each line give
 - **Q6 — Camera:** north-up, centred on own frigate.
 - **Q7 — Minimap:** none.
 - **Q8 — Turning:** a frigate can turn on the spot (constant rate).
-- **Q9 — Collisions:** land damage is speed-scaled up to 10 HP, at most once per second while in contact; frigate-vs-frigate contact causes no damage.
-- **Q10 — Damage model:** 100 HP; shell 10 HP; torpedo 25 HP; no regeneration.
+- **Q9 — Collisions:** touching land costs 20 HP (one cannon shell), at most once per second while in contact; frigate-vs-frigate contact causes no damage. Amounts superseded by Q27 and Q36.
+- **Q10 — Damage model:** 100 HP; shell 20 HP; torpedo 50 HP; no regeneration. Amounts superseded by Q36.
 - **Q11 — Aim reference:** aims are relative to the hull (turn with the boat).
 - **Q12 — Cannon range control:** Up/Down arrows adjust range.
 - **Q13 — Cannon max range:** 800 u.
@@ -40,7 +40,7 @@ All questions raised during the specification phase are resolved. Each line give
 ## Playtest decisions — 2026-10-16
 
 - **Q26 — Throttle telegraph:** W/S step the throttle levels −1 full astern, 0 stop, 1 one-third ahead, 2 two-thirds ahead, and 3 full ahead; show all levels and highlight the selected setting in the HUD. Decided 2026-10-16 after playtest.
-- **Q27 — Speed-scaled land damage:** damage is zero below 20 u/s impact speed; otherwise round `10 × min(1, impact speed / 80)`, limited to once per second and disabled during spawn protection. Decided 2026-10-16 after playtest.
+- **Q27 — Speed-scaled land damage:** damage is zero below 20 u/s impact speed; otherwise round `20 × min(1, impact speed / 80)`, limited to once per second and disabled during spawn protection. Decided 2026-10-16 after playtest. Maximum superseded by Q36.
 - **Q28 — Channel width:** every water tile belongs to an all-water 8 × 8 tile square, giving channels a minimum width of 160 u. Decided 2026-10-16 after playtest.
 - **Q29 — Frigate speeds:** maximum forward speed 80 u/s, reverse speed 25 u/s, acceleration 40 u/s², with no drag. Decided 2026-10-16 after playtest.
 - **Q30 — Torpedo spread:** fire the three torpedoes at −2°, 0°, and +2°. Decided 2026-10-16 after playtest.
