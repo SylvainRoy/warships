@@ -9,6 +9,7 @@ export interface GameSettings {
   torpedoSpeedPct: number;
   cannonReload: number;
   torpedoReload: number;
+  landCoveragePct: number;
 }
 
 export const DEFAULT_SETTINGS: GameSettings = {
@@ -20,6 +21,7 @@ export const DEFAULT_SETTINGS: GameSettings = {
   torpedoSpeedPct: 100,
   cannonReload: GAME_CONFIG.cannon.reload,
   torpedoReload: GAME_CONFIG.torpedo.reload,
+  landCoveragePct: GAME_CONFIG.world.generation.targetLandCoverage * 100,
 };
 
 export const SETTINGS_LIMITS: Record<keyof GameSettings, { min: number; max: number; step: number }> = {
@@ -31,6 +33,7 @@ export const SETTINGS_LIMITS: Record<keyof GameSettings, { min: number; max: num
   torpedoSpeedPct: { min: 50, max: 200, step: 10 },
   cannonReload: { min: 0.5, max: 10, step: 0.5 },
   torpedoReload: { min: 1, max: 20, step: 0.5 },
+  landCoveragePct: { min: 5, max: 40, step: 5 },
 };
 
 const SETTINGS_KEYS: readonly (keyof GameSettings)[] = [
@@ -42,6 +45,7 @@ const SETTINGS_KEYS: readonly (keyof GameSettings)[] = [
   "torpedoSpeedPct",
   "cannonReload",
   "torpedoReload",
+  "landCoveragePct",
 ];
 
 const SETTING_LABELS: Record<keyof GameSettings, string> = {
@@ -53,6 +57,7 @@ const SETTING_LABELS: Record<keyof GameSettings, string> = {
   torpedoSpeedPct: "torpedo speed",
   cannonReload: "cannon reload",
   torpedoReload: "torpedo reload",
+  landCoveragePct: "land coverage",
 };
 
 export function sanitizeSettings(value: unknown): GameSettings | null {

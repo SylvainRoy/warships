@@ -118,9 +118,13 @@ describe("multiplayer room", () => {
     expect(hostSocket.last("error")?.code).toBe("invalid_action");
     expect(room.game.settings).toEqual(DEFAULT_SETTINGS);
 
+    const initialSeed = room.game.world.seed;
+    const initialWorldMessageCount = hostSocket.messages.filter((message) => message.type === "world").length;
     const settings = { ...DEFAULT_SETTINGS, boatSpeedPct: 150, cannonReload: 2 };
     send(room, hostSocket, { type: "host", action: "settings", settings });
     expect(room.game.settings).toEqual(settings);
+    expect(room.game.world.seed).toBe(initialSeed);
+    expect(hostSocket.messages.filter((message) => message.type === "world")).toHaveLength(initialWorldMessageCount);
     expect(hostSocket.last("settings")?.settings).toEqual(settings);
     expect(guestSocket.last("settings")?.settings).toEqual(settings);
     expect(guestSocket.messages.some((message) =>
@@ -134,6 +138,33 @@ describe("multiplayer room", () => {
     expect(hostSocket.messages.filter((message) =>
       message.type === "event" && message.event.message === "Host Harbor: boat speed 150%, cannon reload 2 s",
     )).toHaveLength(eventCount);
+  });
+
+  it("regenerates the world when the host changes land coverage", () => {
+    const { room } = setup();
+    const hostSocket = connect(room);
+    join(room, hostSocket, "Harbor");
+    const hostId = welcome(hostSocket).playerId;
+    room.game.scores[hostId]!.score = 3;
+    const initialSeed = room.game.world.seed;
+    const settings = { ...DEFAULT_SETTINGS, landCoveragePct: 10 };
+
+    send(room, hostSocket, { type: "host", action: "settings", settings });
+
+    expect(room.game.settings).toEqual(settings);
+    expect(room.game.world.seed).not.toBe(initialSeed);
+    const coverage = room.game.world.grid.reduce((sum, cell) => sum + cell, 0) / room.game.world.grid.length;
+    expect(coverage).toBeGreaterThanOrEqual(0.075);
+    expect(coverage).toBeLessThanOrEqual(0.125);
+    expect(hostSocket.last("world")?.type).toBe("world");
+    expect(hostSocket.last("projectiles")).toMatchObject({ type: "projectiles", reset: true, shells: [], torpedoes: [] });
+    expect(hostSocket.messages.some((message) =>
+      message.type === "event" && message.event.message === "Host Harbor: land coverage 10%",
+    )).toBe(true);
+    expect(hostSocket.messages.some((message) =>
+      message.type === "event" && message.event.message === "Harbor regenerated the world",
+    )).toBe(true);
+    expect(room.game.scores[hostId]?.score).toBe(3);
   });
 
   it("preserves settings through regeneration, score reset, and host succession", () => {

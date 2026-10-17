@@ -311,6 +311,7 @@ const settingsRows: Array<{ key: keyof GameSettings; label: string }> = [
   { key: "torpedoSpeedPct", label: "Torpedo speed" },
   { key: "cannonReload", label: "Cannon reload" },
   { key: "torpedoReload", label: "Torpedo reload" },
+  { key: "landCoveragePct", label: "Land coverage" },
 ];
 
 window.addEventListener("keydown", (event) => {
@@ -1023,15 +1024,21 @@ function drawHostMenu(snapshot: Snapshot, width: number, height: number): void {
   ctx.fillText("HOST CONTROL", left, centerY - 142);
   ctx.fillStyle = "#9bb4bb";
   ctx.font = "12px Manrope, sans-serif";
+  const landCoverageChanged = hostPending?.action === "settings"
+    && hostPending.draft.landCoveragePct !== gameSettings.landCoveragePct;
   ctx.fillText(
-    hostPending?.action === "settings" ? "Adjust values for this battle." : "Actions are shared with every captain.",
+    landCoverageChanged
+      ? "Enter: apply + new map"
+      : hostPending?.action === "settings"
+        ? "Adjust values for this battle."
+        : "Actions are shared with every captain.",
     left,
     centerY - 112,
   );
   if (hostPending?.action === "settings") {
     const pending = hostPending;
     settingsRows.forEach((row, index) => {
-      const y = centerY - 72 + index * 26;
+      const y = centerY - 72 + index * 23;
       const selected = index === pending.index;
       const value = pending.draft[row.key];
       if (selected) {

@@ -15,7 +15,7 @@ import {
   type GameState,
   type GameEvent,
 } from "../shared/sim.js";
-import { encodeWorld, generateWorld, type World } from "../shared/world.js";
+import { encodeWorld, generateWorldWithFallback, type World } from "../shared/world.js";
 
 const SLOT_COLOURS = ["#3b82f6", "#ef4444", "#facc15", "#a855f7"] as const;
 const EMPTY_INPUT: FrigateInput = { seq: 0, keys: 0, throttle: 0, fireCannon: false, fireTorpedo: false };
@@ -53,7 +53,7 @@ export class Room {
     private readonly clock: () => number = () => performance.now() / 1000,
     initialWorld?: World,
   ) {
-    this.game = createGameState(initialWorld ?? generateWorld(seed));
+    this.game = createGameState(initialWorld ?? generateWorldWithFallback(seed, GAME_CONFIG.world.generation.targetLandCoverage));
     this.random = createSeededRandom(seed ^ 0x753a9);
   }
 
@@ -211,24 +211,7 @@ export class Room {
     }
     const now = this.clock();
     if (message.action === "regenerate") {
-      const seed = randomBytes(4).readUInt32LE();
-      regenerateGameWorld(this.game, seed, now, this.random);
-      for (const player of this.sessions.values()) {
-        const frigate = this.game.frigates[player.id];
-        if (frigate) frigate.name = player.name;
-      }
-      const encoded = encodeWorld(this.game.world.grid);
-      this.broadcast({ type: "world", world: encoded });
-      this.sentProjectileIds.clear();
-      this.broadcastJoined({
-        type: "projectiles",
-        reset: true,
-        serverTime: now,
-        shells: [],
-        torpedoes: [],
-        removed: [],
-      });
-      this.broadcastEvent({ type: "host", playerId: session.id, name: session.name, message: `${session.name} regenerated the world` });
+      this.regenerateWorld(session, now);
       return;
     }
     if (message.action === "resetScores") {
@@ -258,6 +241,7 @@ export class Room {
         return;
       }
       const changes = describeSettingsChanges(this.game.settings, settings);
+      const coverageChanged = this.game.settings.landCoveragePct !== settings.landCoveragePct;
       this.game.settings = settings;
       for (const player of this.sessions.values()) {
         if (player.socket) this.send(player.socket, { type: "settings", settings: { ...settings } });
@@ -270,9 +254,31 @@ export class Room {
           message: `Host ${session.name}: ${changes.join(", ")}`,
         });
       }
+      if (coverageChanged) this.regenerateWorld(session, now);
       return;
     }
     this.send(session.socket!, { type: "error", code: "invalid_action" });
+  }
+
+  private regenerateWorld(session: PlayerSession, now: number): void {
+    const seed = randomBytes(4).readUInt32LE();
+    regenerateGameWorld(this.game, seed, now, this.random);
+    for (const player of this.sessions.values()) {
+      const frigate = this.game.frigates[player.id];
+      if (frigate) frigate.name = player.name;
+    }
+    const encoded = encodeWorld(this.game.world.grid);
+    this.broadcast({ type: "world", world: encoded });
+    this.sentProjectileIds.clear();
+    this.broadcastJoined({
+      type: "projectiles",
+      reset: true,
+      serverTime: now,
+      shells: [],
+      torpedoes: [],
+      removed: [],
+    });
+    this.broadcastEvent({ type: "host", playerId: session.id, name: session.name, message: `${session.name} regenerated the world` });
   }
 
   private tick(): void {

@@ -35,7 +35,7 @@ The game MUST work on both **Mac and PC** keyboards (Windows/Linux). Implementat
 
 The host opens the menu with Esc. R requests world regeneration, X requests a score reset, K opens a numbered list of captains to kick, and S opens Settings. Select a kick target with `Digit1`–`Digit3` or `Numpad1`–`Numpad3`. Enter or NumpadEnter confirms a pending action; Esc cancels it or returns from kick selection. Confirmations are shown in-game, not in browser dialogs.
 
-In Settings, the rows are Boat speed, Rotation speed, Cannon rotation, Torpedo rotation, Shell speed, Torpedo speed, Cannon reload, and Torpedo reload. Up/Down selects a row, Left/Right changes its value, D restores defaults, Enter applies the draft, and Esc returns to the host menu. Settings apply immediately to the battle.
+In Settings, the rows are Boat speed, Rotation speed, Cannon rotation, Torpedo rotation, Shell speed, Torpedo speed, Cannon reload, Torpedo reload, and Land coverage. Up/Down selects a row, Left/Right changes its value, D restores defaults, Enter applies the draft, and Esc returns to the host menu. When Land coverage differs from the applied value, the hint says `Enter: apply + new map`; applying it immediately generates a new map while keeping scores.
 
 ## In-world indicators
 

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { GAME_CONFIG } from "../src/shared/config.js";
-import { decodeWorld, encodeWorld, generateWorld, isLandAt } from "../src/shared/world.js";
+import { decodeWorld, encodeWorld, generateWorld, generateWorldWithFallback, isLandAt } from "../src/shared/world.js";
 
 const { columns, rows } = GAME_CONFIG.world;
 
@@ -76,8 +76,10 @@ describe("procedural world", () => {
       const coverage = countLand(world.grid) / world.grid.length;
       const landArea = landSummedArea(world.grid);
       const channelSize = GAME_CONFIG.world.generation.minChannelTiles;
-      expect(coverage).toBeGreaterThanOrEqual(0.2);
-      expect(coverage).toBeLessThanOrEqual(0.3);
+      const target = GAME_CONFIG.world.generation.targetLandCoverage;
+      const tolerance = GAME_CONFIG.world.generation.landCoverageTolerance;
+      expect(coverage).toBeGreaterThanOrEqual(target - tolerance);
+      expect(coverage).toBeLessThanOrEqual(target + tolerance);
       expect(waterRegionCount(world.grid)).toBe(1);
       for (let y = 0; y < rows; y += 1) {
         for (let x = 0; x < columns; x += 1) {
@@ -86,6 +88,24 @@ describe("procedural world", () => {
       }
     }
   }, 120_000);
+
+  it("generates requested coverage with connected water", () => {
+    const tolerance = GAME_CONFIG.world.generation.landCoverageTolerance;
+    for (const target of [0.05, 0.25, 0.4]) {
+      for (const seed of [1, 2]) {
+        const world = generateWorld(seed, target);
+        const coverage = countLand(world.grid) / world.grid.length;
+        expect(coverage).toBeGreaterThanOrEqual(target - tolerance);
+        expect(coverage).toBeLessThanOrEqual(target + tolerance);
+        expect(waterRegionCount(world.grid)).toBe(1);
+      }
+    }
+  }, 120_000);
+
+  it("tries the next seed when the requested coverage cannot be generated", () => {
+    expect(() => generateWorld(95028, 0.4)).toThrow();
+    expect(generateWorldWithFallback(95028, 0.4).seed).toBe(95029);
+  });
 
   it("is deterministic and round-trips the server-sent grid encoding", () => {
     const first = generateWorld(98765);

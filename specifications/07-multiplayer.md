@@ -24,10 +24,10 @@ A spawn point is valid only when no land tile lies within 60 u of the frigate hu
   - **Regenerate world**: new random seed; all projectiles are removed; all frigates respawn per the spawning rules. Scores are kept.
   - **Reset scores**: all scores and sunk counts set to 0.
   - **Kick a player**: choose a numbered target (ordered by slot) with 1–3.
-  - **Settings**: edit boat speed (`boatSpeedPct`), rotation (`rotationPct`), cannon rotation (`cannonRotationPct`), torpedo rotation (`torpedoRotationPct`), shell speed (`shellSpeedPct`), torpedo speed (`torpedoSpeedPct`), cannon reload (`cannonReload`), and torpedo reload (`torpedoReload`). Values must contain exactly the eight supported keys and satisfy their limits and steps (Q43, Q50); invalid settings are rejected.
+  - **Settings**: edit boat speed (`boatSpeedPct`), rotation (`rotationPct`), cannon rotation (`cannonRotationPct`), torpedo rotation (`torpedoRotationPct`), shell speed (`shellSpeedPct`), torpedo speed (`torpedoSpeedPct`), cannon reload (`cannonReload`), torpedo reload (`torpedoReload`), and Land coverage (`landCoveragePct`). Values must contain exactly the nine supported keys and satisfy their limits and steps (Q43, Q50, Q53); invalid settings are rejected.
 - Enter confirms a pending action; Esc cancels it or returns from kick selection.
 - All players see a notification in the event feed when the host performs an action.
-- Applying settings broadcasts the new values to every joined player. When at least one value changes, the feed says `Host <name>: <changed settings>` in field order; applying unchanged values does not add an event.
+- Applying settings broadcasts the new values to every joined player. When at least one value changes, the feed says `Host <name>: <changed settings>` in field order; applying unchanged values does not add an event. Changing Land coverage immediately regenerates the map and respawns all frigates, while keeping scores (Q54).
 - Settings are kept in server memory across world regeneration, score resets, and host succession. They reset to defaults when the server restarts. In-flight projectiles and reloads already in progress retain their values (Q44, Q46).
 - Host privileges are tied to the session (connection), not to a password.
 

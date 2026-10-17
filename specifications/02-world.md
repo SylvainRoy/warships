@@ -25,7 +25,8 @@ Rendering MAY smooth tile edges (e.g. marching squares) so coasts look natural; 
 ## Generation
 
 - The world is generated procedurally from a **seed** (integer) on the server. Clients receive the seed + generation algorithm version, or the tile grid itself (implementation choice).
-- Target land coverage: **20–30 %** of the world, made of:
+- The host's **Land coverage** setting controls the target share of the map: **5–40 %** in 5-point steps, default **25 %**. Generation accepts a result within **±2.5 percentage points** of the target; targets above 40 % are unsupported because generation may fail.
+- Land is made of:
   - a dozen large islands / land masses,
   - many small islands (some just a few tiles), giving cover against torpedoes.
 - **Connectivity MUST be guaranteed**: after generation, a flood fill identifies water regions; every water region not connected to the largest one is turned into land (or connected by carving a channel). Result: all water is reachable by any frigate.

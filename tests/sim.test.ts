@@ -465,14 +465,17 @@ describe("spawning", () => {
 
   it("keeps all four players 2400 units apart after world regeneration", () => {
     const state = createGameState(openWorld());
-    state.settings = { ...DEFAULT_SETTINGS, boatSpeedPct: 150, cannonReload: 2 };
+    state.settings = { ...DEFAULT_SETTINGS, boatSpeedPct: 150, cannonReload: 2, landCoveragePct: 10 };
     const ships = [1, 2, 3, 4].map((slot) => frigate(`p${slot}`, 4000 + slot * 100, 4000));
     for (const ship of ships) state.frigates[ship.playerId] = ship;
     state.scores = scores(...ships);
 
     regenerateGameWorld(state, 2468, 1, createSeededRandom(17));
 
-    expect(state.settings).toEqual({ ...DEFAULT_SETTINGS, boatSpeedPct: 150, cannonReload: 2 });
+    expect(state.settings).toEqual({ ...DEFAULT_SETTINGS, boatSpeedPct: 150, cannonReload: 2, landCoveragePct: 10 });
+    const coverage = state.world.grid.reduce((sum, cell) => sum + cell, 0) / state.world.grid.length;
+    expect(coverage).toBeGreaterThanOrEqual(0.075);
+    expect(coverage).toBeLessThanOrEqual(0.125);
     const respawned = Object.values(state.frigates);
     for (let first = 0; first < respawned.length; first += 1) {
       for (let second = first + 1; second < respawned.length; second += 1) {
