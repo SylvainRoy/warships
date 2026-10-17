@@ -3,6 +3,7 @@ import { performance } from "node:perf_hooks";
 import type { WebSocket } from "ws";
 import { GAME_CONFIG } from "../shared/config.js";
 import type { ClientMessage, ServerMessage, SnapshotFrigate } from "../shared/protocol.js";
+import { describeSettingsChanges, sanitizeSettings } from "../shared/settings.js";
 import {
   createGameState,
   createSeededRandom,
@@ -177,6 +178,7 @@ export class Room {
       token: session.token,
       slot: session.slot,
       world: encodeWorld(this.game.world.grid),
+      settings: { ...this.game.settings },
     });
     this.broadcastLobby();
   }
@@ -231,6 +233,27 @@ export class Room {
       this.removeSession(target);
       return;
     }
+    if (message.action === "settings") {
+      const settings = sanitizeSettings(message.settings);
+      if (!settings) {
+        this.send(session.socket!, { type: "error", code: "invalid_action" });
+        return;
+      }
+      const changes = describeSettingsChanges(this.game.settings, settings);
+      this.game.settings = settings;
+      for (const player of this.sessions.values()) {
+        if (player.socket) this.send(player.socket, { type: "settings", settings: { ...settings } });
+      }
+      if (changes.length > 0) {
+        this.broadcastEvent({
+          type: "host",
+          playerId: session.id,
+          name: session.name,
+          message: `Host ${session.name}: ${changes.join(", ")}`,
+        });
+      }
+      return;
+    }
     this.send(session.socket!, { type: "error", code: "invalid_action" });
   }
 
@@ -277,7 +300,14 @@ export class Room {
 
   private broadcastSnapshots(now: number): void {
     const shells = this.game.shells;
-    const torpedoes = this.game.torpedoes;
+    const torpedoes = this.game.torpedoes.map(({ id, ownerId, x, y, angle, elapsed }) => ({
+      id,
+      ownerId,
+      x,
+      y,
+      angle,
+      elapsed,
+    }));
     const players = [...this.sessions.values()].map((session) => this.scoreRecord(session));
     for (const session of this.sessions.values()) {
       if (!session.socket) continue;

@@ -1,6 +1,6 @@
 # Warships — Specifications
 
-**Status: APPROVED v1.4** (2026-10-17). Changes after approval must be recorded in the changelog.
+**Status: APPROVED v1.5** (2026-10-17). Changes after approval must be recorded in the changelog.
 
 | # | Document | Content |
 |---|----------|---------|
@@ -22,7 +22,8 @@
 
 ## Changelog
 
-- v1.4 — faster shells (800 u/s) drawn as pointed black shells; HUD anchored to window corners; approved 2026-10-17 after playtest.
+- v1.5 — host game settings: boat/rotation/shell/torpedo speed percentages and reload times (Q42–Q47); new base values (Q48); approved 2026-10-17.
+- v1.4 — faster shells drawn as pointed black shells; HUD anchored to window corners; approved 2026-10-17 after playtest.
 - v1.3 — fix spawns overlapping land (exact clearance check) and replace browser confirmation dialogs with in-game host-menu confirmation; approved 2026-10-17 after playtest.
 - v1.2 — hide the own frigate HP bar, replace the torpedo indicator with a segmented arrow, align cannon reticle ticks with the line of fire, keep the cannon reticle on screen, move HUD panels to 8 px from screen corners, and halve all damage; approved 2026-10-17 after playtest.
 - v1.1 — easier throttle controls, speed-scaled land damage, wider channels, reduced frigate speeds, and a wider torpedo spread; approved 2026-10-16 after playtest.

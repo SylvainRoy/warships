@@ -17,7 +17,8 @@ The server serves the static client files **and** the WebSocket endpoint on the 
 - Server tick: **30 Hz**. State snapshots broadcast at **20 Hz**.
 - Client renders at the display refresh rate (target 60 fps) and **interpolates** other frigates and projectiles between snapshots (≈ 100 ms buffer).
 - Own frigate: **client-side prediction** with server reconciliation, so controls feel instant even with latency.
-- Snapshots contain only dynamic state (frigates, projectiles, scores). The world is sent once on join and on regeneration.
+- Snapshots contain only dynamic state (frigates, projectiles, scores). The world is sent once on join and on regeneration; snapshots omit the internal speed field for torpedoes.
+- The `welcome` message includes the current game settings; a `settings` message broadcasts host updates to joined clients.
 - Messages: JSON for v1; binary encoding only if bandwidth requires it.
 - Target playable latency: up to 150 ms round-trip.
 
@@ -26,7 +27,7 @@ The server serves the static client files **and** the WebSocket endpoint on the 
 - Run with a single command (e.g. `npm start`, or a Docker image), configurable port.
 - **Phase 1 — local network**: the server runs on a machine of the LAN; players open `http://<server-ip>:<port>`. Plain HTTP/WS is acceptable. The README MUST document how to start it and find the URL.
 - **Phase 2 — Google Cloud (GCP)**, later: same server packaged as a Docker image, exposed over HTTPS/WSS. The architecture MUST NOT preclude this (e.g. configurable port, a single container, no local-file dependencies). The exact GCP service is chosen in phase 2.
-- No database; all state is in memory and lost when the server restarts.
+- No database; all state, including host-adjustable game settings, is in memory and lost when the server restarts.
 
 ## Performance targets
 

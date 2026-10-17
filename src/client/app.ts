@@ -1,7 +1,8 @@
 import { GAME_CONFIG } from "../shared/config.js";
-import { INPUT_KEYS, applyFrigateInput, type Frigate, type FrigateInput, type GameEvent, type Shell, type Torpedo } from "../shared/sim.js";
+import { INPUT_KEYS, applyFrigateInput, type Frigate, type FrigateInput, type GameEvent, type Shell } from "../shared/sim.js";
+import { DEFAULT_SETTINGS, describeSettingsChanges, SETTINGS_LIMITS, type GameSettings } from "../shared/settings.js";
 import { decodeWorld, isLandAt, type World } from "../shared/world.js";
-import type { LobbyMessage, ServerMessage, SnapshotFrigate } from "../shared/protocol.js";
+import type { LobbyMessage, ServerMessage, SnapshotFrigate, SnapshotTorpedo } from "../shared/protocol.js";
 import { computeCamera } from "./camera.js";
 
 type Snapshot = Extract<ServerMessage, { type: "snapshot" }>;
@@ -50,6 +51,7 @@ let world: World | null = null;
 let ownId: string | null = null;
 let latestSnapshot: Snapshot | null = null;
 let predictedOwn: Frigate | null = null;
+let gameSettings: GameSettings = DEFAULT_SETTINGS;
 let snapshots: StoredSnapshot[] = [];
 let pendingInputs: PendingInput[] = [];
 let sequence = 0;
@@ -59,7 +61,13 @@ let shouldAutoJoin = false;
 let joined = false;
 let tabHeld = false;
 let hostMenuOpen = false;
-let hostPending: { action: "regenerate" } | { action: "resetScores" } | { action: "kickSelect" } | { action: "kick"; playerId: string; name: string } | null = null;
+let hostPending:
+  | { action: "regenerate" }
+  | { action: "resetScores" }
+  | { action: "kickSelect" }
+  | { action: "kick"; playerId: string; name: string }
+  | { action: "settings"; draft: GameSettings; index: number }
+  | null = null;
 let debugVisible = false;
 let cannonFirePending = false;
 let torpedoFirePending = false;
@@ -147,6 +155,7 @@ function handleMessage(message: ServerMessage): void {
   } else if (message.type === "welcome") {
     throttleLevel = 0;
     ownId = message.playerId;
+    gameSettings = { ...message.settings };
     sessionStorage.setItem("warships.token", message.token);
     sessionStorage.setItem("warships.sessionName", nameInput.value.trim());
     world = { seed: 0, grid: decodeWorld(message.world) };
@@ -164,6 +173,8 @@ function handleMessage(message: ServerMessage): void {
     if (world) world = { ...world, grid: decodeWorld(message.world) };
     worldCache.clear();
     addFeed("World regenerated");
+  } else if (message.type === "settings") {
+    gameSettings = { ...message.settings };
   } else if (message.type === "snapshot") {
     onSnapshot(message);
   } else if (message.type === "event") {
@@ -272,6 +283,15 @@ const gameCodes = new Set([
   "KeyW", "KeyS", "ShiftRight", "Backslash", "IntlBackslash", "Tab", "Escape", "F3",
 ]);
 
+const settingsRows: Array<{ key: keyof GameSettings; label: string }> = [
+  { key: "boatSpeedPct", label: "Boat speed" },
+  { key: "rotationPct", label: "Rotation speed" },
+  { key: "shellSpeedPct", label: "Shell speed" },
+  { key: "torpedoSpeedPct", label: "Torpedo speed" },
+  { key: "cannonReload", label: "Cannon reload" },
+  { key: "torpedoReload", label: "Torpedo reload" },
+];
+
 window.addEventListener("keydown", (event) => {
   const target = event.target;
   const isTyping = target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement;
@@ -296,6 +316,11 @@ window.addEventListener("keydown", (event) => {
     }
     return;
   }
+  if (
+    hostMenuOpen
+    && (event.code === "KeyW" || event.code === "KeyS" || event.code === "ShiftRight"
+      || event.code === "Backslash" || event.code === "IntlBackslash" || bindingToKey[event.code] !== undefined)
+  ) return;
   if (event.repeat) return;
   if (event.code === "KeyW") {
     throttleLevel = Math.min(3, throttleLevel + 1);
@@ -356,6 +381,7 @@ function onSnapshot(snapshot: Snapshot): void {
         1 / GAME_CONFIG.network.tickRate,
         world ?? { seed: 0, grid: new Uint8Array(800 * 450) },
         localTime,
+        gameSettings,
       );
       localTime += 1 / GAME_CONFIG.network.tickRate;
     }
@@ -383,7 +409,16 @@ function simulationTick(): void {
   const input = nextInput();
   cannonFirePending = false;
   torpedoFirePending = false;
-  if (predictedOwn) predictedOwn = applyFrigateInput(predictedOwn, input, 1 / GAME_CONFIG.network.tickRate, world, performance.now() / 1000 + serverTimeOffset);
+  if (predictedOwn) {
+    predictedOwn = applyFrigateInput(
+      predictedOwn,
+      input,
+      1 / GAME_CONFIG.network.tickRate,
+      world,
+      performance.now() / 1000 + serverTimeOffset,
+      gameSettings,
+    );
+  }
   pendingInputs.push({ input, sentAt: performance.now() });
   socket.send(JSON.stringify({ type: "input", ...input }));
 }
@@ -428,7 +463,7 @@ function interpolateAngle(first: number, second: number, amount: number): number
   return first + delta * amount;
 }
 
-function interpolateProjectiles<T extends Shell | Torpedo>(
+function interpolateProjectiles<T extends Shell | SnapshotTorpedo>(
   older: T[],
   newer: T[],
   amount: number,
@@ -443,8 +478,8 @@ function interpolateProjectiles<T extends Shell | Torpedo>(
       const oldShell = previous as Shell;
       return { ...shell, elapsed: oldShell.elapsed + (shell.elapsed - oldShell.elapsed) * amount } as T;
     }
-    const torpedo = projectile as Torpedo;
-    const oldTorpedo = previous as Torpedo;
+    const torpedo = projectile as SnapshotTorpedo;
+    const oldTorpedo = previous as SnapshotTorpedo;
     return {
       ...torpedo,
       x: oldTorpedo.x + (torpedo.x - oldTorpedo.x) * amount,
@@ -695,7 +730,7 @@ function drawShell(shell: Shell): void {
   ctx.restore();
 }
 
-function drawTorpedo(torpedo: Torpedo): void {
+function drawTorpedo(torpedo: SnapshotTorpedo): void {
   ctx.save();
   ctx.translate(torpedo.x, torpedo.y);
   ctx.rotate(torpedo.angle);
@@ -733,7 +768,7 @@ function drawReticle(frigate: Frigate, now: number): void {
   const x = frigate.x + Math.cos(angle) * frigate.cannonRange;
   const y = frigate.y + Math.sin(angle) * frigate.cannonRange;
   const reloading = Math.max(0, frigate.cannonReadyAt - now);
-  const progress = 1 - reloading / GAME_CONFIG.cannon.reload;
+  const progress = 1 - reloading / gameSettings.cannonReload;
   ctx.save();
   ctx.globalAlpha = reloading > 0 ? .35 : .95;
   ctx.strokeStyle = "#5dffac";
@@ -760,7 +795,7 @@ function drawReticle(frigate: Frigate, now: number): void {
   }
   const torpedoAngle = frigate.heading + frigate.torpedoBearing;
   const torpedoReload = Math.max(0, frigate.torpedoReadyAt - now);
-  const torpedoProgress = 1 - torpedoReload / GAME_CONFIG.torpedo.reload;
+  const torpedoProgress = 1 - torpedoReload / gameSettings.torpedoReload;
   const filled = Math.floor(torpedoProgress * 5);
   const ready = torpedoReload === 0;
   const axisX = Math.cos(torpedoAngle);
@@ -924,10 +959,14 @@ function drawHud(snapshot: Snapshot, frigate: Frigate | undefined, now: number, 
 }
 
 function drawFullScoreboard(snapshot: Snapshot, width: number, height: number): void {
-  ctx.fillStyle = "rgba(3, 13, 20, .84)";
-  ctx.fillRect(width / 2 - 245, height / 2 - 160, 490, 320);
-  ctx.fillStyle = "#9bb6bf";
+  const changes = describeSettingsChanges(DEFAULT_SETTINGS, gameSettings);
+  const customRules = changes.length > 0 ? `CUSTOM RULES · ${changes.join(" · ")}` : "";
   ctx.font = "500 11px DM Mono, monospace";
+  const panelWidth = Math.min(width - 32, Math.max(490, customRules ? ctx.measureText(customRules).width + 48 : 490));
+  const panelHeight = customRules ? 360 : 320;
+  ctx.fillStyle = "rgba(3, 13, 20, .84)";
+  ctx.fillRect(width / 2 - panelWidth / 2, height / 2 - panelHeight / 2, panelWidth, panelHeight);
+  ctx.fillStyle = "#9bb6bf";
   ctx.textAlign = "left";
   ctx.fillText("WATERSIDE SCOREBOARD", width / 2 - 215, height / 2 - 128);
   snapshot.players.slice().sort((a, b) => b.score - a.score || a.sunk - b.sunk).forEach((player, index) => {
@@ -946,6 +985,11 @@ function drawFullScoreboard(snapshot: Snapshot, width: number, height: number): 
     ctx.fillText(`${player.score} PTS    ${player.sunk} SUNK`, width / 2 + 202, y + 4);
     ctx.textAlign = "left";
   });
+  if (customRules) {
+    ctx.fillStyle = "#e4ad80";
+    ctx.font = "500 11px DM Mono, monospace";
+    ctx.fillText(customRules, width / 2 - panelWidth / 2 + 24, height / 2 + 127);
+  }
 }
 
 function drawHostMenu(snapshot: Snapshot, width: number, height: number): void {
@@ -965,8 +1009,35 @@ function drawHostMenu(snapshot: Snapshot, width: number, height: number): void {
   ctx.fillText("HOST CONTROL", left, centerY - 142);
   ctx.fillStyle = "#9bb4bb";
   ctx.font = "12px Manrope, sans-serif";
-  ctx.fillText("Actions are shared with every captain.", left, centerY - 112);
-  if (hostPending?.action === "kickSelect") {
+  ctx.fillText(
+    hostPending?.action === "settings" ? "Adjust values for this battle." : "Actions are shared with every captain.",
+    left,
+    centerY - 112,
+  );
+  if (hostPending?.action === "settings") {
+    const pending = hostPending;
+    settingsRows.forEach((row, index) => {
+      const y = centerY - 72 + index * 26;
+      const selected = index === pending.index;
+      const value = pending.draft[row.key];
+      if (selected) {
+        ctx.fillStyle = "rgba(107, 224, 207, .14)";
+        ctx.fillRect(width / 2 - 200, y - 6, 400, 23);
+      }
+      ctx.fillStyle = selected ? "#6be0cf" : "#d7e5e9";
+      ctx.font = "600 12px Manrope, sans-serif";
+      ctx.fillText(`${selected ? "▸" : " "}  ${row.label}`, left, y);
+      ctx.textAlign = "right";
+      ctx.fillStyle = value !== DEFAULT_SETTINGS[row.key] ? "#e4ad80" : "#d7e5e9";
+      ctx.font = "500 12px DM Mono, monospace";
+      ctx.fillText(
+        row.key === "cannonReload" || row.key === "torpedoReload" ? `${value.toFixed(1)} s` : `${value}%`,
+        left + 368,
+        y,
+      );
+      ctx.textAlign = "left";
+    });
+  } else if (hostPending?.action === "kickSelect") {
     ctx.fillStyle = "#e4ad80";
     ctx.fillText("Select a player to kick:", left, centerY - 65);
     snapshot.players
@@ -989,28 +1060,81 @@ function drawHostMenu(snapshot: Snapshot, width: number, height: number): void {
     ctx.fillText("X  Reset scores", left, centerY - 35);
     ctx.fillStyle = "#e4ad80";
     ctx.fillText("K  Kick player", left, centerY - 5);
+    ctx.fillStyle = "#6be0cf";
+    ctx.fillText("S  Settings", left, centerY + 25);
   }
   ctx.fillStyle = "#8ea9b0";
   ctx.font = "10px DM Mono, monospace";
-  const footer = hostPending?.action === "kickSelect"
-    ? "ESC BACK"
-    : hostPending
-      ? "ENTER CONFIRM · ESC CANCEL"
-      : "ESC TO CLOSE";
-  ctx.fillText(footer, left, centerY + 140);
+  const footer = hostPending?.action === "settings"
+    ? "↑↓ SELECT · ←→ CHANGE · D DEFAULTS · ENTER APPLY · ESC BACK"
+    : hostPending?.action === "kickSelect"
+      ? "ESC BACK"
+      : hostPending
+        ? "ENTER CONFIRM · ESC CANCEL"
+        : "ESC TO CLOSE";
+  ctx.textAlign = "center";
+  ctx.fillText(footer, width / 2, centerY + 140);
+  ctx.textAlign = "left";
 }
 
-function sendHost(action: "regenerate" | "resetScores" | "kick", target?: string): void {
+function sendHost(action: "regenerate" | "resetScores"): void;
+function sendHost(action: "kick", target: string): void;
+function sendHost(action: "settings", settings: GameSettings): void;
+function sendHost(
+  action: "regenerate" | "resetScores" | "kick" | "settings",
+  value?: string | GameSettings,
+): void {
   if (!socket || socket.readyState !== WebSocket.OPEN) return;
-  socket.send(JSON.stringify({ type: "host", action, ...(target ? { target } : {}) }));
+  const message = action === "kick"
+    ? { type: "host", action, target: value as string }
+    : action === "settings"
+      ? { type: "host", action, settings: value as GameSettings }
+      : { type: "host", action };
+  socket.send(JSON.stringify(message));
 }
 
 window.addEventListener("keydown", (event) => {
-  if (!joined || event.repeat || event.target instanceof HTMLInputElement) return;
+  if (!joined || event.target instanceof HTMLInputElement) return;
   if (!hostMenuOpen) return;
+  const settingsPending = hostPending?.action === "settings" ? hostPending : null;
+  const isSettingsArrow = event.code === "ArrowUp" || event.code === "ArrowDown"
+    || event.code === "ArrowLeft" || event.code === "ArrowRight";
+  if (settingsPending && isSettingsArrow) {
+    event.preventDefault();
+    if ((event.code === "ArrowUp" || event.code === "ArrowDown") && event.repeat) return;
+    const direction = event.code === "ArrowUp" || event.code === "ArrowLeft" ? -1 : 1;
+    if (event.code === "ArrowUp" || event.code === "ArrowDown") {
+      hostPending = {
+        ...settingsPending,
+        index: Math.max(0, Math.min(settingsRows.length - 1, settingsPending.index + direction)),
+      };
+      return;
+    }
+    const row = settingsRows[settingsPending.index];
+    if (!row) return;
+    const limits = SETTINGS_LIMITS[row.key];
+    const currentSteps = Math.round((settingsPending.draft[row.key] - limits.min) / limits.step);
+    const totalSteps = Math.round((limits.max - limits.min) / limits.step);
+    const value = Number((limits.min + Math.max(0, Math.min(totalSteps, currentSteps + direction)) * limits.step).toFixed(6));
+    hostPending = { ...settingsPending, draft: { ...settingsPending.draft, [row.key]: value } };
+    return;
+  }
+  if (event.repeat) return;
   const digit = /^(?:Digit|Numpad)([1-3])$/.exec(event.code);
   const isEnter = event.code === "Enter" || event.code === "NumpadEnter";
-  if (isEnter || digit) event.preventDefault();
+  if (isEnter || digit || (settingsPending && event.code === "KeyD")) event.preventDefault();
+  if (settingsPending) {
+    if (event.code === "KeyD") {
+      hostPending = { ...settingsPending, draft: { ...DEFAULT_SETTINGS } };
+      return;
+    }
+    if (isEnter) {
+      sendHost("settings", { ...settingsPending.draft });
+      hostPending = null;
+      hostMenuOpen = false;
+    }
+    return;
+  }
   if (hostPending) {
     if (hostPending.action === "kickSelect" && digit && latestSnapshot) {
       const target = latestSnapshot.players
@@ -1021,13 +1145,16 @@ window.addEventListener("keydown", (event) => {
     }
     if (hostPending.action !== "kickSelect" && isEnter) {
       if (hostPending.action === "kick") sendHost("kick", hostPending.playerId);
-      else sendHost(hostPending.action);
+      else if (hostPending.action === "regenerate" || hostPending.action === "resetScores") sendHost(hostPending.action);
       hostPending = null;
       hostMenuOpen = false;
     }
     return;
   }
-  if (event.code === "KeyR") hostPending = { action: "regenerate" };
+  if (event.code === "KeyS") {
+    for (const code of ["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight"]) pressed.delete(code);
+    hostPending = { action: "settings", draft: { ...gameSettings }, index: 0 };
+  } else if (event.code === "KeyR") hostPending = { action: "regenerate" };
   else if (event.code === "KeyX") hostPending = { action: "resetScores" };
   else if (event.code === "KeyK" && latestSnapshot) {
     if (latestSnapshot.players.some((player) => player.playerId !== ownId)) {
