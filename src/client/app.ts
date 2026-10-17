@@ -6,10 +6,13 @@ import type { LobbyMessage, ServerMessage, SnapshotFrigate } from "../shared/pro
 import { computeCamera, computeViewport } from "./camera.js";
 import { ProjectileStore } from "./projectiles.js";
 import { RADAR, radarBearing, radarContacts, worldToRadar } from "./radar.js";
+import { shouldResetWake, torpedoWakeLength, wakeArmOffset, wakeLife } from "./wake.js";
 
 type Snapshot = Extract<ServerMessage, { type: "snapshot" }>;
 type StoredSnapshot = { receivedAt: number; value: Snapshot };
 type PendingInput = { input: FrigateInput; sentAt: number };
+type WakeSample = { x: number; y: number; heading: number; speed: number; at: number };
+type WakeObservation = { x: number; y: number; heading: number; status: SnapshotFrigate["status"]; at: number };
 
 declare global {
   interface Window {
@@ -50,7 +53,8 @@ let radarMapCanvas: HTMLCanvasElement | null = null;
 let radarMapWorld: World | null = null;
 const terrainChunkSize = 800;
 let worldCacheResolution = 0;
-const wakeTrails = new Map<string, Array<{ x: number; y: number; at: number }>>();
+const wakeTrails = new Map<string, WakeSample[]>();
+const wakeObservations = new Map<string, WakeObservation>();
 const effects: Array<{ event: GameEvent; at: number }> = [];
 const feed: Array<{ text: string; at: number }> = [];
 let socket: WebSocket | null = null;
@@ -634,31 +638,170 @@ function buildTerrainChunk(worldState: World, chunkX: number, chunkY: number, re
   return chunk;
 }
 
-function drawWake(frigate: SnapshotFrigate, now: number): void {
-  const history = wakeTrails.get(frigate.playerId) ?? [];
-  const last = history[history.length - 1];
-  if (!last || Math.hypot(frigate.x - last.x, frigate.y - last.y) > 1) {
-    history.push({ x: frigate.x, y: frigate.y, at: now });
+function sternPoint(sample: WakeSample): { x: number; y: number } {
+  return {
+    x: sample.x - Math.cos(sample.heading) * GAME_CONFIG.frigate.length / 2,
+    y: sample.y - Math.sin(sample.heading) * GAME_CONFIG.frigate.length / 2,
+  };
+}
+
+function wakeSpeedFraction(speed: number): number {
+  const settingAdjustedSpeed = GAME_CONFIG.frigate.maxForwardSpeed * gameSettings.boatSpeedPct / 100;
+  return Math.max(0, Math.min(1, Math.abs(speed) / settingAdjustedSpeed));
+}
+
+function wakeArmPoint(sample: WakeSample, now: number, side: number): { x: number; y: number } {
+  const age = now - sample.at;
+  const offset = wakeArmOffset(age, wakeSpeedFraction(sample.speed), GAME_CONFIG.frigate.beam);
+  const stern = sternPoint(sample);
+  const perpendicularX = -Math.sin(sample.heading);
+  const perpendicularY = Math.cos(sample.heading);
+  return {
+    x: stern.x + perpendicularX * offset * side,
+    y: stern.y + perpendicularY * offset * side,
+  };
+}
+
+function drawWakes(frigates: readonly SnapshotFrigate[], now: number): void {
+  const present = new Set(frigates.map((frigate) => frigate.playerId));
+  for (const playerId of wakeObservations.keys()) {
+    if (present.has(playerId)) continue;
+    wakeTrails.delete(playerId);
+    wakeObservations.delete(playerId);
   }
-  while (history.length > 0 && now - (history[0]?.at ?? now) > 1.3) history.shift();
-  wakeTrails.set(frigate.playerId, history);
-  if (history.length < 2) return;
+  for (const frigate of frigates) {
+    const history = wakeTrails.get(frigate.playerId) ?? [];
+    const last = history[history.length - 1];
+    const previousObservation = wakeObservations.get(frigate.playerId);
+    const observationJumped = previousObservation !== undefined && shouldResetWake(previousObservation, frigate);
+    const observationMoved = previousObservation !== undefined
+      && Math.hypot(frigate.x - previousObservation.x, frigate.y - previousObservation.y) > 0.001;
+    const observationStatusChanged = previousObservation !== undefined && previousObservation.status !== frigate.status;
+    const respawned = observationStatusChanged
+      && previousObservation.status !== "alive"
+      && frigate.status === "alive";
+    const sampleJumped = last !== undefined && shouldResetWake(last, frigate);
+    let speed = frigate.speed;
+    if (typeof speed !== "number") {
+      speed = previousObservation && observationMoved && !observationJumped && !respawned && now > previousObservation.at
+        ? (
+          (frigate.x - previousObservation.x) * Math.cos(frigate.heading)
+          + (frigate.y - previousObservation.y) * Math.sin(frigate.heading)
+        ) / (now - previousObservation.at)
+        : 0;
+    }
+    if (!previousObservation || observationMoved || observationJumped || observationStatusChanged) {
+      wakeObservations.set(frigate.playerId, {
+        x: frigate.x,
+        y: frigate.y,
+        heading: frigate.heading,
+        status: frigate.status,
+        at: now,
+      });
+    }
+
+    if (sampleJumped || respawned) history.length = 0;
+    const lastSample = history[history.length - 1];
+    if (
+      (frigate.status === "alive" || frigate.status === "sinking")
+      && Math.abs(speed) > 2
+      && (!lastSample || Math.hypot(frigate.x - lastSample.x, frigate.y - lastSample.y) >= 3)
+    ) {
+      history.push({ x: frigate.x, y: frigate.y, heading: frigate.heading, speed, at: now });
+    }
+
+    const currentSamples = history.filter((sample) => now - sample.at < wakeLife(sample.speed));
+    if (currentSamples.length > 0) wakeTrails.set(frigate.playerId, currentSamples);
+    else wakeTrails.delete(frigate.playerId);
+  }
+
   ctx.save();
-  ctx.lineWidth = 2;
-  ctx.setLineDash([3, 7]);
-  ctx.strokeStyle = "rgba(222, 246, 248, .36)";
+  ctx.globalAlpha = 1;
+  ctx.lineCap = "round";
+  ctx.lineJoin = "round";
+  for (const history of wakeTrails.values()) {
+    for (let index = 1; index < history.length; index += 1) {
+      const previous = history[index - 1];
+      const sample = history[index];
+      if (!previous || !sample) continue;
+      const age = now - sample.at;
+      const speedFraction = wakeSpeedFraction(sample.speed);
+      const fade = Math.max(0, 1 - age / wakeLife(sample.speed));
+      if (fade === 0 || speedFraction === 0) continue;
+
+      const previousStern = sternPoint(previous);
+      const currentStern = sternPoint(sample);
+      ctx.strokeStyle = `rgba(222, 246, 248, ${0.18 * fade * speedFraction})`;
+      ctx.lineWidth = 8 + age * 2;
+      ctx.beginPath();
+      ctx.moveTo(previousStern.x, previousStern.y);
+      ctx.lineTo(currentStern.x, currentStern.y);
+      ctx.stroke();
+
+      if (previous.speed <= 2 || sample.speed <= 2) continue;
+      ctx.strokeStyle = `rgba(222, 246, 248, ${0.55 * fade * speedFraction})`;
+      ctx.lineWidth = 1.5;
+      for (const side of [-1, 1]) {
+        const previousArm = wakeArmPoint(previous, now, side);
+        const currentArm = wakeArmPoint(sample, now, side);
+        ctx.beginPath();
+        ctx.moveTo(previousArm.x, previousArm.y);
+        ctx.lineTo(currentArm.x, currentArm.y);
+        ctx.stroke();
+      }
+    }
+  }
+  ctx.restore();
+}
+
+function torpedoBubbleJitter(id: string, index: number): number {
+  let hash = 2166136261;
+  for (let character = 0; character < id.length; character += 1) {
+    hash = Math.imul(hash ^ id.charCodeAt(character), 16777619);
+  }
+  hash = Math.imul(hash ^ index, 16777619);
+  return (hash >>> 0) / 0xffffffff * 4 - 2;
+}
+
+function drawTorpedoWake(torpedo: Torpedo): void {
+  const travelled = torpedo.elapsed * torpedo.speed;
+  const length = torpedoWakeLength(torpedo.speed, travelled);
+  if (length <= 0) return;
+
+  ctx.save();
+  const tailX = torpedo.x;
+  const tailY = torpedo.y;
+  const directionX = Math.cos(torpedo.angle);
+  const directionY = Math.sin(torpedo.angle);
+  const farX = tailX - directionX * length;
+  const farY = tailY - directionY * length;
+  const gradient = ctx.createLinearGradient(tailX, tailY, farX, farY);
+  gradient.addColorStop(0, "rgba(222, 246, 248, .5)");
+  gradient.addColorStop(1, "rgba(222, 246, 248, 0)");
+  ctx.strokeStyle = gradient;
+  ctx.lineWidth = 2.5;
   ctx.beginPath();
-  history.forEach((point, index) => {
-    if (index === 0) ctx.moveTo(point.x, point.y);
-    else ctx.lineTo(point.x, point.y);
-  });
+  ctx.moveTo(tailX, tailY);
+  ctx.lineTo(farX, farY);
   ctx.stroke();
+
+  for (let distance = 12, index = 0; distance <= length; distance += 12, index += 1) {
+    const fade = 1 - distance / length;
+    if (fade <= 0) continue;
+    const jitter = torpedoBubbleJitter(torpedo.id, index);
+    const x = tailX - directionX * distance - directionY * jitter;
+    const y = tailY - directionY * distance + directionX * jitter;
+    ctx.globalAlpha = 0.5 * fade;
+    ctx.fillStyle = "#def6f8";
+    ctx.beginPath();
+    ctx.arc(x, y, 1, 0, Math.PI * 2);
+    ctx.fill();
+  }
   ctx.restore();
 }
 
 function drawFrigate(frigate: SnapshotFrigate, now: number, debug: boolean): void {
   if (frigate.status === "waiting") return;
-  drawWake(frigate, now);
   if (frigate.status === "alive" && now < frigate.spawnProtectedUntil && Math.floor(now * 8) % 2 === 0) return;
   const sinkingProgress = frigate.status === "sinking"
     ? Math.min(1, (now - frigate.sinkingStartedAt) / GAME_CONFIG.player.sinkAnimation)
@@ -1413,10 +1556,14 @@ function renderFrame(now: number): void {
       viewport.dpr,
     );
     const visible = snapshot?.frigates ?? [];
+    drawWakes(visible, serverNow);
+    for (const shell of renderedProjectiles.shells) drawShell(shell);
+    for (const torpedo of renderedProjectiles.torpedoes) {
+      drawTorpedoWake(torpedo);
+      drawTorpedo(torpedo);
+    }
     for (const frigate of visible) if (frigate.playerId !== ownId) drawFrigate(frigate, serverNow, debugVisible);
     if (own) drawFrigate(own, serverNow, debugVisible);
-    for (const shell of renderedProjectiles.shells) drawShell(shell);
-    for (const torpedo of renderedProjectiles.torpedoes) drawTorpedo(torpedo);
     for (const effect of effects) drawExplosion(effect, now);
     if (own) drawReticle(own, serverNow);
     ctx.restore();

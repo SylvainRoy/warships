@@ -83,3 +83,8 @@ All questions raised during the specification phase are resolved. Each line give
 - **Q64 — Radar position privacy:** snapshots continue to carry every boat's exact position; radar only limits what is drawn. Accepted for now. Decided 2026-10-17.
 - **Q65 — Radar object rules:** each object kind uses position, direction-only, or hidden radar visibility. Decided 2026-10-17.
 - **Q66 — Radar range:** use a fixed 3,000 u range; a host setting may be added later. Decided 2026-10-17.
+- **Q67 — Boat wakes:** use a V-shaped forward wake scaled by speed; astern motion leaves a churn band only. Decided 2026-10-17.
+- **Q68 — Torpedo wakes:** leave a 150 u bubble trail behind each torpedo to reveal roughly where it came from. Decided 2026-10-17.
+- **Q69 — Wake persistence and speed settings:** forward boat samples live 3 s, astern churn samples 1 s, and torpedo trails extend up to 1.25 s of travel (150 u at default speed); reach follows the host speed settings. Decided 2026-10-17.
+- **Q70 — Wake networking:** wakes are visual and client-only, add no network data, and do not appear on radar. Decided 2026-10-17.
+- **Q71 — Wake lifecycle:** a sinking boat's wake fades in place, and a respawn starts a fresh wake. Decided 2026-10-17.

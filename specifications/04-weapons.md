@@ -43,6 +43,7 @@ Underwater weapon: straight-line, fast, blocked by land.
 - **Reload: 4 s**.
 - The host can adjust torpedo speed and reload; the 0.5 s arming delay remains unchanged (Q47).
 - Torpedoes do not collide with the firer's own frigate during the first 0.5 s (arming delay); after that they can hit it.
+- Each torpedo leaves a pale gradient line with bubbles behind it, up to 1.25 s of travel (150 u at the default 120 u/s). The 1 u bubbles are spaced 12 u apart with deterministic ±2 u lateral jitter. The trail grows only as far as the torpedo has travelled and disappears when it does; this is a client-only visual and is not shown on radar.
 
 ### Lifetime and impact
 
