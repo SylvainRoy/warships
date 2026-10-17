@@ -88,3 +88,8 @@ All questions raised during the specification phase are resolved. Each line give
 - **Q69 — Wake persistence and speed settings:** forward boat samples live 3 s, astern churn samples 1 s, and torpedo trails extend up to 1.25 s of travel (150 u at default speed); reach follows the host speed settings. Decided 2026-10-17.
 - **Q70 — Wake networking:** wakes are visual and client-only, add no network data, and do not appear on radar. Decided 2026-10-17.
 - **Q71 — Wake lifecycle:** a sinking boat's wake fades in place, and a respawn starts a fresh wake. Decided 2026-10-17.
+- **Q72 — Terrain style:** use the natural terrain style selected from the Q72–Q76 mock-ups. Decided 2026-10-17.
+- **Q73 — Terrain detail:** render beaches, grass, forest, and rock; add no buildings. Decided 2026-10-17.
+- **Q74 — Shallow-water width:** use about 60 u of turquoise shallows, halved after the mock-up; terrain colors are visual only. Decided 2026-10-17.
+- **Q75 — Terrain contrast:** keep boats, wakes, and the sight legible against the terrain; leave the radar unchanged. Decided 2026-10-17.
+- **Q76 — Mock-up process:** render terrain-style mock-ups before implementing the selected natural style as the real feature. Decided 2026-10-17.

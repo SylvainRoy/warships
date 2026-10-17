@@ -22,6 +22,8 @@ Two terrain types, stored as a grid of **tiles of 20 u × 20 u** (800 × 450 til
 
 Rendering MAY smooth tile edges (e.g. marching squares) so coasts look natural; collision uses the same smoothed shape or the tile grid (implementation choice, must be identical on server and client).
 
+The visual terrain style is natural: rounded turquoise shallows about **60 u** wide, a pale surf line, sandy beaches, grass, forest, and rock. These are visual only; the marching-squares coast shapes and radar are unchanged.
+
 ## Generation
 
 - The world is generated procedurally from a **seed** (integer) on the server. Clients receive the seed + generation algorithm version, or the tile grid itself (implementation choice).

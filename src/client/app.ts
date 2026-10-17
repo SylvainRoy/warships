@@ -6,6 +6,7 @@ import type { LobbyMessage, ServerMessage, SnapshotFrigate } from "../shared/pro
 import { computeCamera, computeViewport } from "./camera.js";
 import { ProjectileStore } from "./projectiles.js";
 import { RADAR, radarBearing, radarContacts, worldToRadar } from "./radar.js";
+import { noise, resetTerrainStyleCache, terrainFields, waterColorAtDistance } from "./terrainStyle.js";
 import { shouldResetWake, torpedoWakeLength, wakeArmOffset, wakeLife } from "./wake.js";
 
 type Snapshot = Extract<ServerMessage, { type: "snapshot" }>;
@@ -46,7 +47,6 @@ if (!context) throw new Error("Canvas 2D is unavailable");
 const ctx = context;
 
 const colours = ["#4b9bff", "#ff6266", "#f3c94e", "#c084fc"];
-const landColor = "#c5b58b";
 const pressed = new Set<string>();
 const worldCache = new Map<string, HTMLCanvasElement>();
 let radarMapCanvas: HTMLCanvasElement | null = null;
@@ -102,6 +102,7 @@ function resetWorldCaches(): void {
   worldCache.clear();
   radarMapCanvas = null;
   radarMapWorld = null;
+  resetTerrainStyleCache();
 }
 
 Object.defineProperty(window, "__warships", {
@@ -539,7 +540,7 @@ function renderTerrain(
   const lastChunkX = Math.min(lastWorldChunkX, Math.floor((cameraX + viewWidth) / terrainChunkSize));
   const firstChunkY = Math.max(0, Math.floor(cameraY / terrainChunkSize));
   const lastChunkY = Math.min(lastWorldChunkY, Math.floor((cameraY + viewHeight) / terrainChunkSize));
-  ctx.fillStyle = "#103e4d";
+  ctx.fillStyle = "#0f3d55";
   ctx.fillRect(cameraX, cameraY, viewWidth, viewHeight);
   ctx.save();
   ctx.beginPath();
@@ -562,6 +563,82 @@ function renderTerrain(
   ctx.restore();
 }
 
+function sampleTerrainField(field: Float64Array, column: number, row: number): number {
+  const x = Math.max(0, Math.min(GAME_CONFIG.world.columns - 1, column));
+  const y = Math.max(0, Math.min(GAME_CONFIG.world.rows - 1, row));
+  const left = Math.floor(x);
+  const top = Math.floor(y);
+  const right = Math.min(GAME_CONFIG.world.columns - 1, left + 1);
+  const bottom = Math.min(GAME_CONFIG.world.rows - 1, top + 1);
+  const tx = x - left;
+  const ty = y - top;
+  const upper = (field[top * GAME_CONFIG.world.columns + left] ?? 0) * (1 - tx)
+    + (field[top * GAME_CONFIG.world.columns + right] ?? 0) * tx;
+  const lower = (field[bottom * GAME_CONFIG.world.columns + left] ?? 0) * (1 - tx)
+    + (field[bottom * GAME_CONFIG.world.columns + right] ?? 0) * tx;
+  return upper * (1 - ty) + lower * ty;
+}
+
+function buildTerrainImage(
+  worldState: World,
+  chunkX: number,
+  chunkY: number,
+  kind: "water" | "land",
+): HTMLCanvasElement {
+  const tile = GAME_CONFIG.world.tileSize;
+  const chunkTiles = terrainChunkSize / tile;
+  const imageMarginTiles = 3;
+  const pixelsPerTile = kind === "water" ? 1 : 4;
+  const imageTiles = chunkTiles + imageMarginTiles * 2;
+  const imageCanvas = document.createElement("canvas");
+  imageCanvas.width = imageTiles * pixelsPerTile;
+  imageCanvas.height = imageTiles * pixelsPerTile;
+  const imageContext = imageCanvas.getContext("2d");
+  if (!imageContext) return imageCanvas;
+  const image = imageContext.createImageData(imageCanvas.width, imageCanvas.height);
+  const fields = terrainFields(worldState);
+  const firstColumn = chunkX * chunkTiles - imageMarginTiles;
+  const firstRow = chunkY * chunkTiles - imageMarginTiles;
+
+  for (let pixelRow = 0; pixelRow < imageCanvas.height; pixelRow += 1) {
+    const row = firstRow + (pixelRow + 0.5) / pixelsPerTile - 0.5;
+    for (let pixelColumn = 0; pixelColumn < imageCanvas.width; pixelColumn += 1) {
+      const column = firstColumn + (pixelColumn + 0.5) / pixelsPerTile - 0.5;
+      let color: readonly [number, number, number];
+      if (kind === "water") {
+        color = waterColorAtDistance(sampleTerrainField(fields.waterDistance, column, row));
+      } else {
+        const edge = sampleTerrainField(fields.landDistance, column, row);
+        const variation = noise(column, row);
+        if (edge < 20) color = [216, 198, 144];
+        else if (edge >= 160) color = blendTerrainColor([111, 154, 79], [138, 133, 119], variation);
+        else if (edge >= 40 && variation > 0.55) color = [63, 107, 56];
+        else color = [111, 154, 79];
+      }
+      const pixel = (pixelRow * imageCanvas.width + pixelColumn) * 4;
+      image.data[pixel] = Math.round(color[0]);
+      image.data[pixel + 1] = Math.round(color[1]);
+      image.data[pixel + 2] = Math.round(color[2]);
+      image.data[pixel + 3] = 255;
+    }
+  }
+  imageContext.putImageData(image, 0, 0);
+  return imageCanvas;
+}
+
+function blendTerrainColor(
+  from: readonly [number, number, number],
+  to: readonly [number, number, number],
+  amount: number,
+): readonly [number, number, number] {
+  const t = Math.max(0, Math.min(1, amount));
+  return [
+    from[0] + (to[0] - from[0]) * t,
+    from[1] + (to[1] - from[1]) * t,
+    from[2] + (to[2] - from[2]) * t,
+  ];
+}
+
 function buildTerrainChunk(worldState: World, chunkX: number, chunkY: number, resolution: number): HTMLCanvasElement {
   const chunkSize = terrainChunkSize;
   const tile = GAME_CONFIG.world.tileSize;
@@ -574,7 +651,7 @@ function buildTerrainChunk(worldState: World, chunkX: number, chunkY: number, re
   const terrain = chunk.getContext("2d", { alpha: false });
   if (!terrain) return chunk;
   terrain.scale(resolution, resolution);
-  terrain.fillStyle = "#103e4d";
+  terrain.fillStyle = "#0f3d55";
   terrain.fillRect(0, 0, paddedSize, paddedSize);
   const landCases: string[][][] = [
     [],
@@ -594,11 +671,12 @@ function buildTerrainChunk(worldState: World, chunkX: number, chunkY: number, re
     [["t", "tr", "br", "bl", "l"]],
     [["tl", "tr", "br", "bl"]],
   ];
-  const startColumn = Math.max(0, chunkX * chunkTiles - 1);
-  const endColumn = Math.min(GAME_CONFIG.world.columns - 2, chunkX * chunkTiles + chunkTiles);
-  const startRow = Math.max(0, chunkY * chunkTiles - 1);
-  const endRow = Math.min(GAME_CONFIG.world.rows - 2, chunkY * chunkTiles + chunkTiles);
-  terrain.fillStyle = landColor;
+  const polygonMarginTiles = 3;
+  const startColumn = Math.max(0, chunkX * chunkTiles - polygonMarginTiles);
+  const endColumn = Math.min(GAME_CONFIG.world.columns - 2, chunkX * chunkTiles + chunkTiles + polygonMarginTiles - 1);
+  const startRow = Math.max(0, chunkY * chunkTiles - polygonMarginTiles);
+  const endRow = Math.min(GAME_CONFIG.world.rows - 2, chunkY * chunkTiles + chunkTiles + polygonMarginTiles - 1);
+  const landPath = new Path2D();
   for (let row = startRow; row <= endRow; row += 1) {
     for (let column = startColumn; column <= endColumn; column += 1) {
       const topLeft = isLandAt(worldState, column * tile + tile / 2, row * tile + tile / 2);
@@ -624,17 +702,34 @@ function buildTerrainChunk(worldState: World, chunkX: number, chunkY: number, re
         const firstKey = polygon[0];
         const first = firstKey ? points[firstKey] : undefined;
         if (!first) continue;
-        terrain.beginPath();
-        terrain.moveTo(first[0], first[1]);
+        landPath.moveTo(first[0], first[1]);
         for (const key of polygon.slice(1)) {
           const point = points[key];
-          if (point) terrain.lineTo(point[0], point[1]);
+          if (point) landPath.lineTo(point[0], point[1]);
         }
-        terrain.closePath();
-        terrain.fill();
+        landPath.closePath();
       }
     }
   }
+
+  terrain.imageSmoothingEnabled = true;
+  const imageOffset = -tile * 2;
+  const imageSize = paddedSize + tile * 4;
+  const waterImage = buildTerrainImage(worldState, chunkX, chunkY, "water");
+  terrain.drawImage(waterImage, imageOffset, imageOffset, imageSize, imageSize);
+  terrain.lineJoin = "round";
+  terrain.lineCap = "round";
+  terrain.strokeStyle = "rgba(255, 255, 255, .15)";
+  terrain.lineWidth = 12;
+  terrain.stroke(landPath);
+  terrain.strokeStyle = "rgba(255, 255, 255, .6)";
+  terrain.lineWidth = 5;
+  terrain.stroke(landPath);
+  const landImage = buildTerrainImage(worldState, chunkX, chunkY, "land");
+  terrain.save();
+  terrain.clip(landPath);
+  terrain.drawImage(landImage, imageOffset, imageOffset, imageSize, imageSize);
+  terrain.restore();
   return chunk;
 }
 
