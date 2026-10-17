@@ -46,6 +46,7 @@ export class Room {
   private timer: ReturnType<typeof setInterval> | undefined;
   private lastLobbySent = "";
   private snapshotAccumulator = 0;
+  private sentProjectileIds = new Set<string>();
 
   constructor(
     seed = randomBytes(4).readUInt32LE(),
@@ -180,6 +181,14 @@ export class Room {
       world: encodeWorld(this.game.world.grid),
       settings: { ...this.game.settings },
     });
+    this.send(socket, {
+      type: "projectiles",
+      reset: true,
+      serverTime: now,
+      shells: [...this.game.shells],
+      torpedoes: [...this.game.torpedoes],
+      removed: [],
+    });
     this.broadcastLobby();
   }
 
@@ -210,6 +219,15 @@ export class Room {
       }
       const encoded = encodeWorld(this.game.world.grid);
       this.broadcast({ type: "world", world: encoded });
+      this.sentProjectileIds.clear();
+      this.broadcastJoined({
+        type: "projectiles",
+        reset: true,
+        serverTime: now,
+        shells: [],
+        torpedoes: [],
+        removed: [],
+      });
       this.broadcastEvent({ type: "host", playerId: session.id, name: session.name, message: `${session.name} regenerated the world` });
       return;
     }
@@ -272,6 +290,7 @@ export class Room {
       }
     }
     stepGame(this.game, inputs, 1 / GAME_CONFIG.network.tickRate, now);
+    this.broadcastProjectileChanges(now);
     for (const session of this.sessions.values()) {
       const score = this.game.scores[session.id];
       if (score) {
@@ -299,15 +318,6 @@ export class Room {
   }
 
   private broadcastSnapshots(now: number): void {
-    const shells = this.game.shells;
-    const torpedoes = this.game.torpedoes.map(({ id, ownerId, x, y, angle, elapsed }) => ({
-      id,
-      ownerId,
-      x,
-      y,
-      angle,
-      elapsed,
-    }));
     const players = [...this.sessions.values()].map((session) => this.scoreRecord(session));
     for (const session of this.sessions.values()) {
       if (!session.socket) continue;
@@ -333,10 +343,34 @@ export class Room {
         ackSeq: session.ackSeq,
         serverTime: now,
         frigates,
-        shells,
-        torpedoes,
         players,
       });
+    }
+  }
+
+  private broadcastProjectileChanges(now: number): void {
+    const liveShells = this.game.shells;
+    const liveTorpedoes = this.game.torpedoes;
+    const liveIds = new Set([...liveShells, ...liveTorpedoes].map((projectile) => projectile.id));
+    const liveTorpedoIds = new Set(liveTorpedoes.map((torpedo) => torpedo.id));
+    const shells = liveShells.filter((shell) => !this.sentProjectileIds.has(shell.id));
+    const torpedoes = liveTorpedoes.filter((torpedo) => !this.sentProjectileIds.has(torpedo.id));
+    const removed = [...this.sentProjectileIds].filter((id) => id.startsWith("t") && !liveTorpedoIds.has(id));
+
+    for (const shell of shells) this.sentProjectileIds.add(shell.id);
+    for (const torpedo of torpedoes) this.sentProjectileIds.add(torpedo.id);
+    for (const id of this.sentProjectileIds) {
+      if (!liveIds.has(id)) this.sentProjectileIds.delete(id);
+    }
+
+    if (shells.length > 0 || torpedoes.length > 0 || removed.length > 0) {
+      this.broadcastJoined({ type: "projectiles", serverTime: now, shells, torpedoes, removed });
+    }
+  }
+
+  private broadcastJoined(message: ServerMessage): void {
+    for (const session of this.sessions.values()) {
+      if (session.socket) this.send(session.socket, message);
     }
   }
 

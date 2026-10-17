@@ -158,25 +158,100 @@ describe("multiplayer room", () => {
     expect(room.game.settings).toEqual(settings);
   });
 
-  it("omits internal torpedo speed from snapshots", () => {
+  it("keeps snapshots free of projectiles and sends new projectiles only once to joined sockets", () => {
     const { room } = setup();
-    const socket = connect(room);
-    join(room, socket, "Harbor");
-    room.game.torpedoes.push({
-      id: "t1",
-      ownerId: welcome(socket).playerId,
-      x: 1000,
-      y: 4500,
-      angle: 0,
-      elapsed: 0,
-      speed: 120,
+    const host = connect(room);
+    const guest = connect(room);
+    join(room, host, "Harbor");
+    join(room, guest, "Buoy");
+    const playerId = welcome(host).playerId;
+    send(room, host, {
+      type: "input",
+      seq: 1,
+      keys: 0,
+      throttle: 0,
+      fireCannon: true,
+      fireTorpedo: true,
     });
     room.advanceTick();
     room.advanceTick();
+    const snapshot = host.last("snapshot");
+    expect(snapshot).toBeDefined();
+    expect(snapshot).not.toHaveProperty("shells");
+    expect(snapshot).not.toHaveProperty("torpedoes");
 
-    const torpedo = socket.last("snapshot")?.torpedoes[0];
-    expect(torpedo).toBeDefined();
-    expect(torpedo).not.toHaveProperty("speed");
+    for (const socket of [host, guest]) {
+      const spawned = socket.messages.filter(
+        (message): message is Extract<ServerMessage, { type: "projectiles" }> => message.type === "projectiles" && !message.reset,
+      );
+      expect(spawned).toHaveLength(1);
+      expect(spawned[0]?.shells).toHaveLength(2);
+      expect(spawned[0]?.torpedoes).toHaveLength(3);
+      expect(spawned[0]?.torpedoes.every((torpedo) => torpedo.speed === GAME_CONFIG.torpedo.speed)).toBe(true);
+      expect(spawned[0]?.shells.every((shell) => shell.ownerId === playerId)).toBe(true);
+    }
+
+    room.advanceTick();
+    for (const socket of [host, guest]) {
+      expect(socket.messages.filter((message) => message.type === "projectiles" && !message.reset)).toHaveLength(1);
+    }
+  });
+
+  it("announces a sent torpedo when it ends on land", () => {
+    const world: World = { seed: 11, grid: new Uint8Array(openWorld.grid.length) };
+    world.grid[225 * GAME_CONFIG.world.columns + 50] = 1;
+    const room = new Room(11, () => 0, world);
+    const socket = connect(room);
+    join(room, socket, "Harbor");
+    room.game.torpedoes.push({
+      id: "tland",
+      ownerId: welcome(socket).playerId,
+      x: 995,
+      y: 4510,
+      angle: 0,
+      elapsed: 0,
+      speed: GAME_CONFIG.torpedo.speed,
+    });
+
+    room.advanceTick();
+    expect(socket.last("projectiles")?.torpedoes.map((torpedo) => torpedo.id)).toContain("tland");
+    room.advanceTick();
+    expect(socket.last("projectiles")?.removed).toContain("tland");
+  });
+
+  it("sends live projectiles after welcome and resets all clients on regeneration", () => {
+    const { room } = setup();
+    const host = connect(room);
+    join(room, host, "Harbor");
+    send(room, host, {
+      type: "input",
+      seq: 1,
+      keys: 0,
+      throttle: 0,
+      fireCannon: true,
+      fireTorpedo: true,
+    });
+    room.advanceTick();
+
+    const guest = connect(room);
+    join(room, guest, "Buoy");
+    const welcomeIndex = guest.messages.findIndex((message) => message.type === "welcome");
+    const resetIndex = guest.messages.findIndex((message) => message.type === "projectiles" && message.reset);
+    expect(resetIndex).toBeGreaterThan(welcomeIndex);
+    const reset = guest.messages[resetIndex]!;
+    expect(reset.type).toBe("projectiles");
+    if (reset.type !== "projectiles") throw new Error("Expected projectile reset");
+    expect(reset.shells).toHaveLength(2);
+    expect(reset.torpedoes).toHaveLength(3);
+    expect(reset.torpedoes.every((torpedo) => torpedo.speed === GAME_CONFIG.torpedo.speed)).toBe(true);
+
+    send(room, host, { type: "host", action: "regenerate" });
+    expect(room.game.shells).toHaveLength(0);
+    expect(room.game.torpedoes).toHaveLength(0);
+    for (const socket of [host, guest]) {
+      const regenerated = socket.last("projectiles");
+      expect(regenerated).toMatchObject({ type: "projectiles", reset: true, shells: [], torpedoes: [], removed: [] });
+    }
   });
 
   it("transfers host to the longest-connected player when the host's grace period expires", () => {
