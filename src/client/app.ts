@@ -6,7 +6,14 @@ import type { LobbyMessage, ServerMessage, SnapshotFrigate } from "../shared/pro
 import { computeCamera, computeViewport } from "./camera.js";
 import { ProjectileStore } from "./projectiles.js";
 import { RADAR, radarBearing, radarContacts, worldToRadar } from "./radar.js";
-import { noise, resetTerrainStyleCache, terrainFields, waterColorAtDistance } from "./terrainStyle.js";
+import {
+  landColorAt,
+  noise,
+  noise2,
+  resetTerrainStyleCache,
+  terrainFields,
+  waterColorAtDistance,
+} from "./terrainStyle.js";
 import { shouldResetWake, torpedoWakeLength, wakeArmOffset, wakeLife } from "./wake.js";
 
 type Snapshot = Extract<ServerMessage, { type: "snapshot" }>;
@@ -609,11 +616,7 @@ function buildTerrainImage(
         color = waterColorAtDistance(sampleTerrainField(fields.waterDistance, column, row));
       } else {
         const edge = sampleTerrainField(fields.landDistance, column, row);
-        const variation = noise(column, row);
-        if (edge < 20) color = [216, 198, 144];
-        else if (edge >= 160) color = blendTerrainColor([111, 154, 79], [138, 133, 119], variation);
-        else if (edge >= 40 && variation > 0.55) color = [63, 107, 56];
-        else color = [111, 154, 79];
+        color = landColorAt(edge, noise(column, row), noise2(column, row));
       }
       const pixel = (pixelRow * imageCanvas.width + pixelColumn) * 4;
       image.data[pixel] = Math.round(color[0]);
@@ -624,19 +627,6 @@ function buildTerrainImage(
   }
   imageContext.putImageData(image, 0, 0);
   return imageCanvas;
-}
-
-function blendTerrainColor(
-  from: readonly [number, number, number],
-  to: readonly [number, number, number],
-  amount: number,
-): readonly [number, number, number] {
-  const t = Math.max(0, Math.min(1, amount));
-  return [
-    from[0] + (to[0] - from[0]) * t,
-    from[1] + (to[1] - from[1]) * t,
-    from[2] + (to[2] - from[2]) * t,
-  ];
 }
 
 function buildTerrainChunk(worldState: World, chunkX: number, chunkY: number, resolution: number): HTMLCanvasElement {

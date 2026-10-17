@@ -3,6 +3,10 @@ import type { World } from "../shared/world.js";
 
 const { columns, rows, tileSize } = GAME_CONFIG.world;
 const infiniteDistance = Number.POSITIVE_INFINITY;
+const sandColor: readonly [number, number, number] = [216, 198, 144];
+const grassColor: readonly [number, number, number] = [111, 154, 79];
+const forestColor: readonly [number, number, number] = [63, 107, 56];
+const rockColor: readonly [number, number, number] = [138, 133, 119];
 
 export interface TerrainFields {
   waterDistance: Float64Array;
@@ -106,14 +110,42 @@ export function waterColorAtDistance(distance: number): readonly [number, number
 }
 
 export function noise(column: number, row: number): number {
-  const x = column / 8;
-  const y = row / 8;
+  return valueNoise(column, row, 8, 0);
+}
+
+export function noise2(column: number, row: number): number {
+  return valueNoise(column, row, 5, 0x9e3779b9);
+}
+
+export function landColorAt(
+  distance: number,
+  forestNoise: number,
+  rockNoise: number,
+): readonly [number, number, number] {
+  const sandGrassBlend = smoothstep(15, 25, distance);
+  let red = sandColor[0] + (grassColor[0] - sandColor[0]) * sandGrassBlend;
+  let green = sandColor[1] + (grassColor[1] - sandColor[1]) * sandGrassBlend;
+  let blue = sandColor[2] + (grassColor[2] - sandColor[2]) * sandGrassBlend;
+  const forestBlend = distance >= 40 ? smoothstep(0.51, 0.59, forestNoise) : 0;
+  red += (forestColor[0] - red) * forestBlend;
+  green += (forestColor[1] - green) * forestBlend;
+  blue += (forestColor[2] - blue) * forestBlend;
+  const rockBlend = smoothstep(140, 180, distance) * smoothstep(0.51, 0.59, rockNoise);
+  red += (rockColor[0] - red) * rockBlend;
+  green += (rockColor[1] - green) * rockBlend;
+  blue += (rockColor[2] - blue) * rockBlend;
+  return [red, green, blue];
+}
+
+function valueNoise(column: number, row: number, cellSize: number, hashOffset: number): number {
+  const x = column / cellSize;
+  const scaledY = row / cellSize;
   const left = Math.floor(x);
-  const top = Math.floor(y);
+  const top = Math.floor(scaledY);
   const tx = x - left;
-  const ty = y - top;
-  const upper = hashNoise(left, top) * (1 - tx) + hashNoise(left + 1, top) * tx;
-  const lower = hashNoise(left, top + 1) * (1 - tx) + hashNoise(left + 1, top + 1) * tx;
+  const ty = scaledY - top;
+  const upper = hashNoise(left, top, hashOffset) * (1 - tx) + hashNoise(left + 1, top, hashOffset) * tx;
+  const lower = hashNoise(left, top + 1, hashOffset) * (1 - tx) + hashNoise(left + 1, top + 1, hashOffset) * tx;
   return upper * (1 - ty) + lower * ty;
 }
 
@@ -182,8 +214,13 @@ function blendRgb(
   ];
 }
 
-function hashNoise(column: number, row: number): number {
-  let value = Math.imul(column | 0, 0x1f123bb5) ^ Math.imul(row | 0, 0x5f356495);
+function smoothstep(edge0: number, edge1: number, value: number): number {
+  const t = Math.max(0, Math.min(1, (value - edge0) / (edge1 - edge0)));
+  return t * t * (3 - 2 * t);
+}
+
+function hashNoise(column: number, row: number, hashOffset: number): number {
+  let value = Math.imul(column | 0, 0x1f123bb5) ^ Math.imul(row | 0, 0x5f356495) ^ hashOffset;
   value = Math.imul(value ^ (value >>> 15), 0x2c1b3c6d);
   value ^= value >>> 12;
   return (value >>> 0) / 0xffffffff;

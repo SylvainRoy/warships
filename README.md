@@ -2,8 +2,6 @@
 
 A persistent, four-captain naval free-for-all. The first player to join is the host.
 
-**Specification status: APPROVED v1.15.**
-
 ## Play on your LAN
 
 Install Node.js 24 on the server computer, then from this repository run:
@@ -47,10 +45,6 @@ npm run typecheck
 npm test
 npm run build
 ```
-
-## Changelog
-
-- **v1.15** — Natural terrain rendering with rounded 60 u shallows, surf, beaches, grass, forest, and rock (Q72–Q76).
 
 ## Docker
 

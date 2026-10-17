@@ -1,5 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { euclideanDistanceField, waterColorAtDistance } from "../src/client/terrainStyle.js";
+import {
+  euclideanDistanceField,
+  landColorAt,
+  noise,
+  noise2,
+  waterColorAtDistance,
+} from "../src/client/terrainStyle.js";
 
 describe("euclideanDistanceField", () => {
   it("measures exact center-to-center Euclidean distances", () => {
@@ -54,5 +60,31 @@ describe("waterColorAtDistance", () => {
     expect(waterColorAtDistance(0)).toEqual([63, 183, 176]);
     expect(waterColorAtDistance(60)).toEqual([26, 95, 122]);
     expect(waterColorAtDistance(400)).toEqual([15, 61, 85]);
+  });
+});
+
+describe("landColorAt", () => {
+  it("blends sand into grass from 15 to 25 u", () => {
+    expect(landColorAt(15, 0, 0)).toEqual([216, 198, 144]);
+    expect(landColorAt(20, 0, 0)).toEqual([163.5, 176, 111.5]);
+    expect(landColorAt(25, 0, 0)).toEqual([111, 154, 79]);
+    expect(noise(20.25, 31.25)).not.toEqual(noise(20, 31));
+    expect(noise2(20.25, 31.25)).not.toEqual(noise2(20, 31));
+  });
+
+  it("softens forest and rock edges with their independent noise fields", () => {
+    expect(landColorAt(50, 0.51, 0)).toEqual([111, 154, 79]);
+    const forestMidpoint = landColorAt(50, 0.55, 0);
+    expect(forestMidpoint[0]).toBeCloseTo(87, 10);
+    expect(forestMidpoint[1]).toBeCloseTo(130.5, 10);
+    expect(forestMidpoint[2]).toBeCloseTo(67.5, 10);
+    expect(landColorAt(50, 0.59, 0)).toEqual([63, 107, 56]);
+    expect(landColorAt(180, 0, 0.51)).toEqual([111, 154, 79]);
+    const rockMidpoint = landColorAt(160, 0, 0.55);
+    expect(rockMidpoint[0]).toBeCloseTo(117.75, 10);
+    expect(rockMidpoint[1]).toBeCloseTo(148.75, 10);
+    expect(rockMidpoint[2]).toBeCloseTo(89, 10);
+    expect(landColorAt(180, 0, 0.59)).toEqual([138, 133, 119]);
+    expect(noise(20.5, 31.25)).not.toEqual(noise2(20.5, 31.25));
   });
 });
