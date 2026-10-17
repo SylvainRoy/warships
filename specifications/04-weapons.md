@@ -16,7 +16,7 @@ Ballistic weapon: shells fly in the air, over water and land, and land on the ai
 ### Firing
 
 - Right Shift fires a **salvo of 2 shells**. Their trajectories are parallel to the bearing, offset by ±15 u perpendicular to it, so they land 30 u apart, centred on the reticle.
-- Shells travel at **500 u/s** horizontal speed: ≤ 1.6 s flight at max range. The landing point is fixed at the time of firing (shells are not guided). Shells are drawn with a parabolic effect (size grows then shrinks, shadow on the water).
+- Shells travel at **800 u/s** horizontal speed: ≤ 1.0 s flight at max range. The landing point is fixed at the time of firing (shells are not guided). Shells are drawn as pointed black shells with a thin pale outline, nose oriented along the flight path, with the parabolic size effect (grows then shrinks) and shadow on the water.
 - **Reload: 3 s** after a salvo. Pressing fire while reloading does nothing.
 - Shells only interact **at their impact point**: no collision while flying, whatever is underneath.
 

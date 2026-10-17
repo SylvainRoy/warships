@@ -268,9 +268,10 @@ describe("torpedoes and scoring", () => {
     state.frigates.shooter = shooter;
     state.frigates.victim = victim;
     state.scores = scores(shooter, victim);
+    const shellDuration = Math.hypot(victim.x - shooter.x, victim.y - shooter.y) / GAME_CONFIG.cannon.shellSpeed;
     state.shells.push({
-      id: "late", ownerId: "shooter", startX: 5000, startY: 4500,
-      impactX: 5400, impactY: 4500, elapsed: 0.79, duration: 0.8,
+      id: "late", ownerId: "shooter", startX: shooter.x, startY: shooter.y,
+      impactX: victim.x, impactY: victim.y, elapsed: shellDuration - dt, duration: shellDuration,
     });
     shooter.status = "sinking";
     shooter.sinkingStartedAt = 0;

@@ -33,7 +33,7 @@ export const GAME_CONFIG = {
     minRange: 100,
     maxRange: 800,
     shellOffset: 15,
-    shellSpeed: 500,
+    shellSpeed: 800,
     damageRadius: 60,
     damage: 10,
     reload: 3,

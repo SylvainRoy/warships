@@ -55,3 +55,5 @@ All questions raised during the specification phase are resolved. Each line give
 - **Q36 — Damage halved:** cannon shell 10 HP, torpedo 25 HP, and land collision up to 10 HP, with no change to the graze threshold or interval; a frigate now takes 10 shells or 4 torpedoes to sink. Decided 2026-10-17 after playtest.
 - **Q37 — Host action confirmation:** host actions are confirmed inside the game (Enter confirms, Esc cancels; kick target chosen with 1–3) instead of browser dialogs, which some browsers/frames block. Decided 2026-10-17 after playtest.
 - **Q38 — Spawn clearance:** a spawn point is valid only if no land tile lies within 60 u of the frigate hull at any heading (disc of radius hull half-diagonal + 60 u), checked tile by tile. Decided 2026-10-17 after playtest.
+- **Q39 — Shell speed:** cannon shells travel at 800 u/s (was 500); max-range flight is 1.0 s, with range unchanged. Decided 2026-10-17 after playtest.
+- **Q40 — Shell look:** shells are pointed black projectiles with a thin pale outline, nose along the flight direction, keeping the parabolic size and shadow. Decided 2026-10-17 after playtest.

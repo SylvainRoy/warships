@@ -670,14 +670,29 @@ function drawShell(shell: Shell): void {
   const y = shell.startY + (shell.impactY - shell.startY) * progress;
   const height = Math.sin(progress * Math.PI) * 48;
   const size = 2.2 + Math.sin(progress * Math.PI) * 2.5;
+  const angle = Math.atan2(shell.impactY - shell.startY, shell.impactX - shell.startX);
   ctx.fillStyle = "rgba(0, 11, 17, .3)";
   ctx.beginPath();
-  ctx.ellipse(x, y + 4, size * 1.5, size * .8, 0, 0, Math.PI * 2);
+  ctx.ellipse(x, y + 4, size * 2, size * .7, angle, 0, Math.PI * 2);
   ctx.fill();
-  ctx.fillStyle = "#fff4c4";
+
+  ctx.save();
+  ctx.translate(x, y - height);
+  ctx.rotate(angle);
   ctx.beginPath();
-  ctx.arc(x, y - height, size, 0, Math.PI * 2);
+  ctx.moveTo(2.6 * size, 0);
+  ctx.quadraticCurveTo(1.4 * size, -0.8 * size, 0.4 * size, -0.8 * size);
+  ctx.lineTo(-1.6 * size, -0.8 * size);
+  ctx.lineTo(-1.6 * size, 0.8 * size);
+  ctx.lineTo(0.4 * size, 0.8 * size);
+  ctx.quadraticCurveTo(1.4 * size, 0.8 * size, 2.6 * size, 0);
+  ctx.closePath();
+  ctx.fillStyle = "#0b0d0e";
   ctx.fill();
+  ctx.lineWidth = 0.8;
+  ctx.strokeStyle = "rgba(225, 240, 236, .75)";
+  ctx.stroke();
+  ctx.restore();
 }
 
 function drawTorpedo(torpedo: Torpedo): void {
