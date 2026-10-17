@@ -4,6 +4,7 @@ import { applyFrigateInput, createGameState, createFrigate, createSeededRandom, 
 import type { World } from "../src/shared/world.js";
 
 const dt = 1 / GAME_CONFIG.network.tickRate;
+const maxHp = GAME_CONFIG.player.maxHp;
 const quietInput: FrigateInput = { seq: 0, keys: 0, throttle: 0, fireCannon: false, fireTorpedo: false };
 
 function openWorld(): World {
@@ -64,20 +65,22 @@ describe("frigate movement and land contact", () => {
     let ship = frigate("coast", 1970, 4500);
     ship.speed = 80;
     ship = awaitApply(ship, { ...quietInput, throttle: 3 }, dt, world, 0);
-    expect(ship.hp).toBe(80);
+    expect(ship.hp).toBe(maxHp - GAME_CONFIG.land.damage);
 
     let slower = frigate("slower", 1970, 4500);
     slower.speed = 80 / 3;
     slower = awaitApply(slower, { ...quietInput, throttle: 1 }, dt, world, 0);
-    expect(slower.hp).toBe(93);
+    expect(slower.hp).toBe(maxHp - Math.round(GAME_CONFIG.land.damage / 3));
 
-    let slider = frigate("slider", 1986, 4500, Math.acos(10 / 80));
-    slider.speed = 80;
+    const shallowImpactSpeed = GAME_CONFIG.land.grazeSpeed / 2;
+    const maxForwardSpeed = GAME_CONFIG.frigate.maxForwardSpeed;
+    let slider = frigate("slider", 1986, 4500, Math.acos(shallowImpactSpeed / maxForwardSpeed));
+    slider.speed = maxForwardSpeed;
     for (let tick = 0; tick < 8; tick += 1) {
       slider = awaitApply(slider, { ...quietInput, throttle: 3 }, dt, world, tick * dt);
     }
     expect(slider.y).toBeGreaterThan(4500);
-    expect(slider.hp).toBe(100);
+    expect(slider.hp).toBe(maxHp);
     expect(slider.speed).toBeGreaterThan(0);
   });
 
@@ -103,7 +106,7 @@ describe("frigate movement and land contact", () => {
     for (let tick = 1; tick <= 3 * GAME_CONFIG.network.tickRate; tick += 1) {
       ship = awaitApply(ship, { ...quietInput, throttle: 3 }, dt, world, tick * dt);
     }
-    expect(ship.hp).toBe(80);
+    expect(ship.hp).toBe(maxHp - GAME_CONFIG.land.damage);
   });
 
   it("ignores land damage during spawn protection", () => {
@@ -113,7 +116,7 @@ describe("frigate movement and land contact", () => {
     protectedShip.speed = 80;
     protectedShip.spawnProtectedUntil = 3;
     protectedShip = awaitApply(protectedShip, { ...quietInput, throttle: 3 }, dt, world, 0);
-    expect(protectedShip.hp).toBe(100);
+    expect(protectedShip.hp).toBe(maxHp);
   });
 
   it("self-sinks on a damaging land impact and applies the score penalty", () => {
@@ -144,8 +147,8 @@ describe("frigate movement and land contact", () => {
     stepGame(state, { one: quietInput, two: quietInput }, dt, dt);
     const distance = Math.hypot(first.x - second.x, first.y - second.y);
     expect(distance).toBeGreaterThanOrEqual(59);
-    expect(first.hp).toBe(100);
-    expect(second.hp).toBe(100);
+    expect(first.hp).toBe(maxHp);
+    expect(second.hp).toBe(maxHp);
   });
 });
 
@@ -168,13 +171,13 @@ describe("cannons", () => {
     expect(state.shells).toHaveLength(2);
     expect(Math.hypot(state.shells[0]!.impactX - state.shells[1]!.impactX, state.shells[0]!.impactY - state.shells[1]!.impactY)).toBeCloseTo(30);
     for (let tick = 1; tick <= 24; tick += 1) stepGame(state, {}, dt, tick * dt);
-    expect(target.hp).toBe(60);
+    expect(target.hp).toBe(maxHp - 2 * GAME_CONFIG.cannon.damage);
   });
 
   it("does not damage a hull more than 60 units from either impact", () => {
     const { state, target } = shootAt(400, 4586);
     for (let tick = 1; tick <= 24; tick += 1) stepGame(state, {}, dt, tick * dt);
-    expect(target.hp).toBe(100);
+    expect(target.hp).toBe(maxHp);
   });
 
   it("allows self-damage, enforces the 3 second reload, and clamps cannon range", () => {
@@ -183,7 +186,7 @@ describe("cannons", () => {
     shooter.x = 5100;
     shooter.y = 4500;
     for (let tick = 1; tick <= 7; tick += 1) stepGame(state, { shooter: { ...quietInput, fireCannon: true } }, dt, tick * dt);
-    expect(shooter.hp).toBe(60);
+    expect(shooter.hp).toBe(maxHp - 2 * GAME_CONFIG.cannon.damage);
     expect(state.shells).toHaveLength(0);
     stepGame(state, { shooter: quietInput }, dt, 8 * dt);
     stepGame(state, { shooter: { ...quietInput, fireCannon: true } }, dt, 3);
@@ -197,7 +200,7 @@ describe("cannons", () => {
 });
 
 describe("torpedoes and scoring", () => {
-  it("launches a 3-torpedo spread, hits hulls for 50, and reloads for 8 seconds", () => {
+  it("launches a 3-torpedo spread, hits hulls for configured damage, and reloads for 8 seconds", () => {
     const world = openWorld();
     const shooter = frigate("shooter");
     const target = frigate("target", 5120, 4512);
@@ -214,7 +217,7 @@ describe("torpedoes and scoring", () => {
     expect(angles[2]).toBeCloseTo(GAME_CONFIG.torpedo.spread);
     state.torpedoes = [state.torpedoes[1]!];
     for (let tick = 1; tick <= 60; tick += 1) stepGame(state, { shooter: { ...quietInput, fireTorpedo: true }, target: quietInput }, dt, tick * dt);
-    expect(target.hp).toBe(50);
+    expect(target.hp).toBe(maxHp - GAME_CONFIG.torpedo.damage);
     expect(state.torpedoes.length).toBeLessThan(3);
     state.torpedoes = [];
     stepGame(state, { shooter: quietInput }, dt, 7.9);
@@ -249,9 +252,9 @@ describe("torpedoes and scoring", () => {
     state.scores = scores(shooter);
     state.torpedoes = [{ id: "arming", ownerId: shooter.playerId, x: 800, y: 4500, angle: 0, elapsed: 0 }];
     for (let tick = 1; tick <= 20; tick += 1) stepGame(state, {}, dt, tick * dt);
-    expect(shooter.hp).toBe(100);
+    expect(shooter.hp).toBe(maxHp);
     for (let tick = 21; tick <= 30; tick += 1) stepGame(state, {}, dt, tick * dt);
-    expect(shooter.hp).toBe(50);
+    expect(shooter.hp).toBe(maxHp - GAME_CONFIG.torpedo.damage);
     expect(state.scores.shooter?.score).toBe(0);
   });
 
@@ -259,7 +262,7 @@ describe("torpedoes and scoring", () => {
     const world = openWorld();
     const shooter = frigate("shooter");
     const victim = frigate("victim", 5400, 4500);
-    victim.hp = 20;
+    victim.hp = GAME_CONFIG.cannon.damage;
     const state = createGameState(world);
     state.frigates.shooter = shooter;
     state.frigates.victim = victim;
@@ -285,7 +288,7 @@ describe("spawning", () => {
     expect(Math.hypot(first.x - second.x, first.y - second.y)).toBeGreaterThanOrEqual(GAME_CONFIG.player.spawnDistance);
     expect(first.x).toBeGreaterThan(60);
     expect(first.y).toBeGreaterThan(60);
-    expect(first.hp).toBe(100);
+    expect(first.hp).toBe(maxHp);
     expect(first.cannonRange).toBe(800);
     expect(pointToHullDistance(first.x, first.y, first)).toBe(0);
   });

@@ -782,58 +782,63 @@ function drawReticle(frigate: Frigate, now: number): void {
 }
 
 function drawHud(snapshot: Snapshot, frigate: Frigate | undefined, now: number, logicalWidth: number, logicalHeight: number): void {
+  const hudMargin = 8;
+  const captainsPanelX = logicalWidth - hudMargin - 230;
+  const captainsPanelY = hudMargin;
+  const hullPanelX = hudMargin;
+  const hullPanelY = logicalHeight - hudMargin - 110;
   ctx.save();
   ctx.textBaseline = "top";
   ctx.textAlign = "left";
   ctx.fillStyle = "rgba(5, 20, 29, .72)";
-  ctx.fillRect(logicalWidth - 250, 20, 230, Math.min(235, 54 + snapshot.players.length * 34));
+  ctx.fillRect(captainsPanelX, captainsPanelY, 230, Math.min(235, 54 + snapshot.players.length * 34));
   ctx.fillStyle = "#88a7b0";
   ctx.font = "500 10px DM Mono, monospace";
-  ctx.fillText("CAPTAINS", logicalWidth - 232, 31);
+  ctx.fillText("CAPTAINS", captainsPanelX + 18, captainsPanelY + 11);
   snapshot.players.slice().sort((a, b) => a.slot - b.slot).forEach((player, index) => {
-    const y = 52 + index * 34;
+    const y = captainsPanelY + 32 + index * 34;
     const own = player.playerId === ownId;
     if (own) {
       ctx.fillStyle = "rgba(100, 223, 202, .12)";
-      ctx.fillRect(logicalWidth - 240, y - 5, 210, 29);
+      ctx.fillRect(captainsPanelX + 10, y - 5, 210, 29);
     }
     ctx.fillStyle = colours[player.slot - 1] ?? "#fff";
     ctx.beginPath();
-    ctx.arc(logicalWidth - 226, y + 5, 4, 0, Math.PI * 2);
+    ctx.arc(captainsPanelX + 24, y + 5, 4, 0, Math.PI * 2);
     ctx.fill();
     ctx.fillStyle = own ? "#f0fffa" : "#d7e5e9";
     ctx.font = `${own ? 700 : 500} 12px Manrope, sans-serif`;
-    ctx.fillText(`${player.host ? "♛ " : ""}${player.name}`, logicalWidth - 215, y - 2);
+    ctx.fillText(`${player.host ? "♛ " : ""}${player.name}`, captainsPanelX + 35, y - 2);
     ctx.textAlign = "right";
     ctx.fillStyle = "#b7cbd0";
     ctx.font = "500 11px DM Mono, monospace";
-    ctx.fillText(`${player.score}  ·  ${player.sunk}`, logicalWidth - 32, y);
+    ctx.fillText(`${player.score}  ·  ${player.sunk}`, captainsPanelX + 218, y);
     ctx.textAlign = "left";
   });
   if (frigate) {
     ctx.fillStyle = "rgba(5, 20, 29, .78)";
-    ctx.fillRect(20, logicalHeight - 130, 380, 110);
+    ctx.fillRect(hullPanelX, hullPanelY, 380, 110);
     ctx.fillStyle = "#90a8b0";
     ctx.font = "500 10px DM Mono, monospace";
-    ctx.fillText("HULL INTEGRITY", 34, logicalHeight - 116);
+    ctx.fillText("HULL INTEGRITY", hullPanelX + 14, hullPanelY + 14);
     ctx.fillStyle = "rgba(215, 237, 238, .17)";
-    ctx.fillRect(34, logicalHeight - 96, 248, 7);
+    ctx.fillRect(hullPanelX + 14, hullPanelY + 34, 248, 7);
     ctx.fillStyle = frigate.hp > 35 ? "#62d3b2" : "#ff776c";
-    ctx.fillRect(34, logicalHeight - 96, 248 * Math.max(0, frigate.hp / GAME_CONFIG.player.maxHp), 7);
+    ctx.fillRect(hullPanelX + 14, hullPanelY + 34, 248 * Math.max(0, frigate.hp / GAME_CONFIG.player.maxHp), 7);
     ctx.fillStyle = "#e8f4f4";
     ctx.font = "600 11px DM Mono, monospace";
-    ctx.fillText(`${frigate.hp} HP`, 34, logicalHeight - 81);
+    ctx.fillText(`${frigate.hp} HP`, hullPanelX + 14, hullPanelY + 49);
     ctx.fillStyle = "#91a8ae";
-    ctx.fillText(`CANNON ${Math.max(0, frigate.cannonReadyAt - now).toFixed(1)}s`, 111, logicalHeight - 81);
-    ctx.fillText(`TORPEDO ${Math.max(0, frigate.torpedoReadyAt - now).toFixed(1)}s`, 211, logicalHeight - 81);
+    ctx.fillText(`CANNON ${Math.max(0, frigate.cannonReadyAt - now).toFixed(1)}s`, hullPanelX + 91, hullPanelY + 49);
+    ctx.fillText(`TORPEDO ${Math.max(0, frigate.torpedoReadyAt - now).toFixed(1)}s`, hullPanelX + 191, hullPanelY + 49);
     ctx.fillStyle = "#90a8b0";
     ctx.font = "500 10px DM Mono, monospace";
     ctx.textBaseline = "middle";
-    ctx.fillText("THROTTLE", 34, logicalHeight - 58);
+    ctx.fillText("THROTTLE", hullPanelX + 14, hullPanelY + 72);
     const steps = ["ASTERN", "STOP", "1/3", "2/3", "FULL"];
     const activeStep = throttleLevel + 1;
-    const stepX = 108;
-    const stepY = logicalHeight - 69;
+    const stepX = hullPanelX + 88;
+    const stepY = hullPanelY + 61;
     const stepWidth = 52;
     const stepGap = 4;
     const stepHeight = 22;
@@ -851,7 +856,7 @@ function drawHud(snapshot: Snapshot, frigate: Frigate | undefined, now: number, 
     ctx.textBaseline = "alphabetic";
     ctx.fillStyle = "#d7e5e9";
     ctx.font = "600 11px DM Mono, monospace";
-    ctx.fillText(throttleLabels[activeStep] ?? "STOP", 34, logicalHeight - 36);
+    ctx.fillText(throttleLabels[activeStep] ?? "STOP", hullPanelX + 14, hullPanelY + 94);
     ctx.textBaseline = "top";
   }
   const feedNow = performance.now();

@@ -92,7 +92,7 @@ describe("multiplayer room", () => {
     expect(room.game.world.seed).not.toBe(initialSeed);
     expect(room.game.scores[host.playerId]?.score).toBe(4);
     expect(room.game.frigates[host.playerId]?.status).toBe("alive");
-    expect(room.game.frigates[guest.playerId]?.hp).toBe(100);
+    expect(room.game.frigates[guest.playerId]?.hp).toBe(GAME_CONFIG.player.maxHp);
     send(room, hostSocket, { type: "host", action: "resetScores" });
     expect(room.game.scores[host.playerId]?.score).toBe(0);
     expect(room.game.scores[guest.playerId]?.sunk).toBe(0);
