@@ -1,9 +1,11 @@
 import type { FrigateInput, GameEvent, Frigate, Shell, Torpedo, PlayerScore } from "./sim.js";
+import type { GameSettings } from "./settings.js";
 
 export type HostAction =
   | { action: "regenerate" }
   | { action: "resetScores" }
-  | { action: "kick"; target: string };
+  | { action: "kick"; target: string }
+  | { action: "settings"; settings: GameSettings };
 
 export type ClientMessage =
   | { type: "hello" }
@@ -23,9 +25,12 @@ export type SnapshotFrigate = Pick<
   "playerId" | "name" | "slot" | "x" | "y" | "heading" | "hp" | "status" | "sinkingStartedAt" | "spawnProtectedUntil"
 > & Partial<Omit<Frigate, "playerId" | "name" | "slot" | "x" | "y" | "heading" | "hp" | "status" | "sinkingStartedAt" | "spawnProtectedUntil">>;
 
+export type SnapshotTorpedo = Omit<Torpedo, "speed">;
+
 export type ServerMessage =
   | LobbyMessage
-  | { type: "welcome"; playerId: string; token: string; slot: number; world: number[] }
+  | { type: "welcome"; playerId: string; token: string; slot: number; world: number[]; settings: GameSettings }
+  | { type: "settings"; settings: GameSettings }
   | { type: "world"; world: number[] }
   | {
       type: "snapshot";
@@ -34,7 +39,7 @@ export type ServerMessage =
       serverTime: number;
       frigates: SnapshotFrigate[];
       shells: Shell[];
-      torpedoes: Torpedo[];
+      torpedoes: SnapshotTorpedo[];
       players: PlayerScore[];
     }
   | { type: "event"; event: GameEvent }

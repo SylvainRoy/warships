@@ -18,6 +18,7 @@ Ballistic weapon: shells fly in the air, over water and land, and land on the ai
 - Right Shift fires a **salvo of 2 shells**. Their trajectories are parallel to the bearing, offset by ±15 u perpendicular to it, so they land 30 u apart, centred on the reticle.
 - Shells travel at **800 u/s** horizontal speed: ≤ 1.0 s flight at max range. The landing point is fixed at the time of firing (shells are not guided). Shells are drawn as pointed black shells with a thin pale outline, nose oriented along the flight path, with the parabolic size effect (grows then shrinks) and shadow on the water.
 - **Reload: 3 s** after a salvo. Pressing fire while reloading does nothing.
+- The host can adjust shell speed and cannon reload; shell range remains unchanged (Q47).
 - Shells only interact **at their impact point**: no collision while flying, whatever is underneath.
 
 ### Impact
@@ -40,6 +41,7 @@ Underwater weapon: straight-line, fast, blocked by land.
 - `\` fires a **spread of 3 torpedoes** simultaneously at bearing −2°, 0°, +2°. They start from the frigate's centre.
 - Torpedo speed **240 u/s** (3 × max frigate speed).
 - **Reload: 8 s**.
+- The host can adjust torpedo speed and reload; the 0.5 s arming delay remains unchanged (Q47).
 - Torpedoes do not collide with the firer's own frigate during the first 0.5 s (arming delay); after that they can hit it.
 
 ### Lifetime and impact

@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { GAME_CONFIG } from "../src/shared/config.js";
 import { mulberry32 } from "../src/shared/rng.js";
 import { applyFrigateInput, createGameState, createFrigate, createSeededRandom, INPUT_KEYS, pointToHullDistance, regenerateGameWorld, spawnFrigate, stepGame, type Frigate, type FrigateInput } from "../src/shared/sim.js";
+import { DEFAULT_SETTINGS, type GameSettings } from "../src/shared/settings.js";
 import { generateWorld, isLandAt, type World } from "../src/shared/world.js";
 
 const dt = 1 / GAME_CONFIG.network.tickRate;
@@ -153,6 +154,92 @@ describe("frigate movement and land contact", () => {
   });
 });
 
+describe("host settings in simulation", () => {
+  it("scales maximum boat speed and acceleration", () => {
+    const state = createGameState(openWorld());
+    const ship = frigate("captain");
+    state.frigates.captain = ship;
+    state.scores = scores(ship);
+    state.settings = { ...DEFAULT_SETTINGS, boatSpeedPct: 150 };
+
+    for (let tick = 0; tick < 2 * GAME_CONFIG.network.tickRate; tick += 1) {
+      stepGame(state, { captain: { ...quietInput, throttle: 3 } }, dt, tick * dt);
+    }
+
+    expect(ship.speed).toBeCloseTo(120);
+  });
+
+  it("scales hull rotation", () => {
+    const state = createGameState(openWorld());
+    const ship = frigate("captain");
+    state.frigates.captain = ship;
+    state.scores = scores(ship);
+    state.settings = { ...DEFAULT_SETTINGS, rotationPct: 200 };
+
+    for (let tick = 0; tick < GAME_CONFIG.network.tickRate; tick += 1) {
+      stepGame(state, { captain: { ...quietInput, keys: INPUT_KEYS.turnRight } }, dt, tick * dt);
+    }
+
+    expect(ship.heading).toBeCloseTo(Math.PI / 2, 5);
+  });
+
+  it("keeps full-speed head-on land damage capped at 10 HP when boat speed is scaled", () => {
+    const world = openWorld();
+    for (let row = 0; row < GAME_CONFIG.world.rows; row += 1) world.grid[row * GAME_CONFIG.world.columns + 100] = 1;
+    const ship = frigate("coast", 1970, 4500);
+    ship.speed = 160;
+
+    const damaged = awaitApply(
+      ship,
+      { ...quietInput, throttle: 3 },
+      dt,
+      world,
+      0,
+      { ...DEFAULT_SETTINGS, boatSpeedPct: 200 },
+    );
+
+    expect(maxHp - damaged.hp).toBeGreaterThan(0);
+    expect(maxHp - damaged.hp).toBeLessThanOrEqual(GAME_CONFIG.land.damage);
+  });
+
+  it("scales shell flight speed and uses configured cannon and torpedo reloads", () => {
+    const state = createGameState(openWorld());
+    const ship = frigate("captain");
+    state.frigates.captain = ship;
+    state.scores = scores(ship);
+    state.settings = {
+      ...DEFAULT_SETTINGS,
+      shellSpeedPct: 200,
+      cannonReload: 1.5,
+      torpedoReload: 4,
+    };
+
+    stepGame(state, { captain: { ...quietInput, fireCannon: true, fireTorpedo: true } }, dt, 5);
+
+    expect(state.shells[0]?.duration).toBeCloseTo(GAME_CONFIG.cannon.maxRange / 1600);
+    expect(ship.cannonReadyAt).toBeCloseTo(6.5);
+    expect(ship.torpedoReadyAt).toBeCloseTo(9);
+  });
+
+  it("stores torpedo speed at fire time", () => {
+    const state = createGameState(openWorld());
+    const ship = frigate("captain", 1000, 4500);
+    state.frigates.captain = ship;
+    state.scores = scores(ship);
+    state.settings = { ...DEFAULT_SETTINGS, torpedoSpeedPct: 50 };
+
+    stepGame(state, { captain: { ...quietInput, fireTorpedo: true } }, dt, 0);
+
+    const torpedo = state.torpedoes.find((candidate) => candidate.angle === 0)!;
+    expect(torpedo.speed).toBe(120);
+    const previousX = torpedo.x;
+    state.settings = { ...state.settings, torpedoSpeedPct: 200 };
+    stepGame(state, {}, dt, dt);
+
+    expect(torpedo.x - previousX).toBeCloseTo(120 * dt);
+  });
+});
+
 describe("cannons", () => {
   function shootAt(range = 400, targetY = 4500) {
     const world = openWorld();
@@ -251,7 +338,15 @@ describe("torpedoes and scoring", () => {
     const state = createGameState(world);
     state.frigates.shooter = shooter;
     state.scores = scores(shooter);
-    state.torpedoes = [{ id: "arming", ownerId: shooter.playerId, x: 800, y: 4500, angle: 0, elapsed: 0 }];
+    state.torpedoes = [{
+      id: "arming",
+      ownerId: shooter.playerId,
+      x: 800,
+      y: 4500,
+      angle: 0,
+      elapsed: 0,
+      speed: GAME_CONFIG.torpedo.speed,
+    }];
     for (let tick = 1; tick <= 20; tick += 1) stepGame(state, {}, dt, tick * dt);
     expect(shooter.hp).toBe(maxHp);
     for (let tick = 21; tick <= 30; tick += 1) stepGame(state, {}, dt, tick * dt);
@@ -328,12 +423,14 @@ describe("spawning", () => {
 
   it("keeps all four players 2400 units apart after world regeneration", () => {
     const state = createGameState(openWorld());
+    state.settings = { ...DEFAULT_SETTINGS, boatSpeedPct: 150, cannonReload: 2 };
     const ships = [1, 2, 3, 4].map((slot) => frigate(`p${slot}`, 4000 + slot * 100, 4000));
     for (const ship of ships) state.frigates[ship.playerId] = ship;
     state.scores = scores(...ships);
 
     regenerateGameWorld(state, 2468, 1, createSeededRandom(17));
 
+    expect(state.settings).toEqual({ ...DEFAULT_SETTINGS, boatSpeedPct: 150, cannonReload: 2 });
     const respawned = Object.values(state.frigates);
     for (let first = 0; first < respawned.length; first += 1) {
       for (let second = first + 1; second < respawned.length; second += 1) {
@@ -344,6 +441,13 @@ describe("spawning", () => {
   });
 });
 
-function awaitApply(ship: Frigate, input: FrigateInput, step: number, world: World, now: number): Frigate {
-  return applyFrigateInput(ship, input, step, world, now);
+function awaitApply(
+  ship: Frigate,
+  input: FrigateInput,
+  step: number,
+  world: World,
+  now: number,
+  settings: GameSettings = DEFAULT_SETTINGS,
+): Frigate {
+  return applyFrigateInput(ship, input, step, world, now, settings);
 }

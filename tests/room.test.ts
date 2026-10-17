@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import type { WebSocket } from "ws";
 import { GAME_CONFIG } from "../src/shared/config.js";
 import type { ClientMessage, ServerMessage } from "../src/shared/protocol.js";
+import { DEFAULT_SETTINGS } from "../src/shared/settings.js";
 import { Room } from "../src/server/room.js";
 import type { World } from "../src/shared/world.js";
 
@@ -63,6 +64,7 @@ describe("multiplayer room", () => {
       expect(welcome(socket).playerId).toBe(`p${index + 1}`);
     });
     expect(room.sessions.get(welcome(sockets[0]!).playerId)?.host).toBe(true);
+    expect(welcome(sockets[0]!).settings).toEqual(DEFAULT_SETTINGS);
     expect(colours).toEqual(["#3b82f6", "#ef4444", "#facc15", "#a855f7"]);
     const fifth = connect(room);
     join(room, fifth, "Eve");
@@ -100,6 +102,81 @@ describe("multiplayer room", () => {
     expect(room.sessions.has(guest.playerId)).toBe(false);
     expect(guestSocket.last("error")?.code).toBe("kicked");
     expect(guestSocket.readyState).toBe(3);
+  });
+
+  it("validates host settings, broadcasts changes, and only announces actual changes", () => {
+    const { room } = setup();
+    const hostSocket = connect(room);
+    const guestSocket = connect(room);
+    join(room, hostSocket, "Harbor");
+    join(room, guestSocket, "Buoy");
+
+    send(room, guestSocket, { type: "host", action: "settings", settings: { ...DEFAULT_SETTINGS, boatSpeedPct: 150 } });
+    expect(guestSocket.last("error")?.code).toBe("not_host");
+
+    send(room, hostSocket, { type: "host", action: "settings", settings: { ...DEFAULT_SETTINGS, boatSpeedPct: 105 } });
+    expect(hostSocket.last("error")?.code).toBe("invalid_action");
+    expect(room.game.settings).toEqual(DEFAULT_SETTINGS);
+
+    const settings = { ...DEFAULT_SETTINGS, boatSpeedPct: 150, cannonReload: 2 };
+    send(room, hostSocket, { type: "host", action: "settings", settings });
+    expect(room.game.settings).toEqual(settings);
+    expect(hostSocket.last("settings")?.settings).toEqual(settings);
+    expect(guestSocket.last("settings")?.settings).toEqual(settings);
+    expect(guestSocket.messages.some((message) =>
+      message.type === "event" && message.event.message === "Host Harbor: boat speed 150%, cannon reload 2 s",
+    )).toBe(true);
+
+    const eventCount = hostSocket.messages.filter((message) =>
+      message.type === "event" && message.event.message === "Host Harbor: boat speed 150%, cannon reload 2 s",
+    ).length;
+    send(room, hostSocket, { type: "host", action: "settings", settings });
+    expect(hostSocket.messages.filter((message) =>
+      message.type === "event" && message.event.message === "Host Harbor: boat speed 150%, cannon reload 2 s",
+    )).toHaveLength(eventCount);
+  });
+
+  it("preserves settings through regeneration, score reset, and host succession", () => {
+    const { room, setNow } = setup();
+    const hostSocket = connect(room);
+    const guestSocket = connect(room);
+    join(room, hostSocket, "Harbor");
+    setNow(1);
+    join(room, guestSocket, "Buoy");
+    const settings = { ...DEFAULT_SETTINGS, boatSpeedPct: 150, torpedoReload: 4 };
+    send(room, hostSocket, { type: "host", action: "settings", settings });
+
+    send(room, hostSocket, { type: "host", action: "regenerate" });
+    expect(room.game.settings).toEqual(settings);
+    send(room, hostSocket, { type: "host", action: "resetScores" });
+    expect(room.game.settings).toEqual(settings);
+
+    hostSocket.close();
+    setNow(12);
+    room.advanceTick();
+    expect(room.sessions.get(welcome(guestSocket).playerId)?.host).toBe(true);
+    expect(room.game.settings).toEqual(settings);
+  });
+
+  it("omits internal torpedo speed from snapshots", () => {
+    const { room } = setup();
+    const socket = connect(room);
+    join(room, socket, "Harbor");
+    room.game.torpedoes.push({
+      id: "t1",
+      ownerId: welcome(socket).playerId,
+      x: 1000,
+      y: 4500,
+      angle: 0,
+      elapsed: 0,
+      speed: 120,
+    });
+    room.advanceTick();
+    room.advanceTick();
+
+    const torpedo = socket.last("snapshot")?.torpedoes[0];
+    expect(torpedo).toBeDefined();
+    expect(torpedo).not.toHaveProperty("speed");
   });
 
   it("transfers host to the longest-connected player when the host's grace period expires", () => {

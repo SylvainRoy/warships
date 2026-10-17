@@ -33,7 +33,9 @@ The game MUST work on both **Mac and PC** keyboards (Windows/Linux). Implementat
 
 ## Host menu
 
-The host opens the menu with Esc. R requests world regeneration, X requests a score reset, and K opens a numbered list of captains to kick. Select a kick target with `Digit1`–`Digit3` or `Numpad1`–`Numpad3`. Enter or NumpadEnter confirms a pending action; Esc cancels it or returns from kick selection. Confirmations are shown in-game, not in browser dialogs.
+The host opens the menu with Esc. R requests world regeneration, X requests a score reset, K opens a numbered list of captains to kick, and S opens Settings. Select a kick target with `Digit1`–`Digit3` or `Numpad1`–`Numpad3`. Enter or NumpadEnter confirms a pending action; Esc cancels it or returns from kick selection. Confirmations are shown in-game, not in browser dialogs.
+
+In Settings, Up/Down selects a row, Left/Right changes its value, D restores defaults, Enter applies the draft, and Esc returns to the host menu. Settings apply immediately to the battle.
 
 ## In-world indicators
 
@@ -45,6 +47,7 @@ The host opens the menu with Esc. R requests world regeneration, X requests a sc
 ## HUD (screen space)
 
 - Top-right: compact scoreboard (name, colour, score) for all connected players, own line highlighted.
+- Holding Tab shows the full scoreboard; when settings differ from defaults, it adds a `CUSTOM RULES · …` line listing each changed setting.
 - Bottom-left: own HP bar, cannon and torpedo reload status, plus a throttle telegraph with the selected level highlighted and its full label.
 - Event feed (top-left): short messages "Alice sank Bob", "Carol joined", "World regenerated", fading after 5 s.
 - Death screen: "Sunk by *X*" + respawn countdown.

@@ -1,5 +1,6 @@
 import { GAME_CONFIG } from "./config.js";
 import { mulberry32 } from "./rng.js";
+import { DEFAULT_SETTINGS, type GameSettings } from "./settings.js";
 import { generateWorld, isLandAt, type World } from "./world.js";
 
 export const INPUT_KEYS = {
@@ -67,6 +68,7 @@ export interface Torpedo {
   y: number;
   angle: number;
   elapsed: number;
+  speed: number;
 }
 
 export interface PlayerScore {
@@ -94,6 +96,7 @@ export interface GameEvent {
 export interface GameState {
   tick: number;
   world: World;
+  settings: GameSettings;
   frigates: Record<string, Frigate>;
   shells: Shell[];
   torpedoes: Torpedo[];
@@ -164,12 +167,13 @@ export function applyFrigateInput(
   dt: number,
   world: World,
   now = 0,
+  settings: GameSettings = DEFAULT_SETTINGS,
 ): Frigate {
   const frigate = { ...source };
   if (frigate.status !== "alive") return frigate;
   const keys = input.keys;
   const turn = Number(isPressed(keys, INPUT_KEYS.turnRight)) - Number(isPressed(keys, INPUT_KEYS.turnLeft));
-  const rotation = turn * GAME_CONFIG.frigate.rotationSpeed * dt;
+  const rotation = turn * GAME_CONFIG.frigate.rotationSpeed * settings.rotationPct / 100 * dt;
   const rotatedHeading = normalizeAngle(frigate.heading + rotation);
   if (rotation === 0 || canOccupy(frigate, frigate.x, frigate.y, rotatedHeading, world)) frigate.heading = rotatedHeading;
 
@@ -184,12 +188,15 @@ export function applyFrigateInput(
   frigate.torpedoBearing = normalizeAngle(frigate.torpedoBearing + torpedoTurn * GAME_CONFIG.torpedo.bearingSpeed * dt);
 
   const level = Math.max(-1, Math.min(3, Math.round(input.throttle) || 0));
+  const speedScale = settings.boatSpeedPct / 100;
+  const maxForwardSpeed = GAME_CONFIG.frigate.maxForwardSpeed * speedScale;
+  const maxReverseSpeed = GAME_CONFIG.frigate.maxReverseSpeed * speedScale;
   const targetSpeed = level < 0
-    ? -GAME_CONFIG.frigate.maxReverseSpeed
-    : GAME_CONFIG.frigate.maxForwardSpeed * level / 3;
-  const speedChange = GAME_CONFIG.frigate.acceleration * dt;
+    ? -maxReverseSpeed
+    : maxForwardSpeed * level / 3;
+  const speedChange = GAME_CONFIG.frigate.acceleration * speedScale * dt;
   const speedDifference = targetSpeed - frigate.speed;
-  const tolerance = Number.EPSILON * GAME_CONFIG.frigate.maxForwardSpeed * 2;
+  const tolerance = Number.EPSILON * maxForwardSpeed * 2;
   frigate.speed = Math.abs(speedDifference) <= speedChange + tolerance
     ? targetSpeed
     : frigate.speed + Math.sign(speedDifference) * speedChange;
@@ -220,7 +227,7 @@ export function applyFrigateInput(
   if (blocked) {
     const damage = impactSpeed < GAME_CONFIG.land.grazeSpeed
       ? 0
-      : Math.round(GAME_CONFIG.land.damage * Math.min(1, impactSpeed / GAME_CONFIG.frigate.maxForwardSpeed));
+      : Math.round(GAME_CONFIG.land.damage * Math.min(1, impactSpeed / maxForwardSpeed));
     if (damage > 0
       && now >= frigate.spawnProtectedUntil
       && (!frigate.landContact || now - frigate.lastLandDamageAt >= GAME_CONFIG.land.damageInterval)) {
@@ -294,7 +301,17 @@ export function spawnFrigate(
 }
 
 export function createGameState(world: World): GameState {
-  return { tick: 0, world, frigates: {}, shells: [], torpedoes: [], scores: {}, events: [], nextProjectileId: 1 };
+  return {
+    tick: 0,
+    world,
+    settings: { ...DEFAULT_SETTINGS },
+    frigates: {},
+    shells: [],
+    torpedoes: [],
+    scores: {},
+    events: [],
+    nextProjectileId: 1,
+  };
 }
 
 function emitExplosion(state: GameState, x: number, y: number, kind: ExplosionKind): void {
@@ -331,13 +348,13 @@ function damageFrigate(state: GameState, target: Frigate, amount: number, source
   if (target.hp === 0) sinkFrigate(state, target, sourceId, now);
 }
 
-function fireCannon(state: GameState, frigate: Frigate, now: number): void {
+function fireCannon(state: GameState, frigate: Frigate, now: number, settings: GameSettings): void {
   const angle = frigate.heading + frigate.cannonBearing;
   const forwardX = Math.cos(angle);
   const forwardY = Math.sin(angle);
   const perpendicularX = -forwardY;
   const perpendicularY = forwardX;
-  const duration = frigate.cannonRange / GAME_CONFIG.cannon.shellSpeed;
+  const duration = frigate.cannonRange / (GAME_CONFIG.cannon.shellSpeed * settings.shellSpeedPct / 100);
   for (const side of [-1, 1]) {
     state.shells.push({
       id: `s${state.nextProjectileId++}`,
@@ -350,10 +367,10 @@ function fireCannon(state: GameState, frigate: Frigate, now: number): void {
       duration,
     });
   }
-  frigate.cannonReadyAt = now + GAME_CONFIG.cannon.reload;
+  frigate.cannonReadyAt = now + settings.cannonReload;
 }
 
-function fireTorpedoes(state: GameState, frigate: Frigate, now: number): void {
+function fireTorpedoes(state: GameState, frigate: Frigate, now: number, settings: GameSettings): void {
   const centre = frigate.heading + frigate.torpedoBearing;
   for (const offset of [-GAME_CONFIG.torpedo.spread, 0, GAME_CONFIG.torpedo.spread]) {
     state.torpedoes.push({
@@ -363,9 +380,10 @@ function fireTorpedoes(state: GameState, frigate: Frigate, now: number): void {
       y: frigate.y,
       angle: centre + offset,
       elapsed: 0,
+      speed: GAME_CONFIG.torpedo.speed * settings.torpedoSpeedPct / 100,
     });
   }
-  frigate.torpedoReadyAt = now + GAME_CONFIG.torpedo.reload;
+  frigate.torpedoReadyAt = now + settings.torpedoReload;
 }
 
 function circlesFor(frigate: Frigate): Array<{ x: number; y: number }> {
@@ -434,17 +452,17 @@ export function stepGame(state: GameState, inputs: Record<string, FrigateInput |
     }
     const input = inputs[frigate.playerId] ?? { seq: 0, keys: 0, throttle: 0, fireCannon: false, fireTorpedo: false };
     if (frigate.status === "alive") {
-      const updated = applyFrigateInput(frigate, input, dt, state.world, now);
+      const updated = applyFrigateInput(frigate, input, dt, state.world, now, state.settings);
       Object.assign(frigate, updated);
       if (frigate.hp <= 0) sinkFrigate(state, frigate, frigate.playerId, now);
       const cannonEdge = input.fireCannon && !frigate.lastFireCannon;
       const torpedoEdge = input.fireTorpedo && !frigate.lastFireTorpedo;
       if (cannonEdge && now >= frigate.cannonReadyAt) {
-        fireCannon(state, frigate, now);
+        fireCannon(state, frigate, now, state.settings);
         frigate.spawnProtectedUntil = now;
       }
       if (torpedoEdge && now >= frigate.torpedoReadyAt) {
-        fireTorpedoes(state, frigate, now);
+        fireTorpedoes(state, frigate, now, state.settings);
         frigate.spawnProtectedUntil = now;
       }
       frigate.lastFireCannon = input.fireCannon;
@@ -479,7 +497,7 @@ export function stepGame(state: GameState, inputs: Record<string, FrigateInput |
   for (const torpedo of state.torpedoes) {
     const oldX = torpedo.x;
     const oldY = torpedo.y;
-    const distance = GAME_CONFIG.torpedo.speed * dt;
+    const distance = torpedo.speed * dt;
     const steps = Math.max(1, Math.ceil(distance / (GAME_CONFIG.world.tileSize / 2)));
     let exploded = false;
     for (let step = 1; step <= steps; step += 1) {

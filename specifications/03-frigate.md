@@ -23,6 +23,7 @@ The frigate has inertia: the throttle sets a target speed, and acceleration move
 - Velocity is always along the hull heading (no sideways drift).
 - W and S each step the throttle setting by one level; key auto-repeat is ignored. The simulation clamps throttle levels to −1 through 3.
 - A and D together cancel.
+- Host settings can scale forward/reverse top speed, acceleration, and rotation by percentage; land damage remains relative to the scaled top speed while the 20 u/s graze threshold stays fixed (Q47).
 
 ## Collisions
 
