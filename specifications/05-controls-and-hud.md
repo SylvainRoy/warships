@@ -46,6 +46,7 @@ In Settings, Up/Down selects a row, Left/Right changes its value, D restores def
 
 ## HUD (screen space)
 
+- HUD panels and overlays are anchored to the browser window edges, not the 16:9 reference frame; positions and sizing remain in reference units and scale with the reference scale.
 - Top-right: compact scoreboard (name, colour, score) for all connected players, own line highlighted.
 - Holding Tab shows the full scoreboard; when settings differ from defaults, it adds a `CUSTOM RULES · …` line listing each changed setting.
 - Bottom-left: own HP bar, cannon and torpedo reload status, plus a throttle telegraph with the selected level highlighted and its full label.
