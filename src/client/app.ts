@@ -2,6 +2,7 @@ import { GAME_CONFIG } from "../shared/config.js";
 import { INPUT_KEYS, applyFrigateInput, type Frigate, type FrigateInput, type GameEvent, type Shell, type Torpedo } from "../shared/sim.js";
 import { decodeWorld, isLandAt, type World } from "../shared/world.js";
 import type { LobbyMessage, ServerMessage, SnapshotFrigate } from "../shared/protocol.js";
+import { computeCamera } from "./camera.js";
 
 type Snapshot = Extract<ServerMessage, { type: "snapshot" }>;
 type StoredSnapshot = { receivedAt: number; value: Snapshot };
@@ -37,6 +38,7 @@ if (!context) throw new Error("Canvas 2D is unavailable");
 const ctx = context;
 
 const colours = ["#4b9bff", "#ff6266", "#f3c94e", "#c084fc"];
+const landColor = "#c5b58b";
 const pressed = new Set<string>();
 const worldCache = new Map<string, HTMLCanvasElement>();
 let worldCacheResolution = 0;
@@ -465,12 +467,26 @@ function renderTerrain(worldState: World, cameraX: number, cameraY: number, scal
     worldCache.clear();
     worldCacheResolution = resolution;
   }
-  const firstChunkX = Math.floor(cameraX / chunkSize);
-  const lastChunkX = Math.floor((cameraX + GAME_CONFIG.screen.width) / chunkSize);
-  const firstChunkY = Math.floor(cameraY / chunkSize);
-  const lastChunkY = Math.floor((cameraY + GAME_CONFIG.screen.height) / chunkSize);
-  ctx.fillStyle = "#0c3445";
+  const lastWorldChunkX = Math.ceil(GAME_CONFIG.world.width / chunkSize) - 1;
+  const lastWorldChunkY = Math.ceil(GAME_CONFIG.world.height / chunkSize) - 1;
+  const firstChunkX = Math.max(0, Math.floor(cameraX / chunkSize));
+  const lastChunkX = Math.min(lastWorldChunkX, Math.floor((cameraX + GAME_CONFIG.screen.width) / chunkSize));
+  const firstChunkY = Math.max(0, Math.floor(cameraY / chunkSize));
+  const lastChunkY = Math.min(lastWorldChunkY, Math.floor((cameraY + GAME_CONFIG.screen.height) / chunkSize));
+  ctx.fillStyle = landColor;
   ctx.fillRect(cameraX, cameraY, GAME_CONFIG.screen.width, GAME_CONFIG.screen.height);
+  const worldLeft = Math.max(0, cameraX);
+  const worldTop = Math.max(0, cameraY);
+  const worldRight = Math.min(GAME_CONFIG.world.width, cameraX + GAME_CONFIG.screen.width);
+  const worldBottom = Math.min(GAME_CONFIG.world.height, cameraY + GAME_CONFIG.screen.height);
+  if (worldRight > worldLeft && worldBottom > worldTop) {
+    ctx.fillStyle = "#0c3445";
+    ctx.fillRect(worldLeft, worldTop, worldRight - worldLeft, worldBottom - worldTop);
+  }
+  ctx.save();
+  ctx.beginPath();
+  ctx.rect(0, 0, GAME_CONFIG.world.width, GAME_CONFIG.world.height);
+  ctx.clip();
   for (let cy = firstChunkY; cy <= lastChunkY; cy += 1) {
     for (let cx = firstChunkX; cx <= lastChunkX; cx += 1) {
       const key = `${worldState.seed}:${cx}:${cy}:${resolution}`;
@@ -482,6 +498,7 @@ function renderTerrain(worldState: World, cameraX: number, cameraY: number, scal
       ctx.drawImage(chunk, cx * chunkSize, cy * chunkSize, chunkSize, chunkSize);
     }
   }
+  ctx.restore();
 }
 
 function buildTerrainChunk(worldState: World, chunkX: number, chunkY: number, resolution: number): HTMLCanvasElement {
@@ -516,7 +533,7 @@ function buildTerrainChunk(worldState: World, chunkX: number, chunkY: number, re
   const endColumn = Math.min(GAME_CONFIG.world.columns - 2, chunkX * 40 + 39);
   const startRow = Math.max(0, chunkY * 40 - 1);
   const endRow = Math.min(GAME_CONFIG.world.rows - 2, chunkY * 40 + 39);
-  terrain.fillStyle = "#c5b58b";
+  terrain.fillStyle = landColor;
   for (let row = startRow; row <= endRow; row += 1) {
     for (let column = startColumn; column <= endColumn; column += 1) {
       const topLeft = isLandAt(worldState, column * tile + tile / 2, row * tile + tile / 2);
@@ -554,13 +571,6 @@ function buildTerrainChunk(worldState: World, chunkX: number, chunkY: number, re
     }
   }
   return chunk;
-}
-
-function cameraFor(frigate: Frigate): { x: number; y: number } {
-  return {
-    x: Math.max(0, Math.min(GAME_CONFIG.world.width - GAME_CONFIG.screen.width, frigate.x - GAME_CONFIG.screen.width / 2)),
-    y: Math.max(0, Math.min(GAME_CONFIG.world.height - GAME_CONFIG.screen.height, frigate.y - GAME_CONFIG.screen.height / 2)),
-  };
 }
 
 function drawWake(frigate: SnapshotFrigate, now: number): void {
@@ -637,10 +647,12 @@ function drawFrigate(frigate: SnapshotFrigate, now: number, debug: boolean): voi
   ctx.textAlign = "center";
   ctx.textBaseline = "bottom";
   ctx.fillText(frigate.name, frigate.x, frigate.y - 19);
-  ctx.fillStyle = "rgba(5, 20, 25, .78)";
-  ctx.fillRect(frigate.x - 21, frigate.y + 16, 42, 4);
-  ctx.fillStyle = frigate.hp > 35 ? "#62d3b2" : "#ff776c";
-  ctx.fillRect(frigate.x - 21, frigate.y + 16, 42 * Math.max(0, frigate.hp / GAME_CONFIG.player.maxHp), 4);
+  if (frigate.playerId !== ownId) {
+    ctx.fillStyle = "rgba(5, 20, 25, .78)";
+    ctx.fillRect(frigate.x - 21, frigate.y + 16, 42, 4);
+    ctx.fillStyle = frigate.hp > 35 ? "#62d3b2" : "#ff776c";
+    ctx.fillRect(frigate.x - 21, frigate.y + 16, 42 * Math.max(0, frigate.hp / GAME_CONFIG.player.maxHp), 4);
+  }
 }
 
 function drawShell(shell: Shell): void {
@@ -710,7 +722,7 @@ function drawReticle(frigate: Frigate, now: number): void {
   ctx.arc(x, y, 2.5, 0, Math.PI * 2);
   ctx.fill();
   for (let i = 0; i < 4; i += 1) {
-    const a = i * Math.PI / 2;
+    const a = angle + i * Math.PI / 2;
     ctx.beginPath();
     ctx.moveTo(x + Math.cos(a) * 45, y + Math.sin(a) * 45);
     ctx.lineTo(x + Math.cos(a) * 55, y + Math.sin(a) * 55);
@@ -719,97 +731,114 @@ function drawReticle(frigate: Frigate, now: number): void {
   if (reloading > 0) {
     ctx.lineWidth = 4;
     ctx.beginPath();
-    ctx.arc(x, y, GAME_CONFIG.cannon.damageRadius + 7, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * progress);
+    ctx.arc(x, y, GAME_CONFIG.cannon.damageRadius + 7, angle, angle + Math.PI * 2 * progress);
     ctx.stroke();
   }
   const torpedoAngle = frigate.heading + frigate.torpedoBearing;
-  const arrowX = frigate.x + Math.cos(torpedoAngle) * 50;
-  const arrowY = frigate.y + Math.sin(torpedoAngle) * 50;
   const torpedoReload = Math.max(0, frigate.torpedoReadyAt - now);
   const torpedoProgress = 1 - torpedoReload / GAME_CONFIG.torpedo.reload;
-  ctx.globalAlpha = torpedoReload > 0 ? .35 : .95;
+  const filled = Math.floor(torpedoProgress * 5);
+  const ready = torpedoReload === 0;
+  const axisX = Math.cos(torpedoAngle);
+  const axisY = Math.sin(torpedoAngle);
+  const perpendicularX = -axisY;
+  const perpendicularY = axisX;
+  const dashLength = (96 - 38 - 3 * 4) / 5;
   ctx.strokeStyle = "#7dff70";
-  ctx.fillStyle = "#7dff70";
-  ctx.lineWidth = 3;
-  ctx.beginPath();
-  ctx.arc(frigate.x, frigate.y, 50, torpedoAngle - .3, torpedoAngle + .3);
-  ctx.stroke();
-  const arrowHeadLength = 14;
-  const arrowHeadHalfWidth = 5;
-  const arrowTipX = arrowX + Math.cos(torpedoAngle) * arrowHeadLength / 2;
-  const arrowTipY = arrowY + Math.sin(torpedoAngle) * arrowHeadLength / 2;
-  const arrowBaseX = arrowX - Math.cos(torpedoAngle) * arrowHeadLength / 2;
-  const arrowBaseY = arrowY - Math.sin(torpedoAngle) * arrowHeadLength / 2;
-  const arrowSideX = -Math.sin(torpedoAngle) * arrowHeadHalfWidth;
-  const arrowSideY = Math.cos(torpedoAngle) * arrowHeadHalfWidth;
-  ctx.beginPath();
-  ctx.moveTo(arrowTipX, arrowTipY);
-  ctx.lineTo(arrowBaseX + arrowSideX, arrowBaseY + arrowSideY);
-  ctx.lineTo(arrowBaseX - arrowSideX, arrowBaseY - arrowSideY);
-  ctx.closePath();
-  ctx.fill();
-  if (torpedoReload > 0) {
-    ctx.lineWidth = 3;
+  ctx.lineCap = "butt";
+  ctx.lineWidth = 2.5;
+  for (let i = 0; i < 5; i += 1) {
+    const startRadius = 38 + i * (dashLength + 3);
+    ctx.globalAlpha = ready || i < filled ? .95 : .25;
     ctx.beginPath();
-    ctx.arc(frigate.x, frigate.y, 58, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * torpedoProgress);
+    ctx.moveTo(frigate.x + axisX * startRadius, frigate.y + axisY * startRadius);
+    ctx.lineTo(frigate.x + axisX * (startRadius + dashLength), frigate.y + axisY * (startRadius + dashLength));
     ctx.stroke();
   }
+  ctx.globalAlpha = ready ? .95 : .25;
+  const tipX = frigate.x + axisX * 112;
+  const tipY = frigate.y + axisY * 112;
+  for (const side of [-1, 1]) {
+    const baseX = frigate.x + axisX * 98 + perpendicularX * 9 * side;
+    const baseY = frigate.y + axisY * 98 + perpendicularY * 9 * side;
+    ctx.beginPath();
+    ctx.moveTo(tipX, tipY);
+    ctx.lineTo(baseX, baseY);
+    ctx.stroke();
+  }
+  ctx.globalAlpha = ready ? .95 : .6;
+  ctx.lineWidth = 1.5;
+  ctx.beginPath();
+  ctx.moveTo(
+    frigate.x + axisX * 38 - perpendicularX * 6,
+    frigate.y + axisY * 38 - perpendicularY * 6,
+  );
+  ctx.lineTo(
+    frigate.x + axisX * 38 + perpendicularX * 6,
+    frigate.y + axisY * 38 + perpendicularY * 6,
+  );
+  ctx.stroke();
   ctx.restore();
 }
 
 function drawHud(snapshot: Snapshot, frigate: Frigate | undefined, now: number, logicalWidth: number, logicalHeight: number): void {
+  const hudMargin = 8;
+  const captainsPanelX = logicalWidth - hudMargin - 230;
+  const captainsPanelY = hudMargin;
+  const hullPanelX = hudMargin;
+  const hullPanelY = logicalHeight - hudMargin - 110;
   ctx.save();
   ctx.textBaseline = "top";
   ctx.textAlign = "left";
   ctx.fillStyle = "rgba(5, 20, 29, .72)";
-  ctx.fillRect(logicalWidth - 250, 20, 230, Math.min(235, 54 + snapshot.players.length * 34));
+  ctx.fillRect(captainsPanelX, captainsPanelY, 230, Math.min(235, 54 + snapshot.players.length * 34));
   ctx.fillStyle = "#88a7b0";
   ctx.font = "500 10px DM Mono, monospace";
-  ctx.fillText("CAPTAINS", logicalWidth - 232, 31);
+  ctx.fillText("CAPTAINS", captainsPanelX + 18, captainsPanelY + 11);
   snapshot.players.slice().sort((a, b) => a.slot - b.slot).forEach((player, index) => {
-    const y = 52 + index * 34;
+    const y = captainsPanelY + 32 + index * 34;
     const own = player.playerId === ownId;
     if (own) {
       ctx.fillStyle = "rgba(100, 223, 202, .12)";
-      ctx.fillRect(logicalWidth - 240, y - 5, 210, 29);
+      ctx.fillRect(captainsPanelX + 10, y - 5, 210, 29);
     }
     ctx.fillStyle = colours[player.slot - 1] ?? "#fff";
     ctx.beginPath();
-    ctx.arc(logicalWidth - 226, y + 5, 4, 0, Math.PI * 2);
+    ctx.arc(captainsPanelX + 24, y + 5, 4, 0, Math.PI * 2);
     ctx.fill();
     ctx.fillStyle = own ? "#f0fffa" : "#d7e5e9";
     ctx.font = `${own ? 700 : 500} 12px Manrope, sans-serif`;
-    ctx.fillText(`${player.host ? "♛ " : ""}${player.name}`, logicalWidth - 215, y - 2);
+    ctx.fillText(`${player.host ? "♛ " : ""}${player.name}`, captainsPanelX + 35, y - 2);
     ctx.textAlign = "right";
     ctx.fillStyle = "#b7cbd0";
     ctx.font = "500 11px DM Mono, monospace";
-    ctx.fillText(`${player.score}  ·  ${player.sunk}`, logicalWidth - 32, y);
+    ctx.fillText(`${player.score}  ·  ${player.sunk}`, captainsPanelX + 218, y);
     ctx.textAlign = "left";
   });
   if (frigate) {
     ctx.fillStyle = "rgba(5, 20, 29, .78)";
-    ctx.fillRect(20, logicalHeight - 130, 380, 110);
+    ctx.fillRect(hullPanelX, hullPanelY, 380, 110);
     ctx.fillStyle = "#90a8b0";
     ctx.font = "500 10px DM Mono, monospace";
-    ctx.fillText("HULL INTEGRITY", 34, logicalHeight - 116);
+    ctx.fillText("HULL INTEGRITY", hullPanelX + 14, hullPanelY + 14);
     ctx.fillStyle = "rgba(215, 237, 238, .17)";
-    ctx.fillRect(34, logicalHeight - 96, 248, 7);
+    ctx.fillRect(hullPanelX + 14, hullPanelY + 34, 248, 7);
     ctx.fillStyle = frigate.hp > 35 ? "#62d3b2" : "#ff776c";
-    ctx.fillRect(34, logicalHeight - 96, 248 * Math.max(0, frigate.hp / GAME_CONFIG.player.maxHp), 7);
+    ctx.fillRect(hullPanelX + 14, hullPanelY + 34, 248 * Math.max(0, frigate.hp / GAME_CONFIG.player.maxHp), 7);
     ctx.fillStyle = "#e8f4f4";
     ctx.font = "600 11px DM Mono, monospace";
-    ctx.fillText(`${frigate.hp} HP`, 34, logicalHeight - 81);
+    ctx.fillText(`${frigate.hp} HP`, hullPanelX + 14, hullPanelY + 49);
     ctx.fillStyle = "#91a8ae";
-    ctx.fillText(`CANNON ${Math.max(0, frigate.cannonReadyAt - now).toFixed(1)}s`, 111, logicalHeight - 81);
-    ctx.fillText(`TORPEDO ${Math.max(0, frigate.torpedoReadyAt - now).toFixed(1)}s`, 211, logicalHeight - 81);
+    ctx.fillText(`CANNON ${Math.max(0, frigate.cannonReadyAt - now).toFixed(1)}s`, hullPanelX + 91, hullPanelY + 49);
+    ctx.fillText(`TORPEDO ${Math.max(0, frigate.torpedoReadyAt - now).toFixed(1)}s`, hullPanelX + 191, hullPanelY + 49);
     ctx.fillStyle = "#90a8b0";
     ctx.font = "500 10px DM Mono, monospace";
     ctx.textBaseline = "middle";
-    ctx.fillText("THROTTLE", 34, logicalHeight - 58);
+    ctx.fillText("THROTTLE", hullPanelX + 14, hullPanelY + 72);
     const steps = ["ASTERN", "STOP", "1/3", "2/3", "FULL"];
     const activeStep = throttleLevel + 1;
-    const stepX = 108;
-    const stepY = logicalHeight - 69;
+    const stepX = hullPanelX + 88;
+    const stepY = hullPanelY + 61;
     const stepWidth = 52;
     const stepGap = 4;
     const stepHeight = 22;
@@ -827,7 +856,7 @@ function drawHud(snapshot: Snapshot, frigate: Frigate | undefined, now: number, 
     ctx.textBaseline = "alphabetic";
     ctx.fillStyle = "#d7e5e9";
     ctx.font = "600 11px DM Mono, monospace";
-    ctx.fillText(throttleLabels[activeStep] ?? "STOP", 34, logicalHeight - 36);
+    ctx.fillText(throttleLabels[activeStep] ?? "STOP", hullPanelX + 14, hullPanelY + 94);
     ctx.textBaseline = "top";
   }
   const feedNow = performance.now();
@@ -973,7 +1002,7 @@ function renderFrame(now: number): void {
   const snapshot = getRenderSnapshot();
   const own = predictedOwn ?? snapshot?.frigates.find((frigate) => frigate.playerId === ownId) as Frigate | undefined;
   if (world && own) {
-    const camera = cameraFor(own);
+    const camera = computeCamera(own);
     ctx.save();
     ctx.translate(-camera.x, -camera.y);
     renderTerrain(world, camera.x, camera.y, viewport.scale, viewport.dpr);

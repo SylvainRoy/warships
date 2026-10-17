@@ -1,6 +1,6 @@
 # Warships — Specifications
 
-**Status: APPROVED v1.1** (2026-10-16). Changes after approval must be recorded in the changelog.
+**Status: APPROVED v1.2** (2026-10-17). Changes after approval must be recorded in the changelog.
 
 | # | Document | Content |
 |---|----------|---------|
@@ -22,6 +22,7 @@
 
 ## Changelog
 
+- v1.2 — hide the own frigate HP bar, replace the torpedo indicator with a segmented arrow, align cannon reticle ticks with the line of fire, keep the cannon reticle on screen, move HUD panels to 8 px from screen corners, and halve all damage; approved 2026-10-17 after playtest.
 - v1.1 — easier throttle controls, speed-scaled land damage, wider channels, reduced frigate speeds, and a wider torpedo spread; approved 2026-10-16 after playtest.
 - v1.0 — approved.
 - v0.3 — all questions resolved: no minimap (Q7), land collisions cause 20 HP damage (Q9), defaults accepted for the rest.

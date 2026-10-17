@@ -10,7 +10,7 @@ Ballistic weapon: shells fly in the air, over water and land, and land on the ai
 
 - **Bearing**: Left / Right arrow rotate the cannon bearing at 90 °/s. Full 360° allowed.
 - **Range**: Up / Down arrows increase / decrease range at 400 u/s, between **100 u** and the **maximum range**.
-- **Maximum range: 800 u** (half a screen width). With the camera centred on the frigate the target is always visible horizontally; vertically (450 u visible) it can leave the screen when aiming far north or south, which is accepted.
+- **Maximum range: 800 u** (half a screen width); the camera shifts to keep it on screen (see [02-world.md#camera](02-world.md#camera)).
 - The aim point is shown by a **green target reticle** drawn on the map (see [05-controls-and-hud.md](05-controls-and-hud.md)).
 
 ### Firing
@@ -22,7 +22,7 @@ Ballistic weapon: shells fly in the air, over water and land, and land on the ai
 
 ### Impact
 
-- On landing, each shell explodes. Any frigate whose hull is within **60 u (one boat length)** of the impact point takes damage: **20 HP per shell**. A frigate hit by both shells takes 40 HP.
+- On landing, each shell explodes. Any frigate whose hull is within **60 u (one boat length)** of the impact point takes damage: **10 HP per shell**. A frigate hit by both shells takes 20 HP.
 - The firer's own frigate CAN be hit by its own shells.
 - Visuals: splash on water, small explosion on land or on a boat.
 
@@ -46,4 +46,4 @@ Underwater weapon: straight-line, fast, blocked by land.
 
 - A torpedo travels in a straight line until it **touches land, a frigate, or the world edge**, where it explodes. There is no maximum range ("exit the screen" in the original draft means the world edge).
 - Torpedo vs torpedo, torpedo vs shell: no interaction.
-- Damage: **50 HP per torpedo** on the frigate it touches (no area damage). Because of the 2° spread, at close range several torpedoes of the same spread can hit the same frigate.
+- Damage: **25 HP per torpedo** on the frigate it touches (no area damage). Because of the 2° spread, at close range several torpedoes of the same spread can hit the same frigate.

@@ -11,7 +11,7 @@
 | Players per game | 1 to 4, first come first served |
 | Games per server | Exactly one, running indefinitely |
 | Mode | Free-for-all deathmatch, no teams |
-| View | 2D top-down, camera follows own frigate |
+| View | 2D top-down, camera follows own frigate and keeps the cannon reticle visible |
 | Platform | Desktop web browser, keyboard only. No installation for players |
 | Session control | First connected player is the **host**: can regenerate the world and reset scores |
 

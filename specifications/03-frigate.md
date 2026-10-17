@@ -27,7 +27,7 @@ The frigate has inertia: the throttle sets a target speed, and acceleration move
 ## Collisions
 
 - **Frigate vs land / world edge**: the frigate stops at the shore (velocity component into the land is cancelled, it can slide along the coast).
-  - Impact speed is the velocity component into the coast. Damage is 0 below 20 u/s; otherwise it is `round(20 × min(1, impact speed / 80))` HP.
+  - Impact speed is the velocity component into the coast. Damage is 0 below 20 u/s; otherwise it is `round(10 × min(1, impact speed / 80))` HP.
   - Damage is applied on new contact, then at most once per second while contact continues. Spawn protection prevents land damage.
   - A frigate sunk by land damage counts as sinking itself ([06-game-rules.md](06-game-rules.md#scoring)).
 - **Frigate vs frigate**: frigates cannot overlap; they are pushed apart and both lose their speed. No damage, i.e. no ramming.
