@@ -1,7 +1,8 @@
 import { describe, expect, it } from "vitest";
 import { GAME_CONFIG } from "../src/shared/config.js";
+import { mulberry32 } from "../src/shared/rng.js";
 import { applyFrigateInput, createGameState, createFrigate, createSeededRandom, INPUT_KEYS, pointToHullDistance, regenerateGameWorld, spawnFrigate, stepGame, type Frigate, type FrigateInput } from "../src/shared/sim.js";
-import type { World } from "../src/shared/world.js";
+import { generateWorld, isLandAt, type World } from "../src/shared/world.js";
 
 const dt = 1 / GAME_CONFIG.network.tickRate;
 const maxHp = GAME_CONFIG.player.maxHp;
@@ -281,6 +282,37 @@ describe("torpedoes and scoring", () => {
 });
 
 describe("spawning", () => {
+  it("keeps generated-world spawns clear of land at every heading", () => {
+    const halfLength = GAME_CONFIG.frigate.length / 2;
+    const halfBeam = GAME_CONFIG.frigate.beam / 2;
+    for (let seed = 1; seed <= 20; seed += 1) {
+      const world = generateWorld(seed);
+      const random = mulberry32(seed * 7919);
+      for (let spawnIndex = 0; spawnIndex < 200; spawnIndex += 1) {
+        const ship = spawnFrigate("spawn-test", "spawn-test", 1, world, [], random, 0);
+        const cos = Math.cos(ship.heading);
+        const sin = Math.sin(ship.heading);
+        for (let localX = -halfLength; localX <= halfLength; localX += 2) {
+          for (let localY = -halfBeam; localY <= halfBeam; localY += 2) {
+            const x = ship.x + localX * cos - localY * sin;
+            const y = ship.y + localX * sin + localY * cos;
+            const land = isLandAt(world, x, y);
+            if (land) expect(land, `seed ${seed}, spawn ${spawnIndex}, hull point (${localX}, ${localY})`).toBe(false);
+          }
+        }
+        for (let localX = -halfLength - GAME_CONFIG.land.clearance; localX <= halfLength + GAME_CONFIG.land.clearance; localX += 4) {
+          for (let localY = -halfBeam - GAME_CONFIG.land.clearance; localY <= halfBeam + GAME_CONFIG.land.clearance; localY += 4) {
+            const x = ship.x + localX * cos - localY * sin;
+            const y = ship.y + localX * sin + localY * cos;
+            if (pointToHullDistance(x, y, ship) > GAME_CONFIG.land.clearance) continue;
+            const land = isLandAt(world, x, y);
+            if (land) expect(land, `seed ${seed}, spawn ${spawnIndex}, clearance point (${localX}, ${localY})`).toBe(false);
+          }
+        }
+      }
+    }
+  });
+
   it("spawns in clear water at least 2400 units from other living ships when possible", () => {
     const world = openWorld();
     const first = spawnFrigate("one", "one", 1, world, [], () => 0.25, 0, 1);
