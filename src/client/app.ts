@@ -848,6 +848,8 @@ function drawHud(snapshot: Snapshot, frigate: Frigate | undefined, now: number, 
   const captainsPanelY = hudMargin;
   const hullPanelX = hudMargin;
   const hullPanelY = logicalHeight - hudMargin - 110;
+  const hullPanelWidth = 380;
+  const hullBarWidth = hullPanelWidth - 28;
   ctx.save();
   ctx.textBaseline = "top";
   ctx.textAlign = "left";
@@ -878,14 +880,14 @@ function drawHud(snapshot: Snapshot, frigate: Frigate | undefined, now: number, 
   });
   if (frigate) {
     ctx.fillStyle = "rgba(5, 20, 29, .78)";
-    ctx.fillRect(hullPanelX, hullPanelY, 380, 110);
+    ctx.fillRect(hullPanelX, hullPanelY, hullPanelWidth, 110);
     ctx.fillStyle = "#90a8b0";
     ctx.font = "500 10px DM Mono, monospace";
     ctx.fillText("HULL INTEGRITY", hullPanelX + 14, hullPanelY + 14);
     ctx.fillStyle = "rgba(215, 237, 238, .17)";
-    ctx.fillRect(hullPanelX + 14, hullPanelY + 34, 248, 7);
+    ctx.fillRect(hullPanelX + 14, hullPanelY + 34, hullBarWidth, 7);
     ctx.fillStyle = frigate.hp > 35 ? "#62d3b2" : "#ff776c";
-    ctx.fillRect(hullPanelX + 14, hullPanelY + 34, 248 * Math.max(0, frigate.hp / GAME_CONFIG.player.maxHp), 7);
+    ctx.fillRect(hullPanelX + 14, hullPanelY + 34, hullBarWidth * Math.max(0, frigate.hp / GAME_CONFIG.player.maxHp), 7);
     ctx.fillStyle = "#e8f4f4";
     ctx.font = "600 11px DM Mono, monospace";
     ctx.fillText(`${frigate.hp} HP`, hullPanelX + 14, hullPanelY + 49);
