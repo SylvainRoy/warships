@@ -4,8 +4,8 @@
 
 Physical sizes like "2 cm" depend on the player's monitor, so the game uses an abstract **world unit (u)**.
 
-- The **reference screen** (the area a player sees) is **1600 u × 900 u** (16:9).
-- The browser canvas scales the reference screen to fit the window (letterboxing if the aspect ratio differs). Every player therefore sees **exactly the same area** of the world whatever their resolution: no player gets an advantage from a bigger monitor.
+- The **reference screen** is **1600 u × 900 u** (16:9).
+- The browser canvas fits the reference screen inside the window, leaving plain dark **#071b2a** bands when the aspect ratio differs; no terrain appears in the bands. Every player sees exactly **1600 × 900 u**, so the visible area does not depend on window shape.
 - On a typical 24" 1920 × 1080 monitor in full screen, 1 u ≈ 0.33 mm, so a 60 u frigate ≈ 2 cm, matching the original intent.
 
 ## Dimensions
@@ -35,7 +35,7 @@ Rendering MAY smooth tile edges (e.g. marching squares) so coasts look natural; 
 
 ## Camera
 
-- The camera is centred on the player's own frigate, does not rotate (north is always up), and is clamped to the world; it never shows beyond the world edge.
+- The camera is centred on the player's own frigate, does not rotate (north is always up), and clamps at the world edges so it never shows beyond the world.
 - The cannon reticle stays at its true world position and may be off screen; it does not affect camera framing.
 - There is **no minimap**: players only know the part of the world they can see.
 

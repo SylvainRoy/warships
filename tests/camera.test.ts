@@ -1,8 +1,16 @@
 import { describe, expect, it } from "vitest";
-import { computeCamera } from "../src/client/camera.js";
+import { computeCamera, computeViewport } from "../src/client/camera.js";
 import { GAME_CONFIG } from "../src/shared/config.js";
 
 const { screen, world } = GAME_CONFIG;
+
+describe("computeViewport", () => {
+  it("fits the reference frame and centers it in non-16:9 windows", () => {
+    expect(computeViewport(1600, 900)).toEqual({ scale: 1, offsetX: 0, offsetY: 0 });
+    expect(computeViewport(2048, 900)).toEqual({ scale: 1, offsetX: 224, offsetY: 0 });
+    expect(computeViewport(1200, 900)).toEqual({ scale: 0.75, offsetX: 0, offsetY: 112.5 });
+  });
+});
 
 describe("computeCamera", () => {
   it("centers on the frigate away from world edges, even when the max-range sight is aimed north", () => {
@@ -43,4 +51,5 @@ describe("computeCamera", () => {
 
     expect(computeCamera(frigate)).toEqual(computeCamera(otherAim));
   });
+
 });
