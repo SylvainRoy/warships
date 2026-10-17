@@ -34,9 +34,8 @@ Rendering MAY smooth tile edges (e.g. marching squares) so coasts look natural; 
 
 ## Camera
 
-- The camera is centred on the player's own frigate, does not rotate (north is always up), and starts clamped to the world.
-- It shifts only as much as needed to keep the frigate and the cannon reticle (including its 60 u radius) on screen; the frigate always remains visible.
-- If the reticle is beyond the world edge, the camera may show outside the world, drawn as boundary land.
+- The camera is centred on the player's own frigate, does not rotate (north is always up), and is clamped to the world; it never shows beyond the world edge.
+- The cannon reticle stays at its true world position and may be off screen; it does not affect camera framing.
 - There is **no minimap**: players only know the part of the world they can see.
 
 ## Visibility
