@@ -37,7 +37,7 @@ Rendering MAY smooth tile edges (e.g. marching squares) so coasts look natural; 
 
 - The camera is centred on the player's own frigate, does not rotate (north is always up), and clamps at the world edges so it never shows beyond the world.
 - The cannon reticle stays at its true world position and may be off screen; it does not affect camera framing.
-- There is **no minimap**: players only know the part of the world they can see.
+- A north-up radar scope sits bottom-right, centred on the own frigate with a fixed 3,000 u range. It shows land as a faint mint mask and other afloat frigates as direction pips, including enemies already on screen; see [05-controls-and-hud.md](05-controls-and-hud.md#radar). The radar limits only what is drawn, not the positions carried in snapshots.
 
 ## Visibility
 

@@ -11,7 +11,7 @@ All questions raised during the specification phase are resolved. Each line give
 - **Q4 — World shape:** 16 000 × 9 000 u (10 × 10 reference screens).
 - **Q5 — Land coverage:** 20–30 %, a dozen large islands plus many small ones.
 - **Q6 — Camera:** north-up, centred on own frigate.
-- **Q7 — Minimap:** none.
+- **Q7 — Minimap:** none. Replaced by Q61.
 - **Q8 — Turning:** a frigate can turn on the spot (constant rate).
 - **Q9 — Collisions:** touching land costs 20 HP (one cannon shell), at most once per second while in contact; frigate-vs-frigate contact causes no damage. Amounts superseded by Q27 and Q36.
 - **Q10 — Damage model:** 100 HP; shell 20 HP; torpedo 50 HP; no regeneration. Amounts superseded by Q36.
@@ -77,3 +77,9 @@ All questions raised during the specification phase are resolved. Each line give
 - **Q58 — Cannon sight size:** keep the 60 u sight circle and reload ring; reduce the centre dot radius to 1.25 u and place the ticks from 50 to 55 u. Decided 2026-10-17 after playtest. The sight size is revised by Q60.
 - **Q59 — Aim-marker size:** halve the cannon arrow to a 60–70 u triangle with 4 u half-width; shorten the torpedo arrow to 19–48 u shaft dashes, a 56 u tip, a 49 u chevron base with ±4.5 u width, and a 19 u base tick with ±3 u width. Use 1.25 u dash/chevron lines and a 1 u base-tick line. Decided 2026-10-17 after playtest.
 - **Q60 — Cannon sight size (revised):** use a 30 u reticle radius, half the 60 u blast radius, to mark the aim point rather than the full damage zone; ticks span 25–27.5 u and the reload ring sits 3.5 u outside the reticle. Keep the 60 u damage radius and 1.25 u centre dot unchanged. Decided 2026-10-17 after playtest.
+- **Q61 — Radar scope:** add a north-up radar at bottom-right, centred on the own frigate, showing land, a cosmetic sweep, and other afloat frigates. Decided 2026-10-17.
+- **Q62 — On-screen radar contacts:** enemies that are already visible on screen still receive radar pips. Decided 2026-10-17.
+- **Q63 — Radar vessel visibility:** show only afloat boats; exclude sinking and waiting frigates. Decided 2026-10-17.
+- **Q64 — Radar position privacy:** snapshots continue to carry every boat's exact position; radar only limits what is drawn. Accepted for now. Decided 2026-10-17.
+- **Q65 — Radar object rules:** each object kind uses position, direction-only, or hidden radar visibility. Decided 2026-10-17.
+- **Q66 — Radar range:** use a fixed 3,000 u range; a host setting may be added later. Decided 2026-10-17.

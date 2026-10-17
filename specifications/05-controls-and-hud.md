@@ -45,6 +45,12 @@ In Settings, the rows are Boat speed, Rotation speed, Cannon rotation, Torpedo r
 - **Frigate HP bars**: the small bar below a frigate is shown for enemies only; own hull integrity remains in the bottom-left HUD.
 - Indicators are visible **only to their owner**.
 
+## Radar
+
+The bottom-right radar scope has a 90 u HUD radius and 8 u margin. It is north-up, centred on the own frigate, and shows a fixed 3,000 u range. Its clipped disc uses the panel background `rgba(5, 20, 29, .72)`. A cached 800 × 450 land mask uses 1 px per tile: land and the area beyond the world boundary are `rgba(93, 255, 172, .45)`, while water is transparent. It is smoothed at `tileSize × radius / range` (0.6 HUD px per tile). Faint mint rings at one-third and two-thirds range and N–S/E–W crosshair lines use about 0.15 alpha. The cosmetic sweep rotates once every four seconds, with a 0.5-alpha line and a 30° trailing wedge at 0.10 alpha.
+
+The own boat is a white 6 u triangle pointing along its heading. Every other alive frigate appears as a 7 u player-coloured direction triangle, pointing outward from radius 84 u, including enemies already on screen; sinking and waiting frigates are excluded. Other object kinds may use position dots (3 u radius, only within range), direction-only pips, or remain hidden. The mint scope border uses 0.6 alpha and a 1.5 u line. Snapshots still carry every boat's exact position; the radar limits only what is drawn.
+
 ## HUD (screen space)
 
 - HUD panels and overlays use the reference screen's fit (contain) scale and are anchored to the browser window edges (Q41, Q56); positions and sizing remain in reference units.

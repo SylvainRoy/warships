@@ -5,6 +5,7 @@ import { decodeWorld, isLandAt, type World } from "../shared/world.js";
 import type { LobbyMessage, ServerMessage, SnapshotFrigate } from "../shared/protocol.js";
 import { computeCamera, computeViewport } from "./camera.js";
 import { ProjectileStore } from "./projectiles.js";
+import { RADAR, radarBearing, radarContacts, worldToRadar } from "./radar.js";
 
 type Snapshot = Extract<ServerMessage, { type: "snapshot" }>;
 type StoredSnapshot = { receivedAt: number; value: Snapshot };
@@ -45,6 +46,8 @@ const colours = ["#4b9bff", "#ff6266", "#f3c94e", "#c084fc"];
 const landColor = "#c5b58b";
 const pressed = new Set<string>();
 const worldCache = new Map<string, HTMLCanvasElement>();
+let radarMapCanvas: HTMLCanvasElement | null = null;
+let radarMapWorld: World | null = null;
 const terrainChunkSize = 800;
 let worldCacheResolution = 0;
 const wakeTrails = new Map<string, Array<{ x: number; y: number; at: number }>>();
@@ -90,6 +93,12 @@ let serverTimeOffset = 0;
 let hasServerTimeOffset = false;
 let reconnectTimer: number | undefined;
 let reconnectForLobby = false;
+
+function resetWorldCaches(): void {
+  worldCache.clear();
+  radarMapCanvas = null;
+  radarMapWorld = null;
+}
 
 Object.defineProperty(window, "__warships", {
   configurable: false,
@@ -173,7 +182,7 @@ function handleMessage(message: ServerMessage): void {
     sessionStorage.setItem("warships.token", message.token);
     sessionStorage.setItem("warships.sessionName", nameInput.value.trim());
     world = { seed: 0, grid: decodeWorld(message.world) };
-    worldCache.clear();
+    resetWorldCaches();
     joined = true;
     shouldAutoJoin = false;
     lobby.hidden = true;
@@ -185,7 +194,7 @@ function handleMessage(message: ServerMessage): void {
   } else if (message.type === "world") {
     throttleLevel = 0;
     if (world) world = { ...world, grid: decodeWorld(message.world) };
-    worldCache.clear();
+    resetWorldCaches();
     addFeed("World regenerated");
   } else if (message.type === "settings") {
     gameSettings = { ...message.settings };
@@ -869,6 +878,164 @@ function drawReticle(frigate: Frigate, now: number): void {
   ctx.restore();
 }
 
+function getRadarMap(worldState: World): HTMLCanvasElement {
+  if (radarMapCanvas && radarMapWorld === worldState) return radarMapCanvas;
+  const canvas = document.createElement("canvas");
+  canvas.width = GAME_CONFIG.world.columns;
+  canvas.height = GAME_CONFIG.world.rows;
+  const mapContext = canvas.getContext("2d");
+  if (mapContext) {
+    const image = mapContext.createImageData(canvas.width, canvas.height);
+    for (let index = 0; index < worldState.grid.length; index += 1) {
+      if (!worldState.grid[index]) continue;
+      const pixel = index * 4;
+      image.data[pixel] = 93;
+      image.data[pixel + 1] = 255;
+      image.data[pixel + 2] = 172;
+      image.data[pixel + 3] = 115;
+    }
+    mapContext.putImageData(image, 0, 0);
+  }
+  radarMapCanvas = canvas;
+  radarMapWorld = worldState;
+  return canvas;
+}
+
+function drawRadarTriangle(x: number, y: number, angle: number, length: number, width: number, color: string): void {
+  const axisX = Math.cos(angle);
+  const axisY = Math.sin(angle);
+  const perpendicularX = -axisY;
+  const perpendicularY = axisX;
+  const tipX = x + axisX * length / 2;
+  const tipY = y + axisY * length / 2;
+  const baseX = x - axisX * length / 2;
+  const baseY = y - axisY * length / 2;
+  ctx.fillStyle = color;
+  ctx.beginPath();
+  ctx.moveTo(tipX, tipY);
+  ctx.lineTo(baseX + perpendicularX * width / 2, baseY + perpendicularY * width / 2);
+  ctx.lineTo(baseX - perpendicularX * width / 2, baseY - perpendicularY * width / 2);
+  ctx.closePath();
+  ctx.fill();
+}
+
+function drawRadar(snapshot: Snapshot, frigate: Frigate, now: number, logicalWidth: number, logicalHeight: number): void {
+  if (!world) return;
+  const centerX = logicalWidth - RADAR.margin - RADAR.radius;
+  const centerY = logicalHeight - RADAR.margin - RADAR.radius;
+  const worldScale = RADAR.radius / RADAR.range;
+  const worldLeft = centerX - frigate.x * worldScale;
+  const worldTop = centerY - frigate.y * worldScale;
+  const worldRight = worldLeft + GAME_CONFIG.world.width * worldScale;
+  const worldBottom = worldTop + GAME_CONFIG.world.height * worldScale;
+  const scopeLeft = centerX - RADAR.radius;
+  const scopeTop = centerY - RADAR.radius;
+  const scopeRight = centerX + RADAR.radius;
+  const scopeBottom = centerY + RADAR.radius;
+
+  ctx.save();
+  ctx.beginPath();
+  ctx.arc(centerX, centerY, RADAR.radius, 0, Math.PI * 2);
+  ctx.fillStyle = "rgba(5, 20, 29, .72)";
+  ctx.fill();
+  ctx.clip();
+
+  ctx.imageSmoothingEnabled = true;
+  ctx.drawImage(
+    getRadarMap(world),
+    worldLeft,
+    worldTop,
+    GAME_CONFIG.world.width * worldScale,
+    GAME_CONFIG.world.height * worldScale,
+  );
+
+  ctx.fillStyle = "rgba(93, 255, 172, .45)";
+  if (worldTop > scopeTop) {
+    ctx.fillRect(scopeLeft, scopeTop, scopeRight - scopeLeft, Math.min(scopeBottom, worldTop) - scopeTop);
+  }
+  if (worldBottom < scopeBottom) {
+    const boundaryTop = Math.max(scopeTop, worldBottom);
+    ctx.fillRect(scopeLeft, boundaryTop, scopeRight - scopeLeft, scopeBottom - boundaryTop);
+  }
+  const boundaryTop = Math.max(scopeTop, worldTop);
+  const boundaryBottom = Math.min(scopeBottom, worldBottom);
+  if (boundaryBottom > boundaryTop && worldLeft > scopeLeft) {
+    ctx.fillRect(scopeLeft, boundaryTop, Math.min(scopeRight, worldLeft) - scopeLeft, boundaryBottom - boundaryTop);
+  }
+  if (boundaryBottom > boundaryTop && worldRight < scopeRight) {
+    const boundaryLeft = Math.max(scopeLeft, worldRight);
+    ctx.fillRect(boundaryLeft, boundaryTop, scopeRight - boundaryLeft, boundaryBottom - boundaryTop);
+  }
+
+  ctx.globalAlpha = .15;
+  ctx.strokeStyle = "#5dffac";
+  ctx.lineWidth = 1;
+  for (const fraction of [1 / 3, 2 / 3]) {
+    ctx.beginPath();
+    ctx.arc(centerX, centerY, RADAR.radius * fraction, 0, Math.PI * 2);
+    ctx.stroke();
+  }
+  ctx.beginPath();
+  ctx.moveTo(centerX, scopeTop);
+  ctx.lineTo(centerX, scopeBottom);
+  ctx.moveTo(scopeLeft, centerY);
+  ctx.lineTo(scopeRight, centerY);
+  ctx.stroke();
+
+  const sweepAngle = now / RADAR.sweepPeriod * Math.PI * 2;
+  ctx.globalAlpha = .1;
+  ctx.fillStyle = "#5dffac";
+  ctx.beginPath();
+  ctx.moveTo(centerX, centerY);
+  ctx.arc(centerX, centerY, RADAR.radius, sweepAngle - Math.PI / 6, sweepAngle);
+  ctx.closePath();
+  ctx.fill();
+  ctx.globalAlpha = .5;
+  ctx.beginPath();
+  ctx.moveTo(centerX, centerY);
+  ctx.lineTo(centerX + Math.cos(sweepAngle) * RADAR.radius, centerY + Math.sin(sweepAngle) * RADAR.radius);
+  ctx.stroke();
+  ctx.globalAlpha = 1;
+
+  const contacts = radarContacts(
+    snapshot.frigates,
+    frigate.playerId,
+    (slot) => colours[slot - 1] ?? "#fff",
+  );
+  for (const contact of contacts) {
+    const dx = contact.x - frigate.x;
+    const dy = contact.y - frigate.y;
+    if (contact.kind === "position") {
+      if (Math.hypot(dx, dy) > RADAR.range) continue;
+      const [radarX, radarY] = worldToRadar(dx, dy);
+      ctx.fillStyle = contact.color;
+      ctx.beginPath();
+      ctx.arc(centerX + radarX, centerY + radarY, 3, 0, Math.PI * 2);
+      ctx.fill();
+    } else {
+      const bearing = radarBearing(frigate.x, frigate.y, contact.x, contact.y);
+      const distance = RADAR.radius - 6;
+      drawRadarTriangle(
+        centerX + Math.cos(bearing) * distance,
+        centerY + Math.sin(bearing) * distance,
+        bearing,
+        7,
+        6,
+        contact.color,
+      );
+    }
+  }
+
+  drawRadarTriangle(centerX, centerY, frigate.heading, 6, 5, "#fff");
+  ctx.globalAlpha = .6;
+  ctx.strokeStyle = "#5dffac";
+  ctx.lineWidth = 1.5;
+  ctx.beginPath();
+  ctx.arc(centerX, centerY, RADAR.radius, 0, Math.PI * 2);
+  ctx.stroke();
+  ctx.restore();
+}
+
 function drawHud(snapshot: Snapshot, frigate: Frigate | undefined, now: number, logicalWidth: number, logicalHeight: number): void {
   const hudMargin = 8;
   const captainsPanelX = logicalWidth - hudMargin - 230;
@@ -987,6 +1154,7 @@ function drawHud(snapshot: Snapshot, frigate: Frigate | undefined, now: number, 
     ctx.fillText(`TICK ${snapshot.tick}`, 32, logicalHeight - 101);
   }
   ctx.restore();
+  if (frigate && frigate.status !== "waiting") drawRadar(snapshot, frigate, now, logicalWidth, logicalHeight);
 }
 
 function drawFullScoreboard(snapshot: Snapshot, width: number, height: number): void {

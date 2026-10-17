@@ -1,6 +1,6 @@
 # Warships — Specifications
 
-**Status: APPROVED v1.12** (2026-10-17). Changes after approval must be recorded in the changelog.
+**Status: APPROVED v1.13** (2026-10-17). Changes after approval must be recorded in the changelog.
 
 | # | Document | Content |
 |---|----------|---------|
@@ -22,6 +22,7 @@
 
 ## Changelog
 
+- v1.13 — add a north-up 3,000 u radar scope with vessel direction pips and a land mask (Q61–Q66); approved 2026-10-17.
 - v1.12 — halve the cannon reticle radius while retaining the 60 u blast radius (Q60); approved 2026-10-17.
 - v1.11 — halve the frigate's drawn and collision size, and shrink the aim markers while retaining the 60 u cannon sight (Q57–Q59); approved 2026-10-17.
 - v1.10 — fixed 16:9 frame with plain letterbox bands; no terrain pop-in or seams (Q56); approved 2026-10-17.
