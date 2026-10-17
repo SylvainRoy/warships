@@ -15,9 +15,9 @@ The server serves the static client files **and** the WebSocket endpoint on the 
 
 - **Server-authoritative** simulation: clients send only their inputs (pressed keys + sequence number); the server computes positions, hits, scores. Prevents cheating and keeps all players consistent.
 - Server tick: **30 Hz**. State snapshots broadcast at **20 Hz**.
-- Client renders at the display refresh rate (target 60 fps) and **interpolates** other frigates and projectiles between snapshots (≈ 100 ms buffer).
+- Client renders at the display refresh rate (target 60 fps) and **interpolates** other frigates between snapshots (≈ 100 ms buffer).
 - Own frigate: **client-side prediction** with server reconciliation, so controls feel instant even with latency.
-- Snapshots contain only dynamic state (frigates, projectiles, scores). The world is sent once on join and on regeneration; snapshots omit the internal speed field for torpedoes.
+- Snapshots carry frigates and scores only. Each shell and torpedo is sent once on spawn; the server sends torpedo removals when they hit, touch land, or leave the world. A full projectile reset is sent after join and world regeneration. Clients advance projectiles along their known paths using the same delayed server clock as frigate interpolation (Q49).
 - The `welcome` message includes the current game settings; a `settings` message broadcasts host updates to joined clients.
 - Messages: JSON for v1; binary encoding only if bandwidth requires it.
 - Target playable latency: up to 150 ms round-trip.

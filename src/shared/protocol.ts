@@ -25,21 +25,18 @@ export type SnapshotFrigate = Pick<
   "playerId" | "name" | "slot" | "x" | "y" | "heading" | "hp" | "status" | "sinkingStartedAt" | "spawnProtectedUntil"
 > & Partial<Omit<Frigate, "playerId" | "name" | "slot" | "x" | "y" | "heading" | "hp" | "status" | "sinkingStartedAt" | "spawnProtectedUntil">>;
 
-export type SnapshotTorpedo = Omit<Torpedo, "speed">;
-
 export type ServerMessage =
   | LobbyMessage
   | { type: "welcome"; playerId: string; token: string; slot: number; world: number[]; settings: GameSettings }
   | { type: "settings"; settings: GameSettings }
   | { type: "world"; world: number[] }
+  | { type: "projectiles"; serverTime: number; shells: Shell[]; torpedoes: Torpedo[]; removed: string[]; reset?: true }
   | {
       type: "snapshot";
       tick: number;
       ackSeq: number;
       serverTime: number;
       frigates: SnapshotFrigate[];
-      shells: Shell[];
-      torpedoes: SnapshotTorpedo[];
       players: PlayerScore[];
     }
   | { type: "event"; event: GameEvent }

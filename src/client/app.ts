@@ -1,9 +1,10 @@
 import { GAME_CONFIG } from "../shared/config.js";
-import { INPUT_KEYS, applyFrigateInput, type Frigate, type FrigateInput, type GameEvent, type Shell } from "../shared/sim.js";
+import { INPUT_KEYS, applyFrigateInput, type Frigate, type FrigateInput, type GameEvent, type Shell, type Torpedo } from "../shared/sim.js";
 import { DEFAULT_SETTINGS, describeSettingsChanges, SETTINGS_LIMITS, type GameSettings } from "../shared/settings.js";
 import { decodeWorld, isLandAt, type World } from "../shared/world.js";
-import type { LobbyMessage, ServerMessage, SnapshotFrigate, SnapshotTorpedo } from "../shared/protocol.js";
+import type { LobbyMessage, ServerMessage, SnapshotFrigate } from "../shared/protocol.js";
 import { computeCamera } from "./camera.js";
+import { ProjectileStore } from "./projectiles.js";
 
 type Snapshot = Extract<ServerMessage, { type: "snapshot" }>;
 type StoredSnapshot = { receivedAt: number; value: Snapshot };
@@ -15,6 +16,8 @@ declare global {
       ownId: string | null;
       latestSnapshot: Readonly<Snapshot> | null;
       predictedOwnFrigate: Readonly<Frigate> | null;
+      projectiles: Readonly<{ shells: Shell[]; torpedoes: Torpedo[] }>;
+      projectileServerTime: number;
     }>;
   }
 }
@@ -53,6 +56,9 @@ let latestSnapshot: Snapshot | null = null;
 let predictedOwn: Frigate | null = null;
 let gameSettings: GameSettings = DEFAULT_SETTINGS;
 let snapshots: StoredSnapshot[] = [];
+const projectileStore = new ProjectileStore();
+let renderedProjectiles: { shells: Shell[]; torpedoes: Torpedo[] } = { shells: [], torpedoes: [] };
+let projectileServerTime = 0;
 let pendingInputs: PendingInput[] = [];
 let sequence = 0;
 let throttleLevel = 0;
@@ -80,6 +86,7 @@ let fpsStartedAt = performance.now();
 let ping = 0;
 let lastPingAt = 0;
 let serverTimeOffset = 0;
+let hasServerTimeOffset = false;
 let reconnectTimer: number | undefined;
 let reconnectForLobby = false;
 
@@ -90,6 +97,8 @@ Object.defineProperty(window, "__warships", {
     ownId,
     latestSnapshot: latestSnapshot ? deepFreeze(structuredClone(latestSnapshot)) : null,
     predictedOwnFrigate: predictedOwn ? deepFreeze({ ...predictedOwn }) : null,
+    projectiles: deepFreeze(structuredClone(renderedProjectiles)),
+    projectileServerTime,
   }),
 });
 
@@ -154,6 +163,10 @@ function handleMessage(message: ServerMessage): void {
     }
   } else if (message.type === "welcome") {
     throttleLevel = 0;
+    projectileStore.clear();
+    renderedProjectiles = { shells: [], torpedoes: [] };
+    projectileServerTime = 0;
+    hasServerTimeOffset = false;
     ownId = message.playerId;
     gameSettings = { ...message.settings };
     sessionStorage.setItem("warships.token", message.token);
@@ -177,6 +190,8 @@ function handleMessage(message: ServerMessage): void {
     gameSettings = { ...message.settings };
   } else if (message.type === "snapshot") {
     onSnapshot(message);
+  } else if (message.type === "projectiles") {
+    projectileStore.apply(message);
   } else if (message.type === "event") {
     effects.push({ event: message.event, at: performance.now() });
     if (message.event.message) addFeed(message.event.message);
@@ -208,6 +223,10 @@ function showKickedMessage(): void {
   latestSnapshot = null;
   predictedOwn = null;
   snapshots = [];
+  projectileStore.clear();
+  renderedProjectiles = { shells: [], torpedoes: [] };
+  projectileServerTime = 0;
+  hasServerTimeOffset = false;
   pendingInputs = [];
   pressed.clear();
   tabHeld = false;
@@ -363,6 +382,7 @@ function onSnapshot(snapshot: Snapshot): void {
   latestSnapshot = snapshot;
   const receivedAt = performance.now();
   serverTimeOffset = snapshot.serverTime - receivedAt / 1000;
+  hasServerTimeOffset = true;
   snapshots.push({ receivedAt, value: snapshot });
   snapshots = snapshots.slice(-6);
   const own = snapshot.frigates.find((frigate) => frigate.playerId === ownId) as Frigate | undefined;
@@ -452,42 +472,12 @@ function getRenderSnapshot(): Snapshot | null {
       heading: interpolateAngle(earlier.heading, item.heading, fraction),
     };
   });
-  return {
-    ...later,
-    frigates,
-    shells: interpolateProjectiles(before.value.shells, later.shells, fraction, "shell"),
-    torpedoes: interpolateProjectiles(before.value.torpedoes, later.torpedoes, fraction, "torpedo"),
-  };
+  return { ...later, frigates };
 }
 
 function interpolateAngle(first: number, second: number, amount: number): number {
   const delta = Math.atan2(Math.sin(second - first), Math.cos(second - first));
   return first + delta * amount;
-}
-
-function interpolateProjectiles<T extends Shell | SnapshotTorpedo>(
-  older: T[],
-  newer: T[],
-  amount: number,
-  kind: "shell" | "torpedo",
-): T[] {
-  const prior = new Map(older.map((projectile) => [projectile.id, projectile]));
-  return newer.map((projectile) => {
-    const previous = prior.get(projectile.id);
-    if (!previous) return projectile;
-    if (kind === "shell") {
-      const shell = projectile as Shell;
-      const oldShell = previous as Shell;
-      return { ...shell, elapsed: oldShell.elapsed + (shell.elapsed - oldShell.elapsed) * amount } as T;
-    }
-    const torpedo = projectile as SnapshotTorpedo;
-    const oldTorpedo = previous as SnapshotTorpedo;
-    return {
-      ...torpedo,
-      x: oldTorpedo.x + (torpedo.x - oldTorpedo.x) * amount,
-      y: oldTorpedo.y + (torpedo.y - oldTorpedo.y) * amount,
-    } as T;
-  });
 }
 
 function resizeCanvas(): { width: number; height: number; scale: number; offsetX: number; offsetY: number; dpr: number } {
@@ -732,7 +722,7 @@ function drawShell(shell: Shell): void {
   ctx.restore();
 }
 
-function drawTorpedo(torpedo: SnapshotTorpedo): void {
+function drawTorpedo(torpedo: Torpedo): void {
   ctx.save();
   ctx.translate(torpedo.x, torpedo.y);
   ctx.rotate(torpedo.angle);
@@ -1195,6 +1185,13 @@ function addFeed(text: string): void {
 function renderFrame(now: number): void {
   const viewport = resizeCanvas();
   const serverNow = now / 1000 + serverTimeOffset;
+  if (hasServerTimeOffset) {
+    projectileServerTime = performance.now() / 1000 + serverTimeOffset - GAME_CONFIG.network.interpolationDelay;
+    renderedProjectiles = projectileStore.at(projectileServerTime);
+  } else {
+    projectileServerTime = 0;
+    renderedProjectiles = { shells: [], torpedoes: [] };
+  }
   ctx.setTransform(viewport.dpr, 0, 0, viewport.dpr, 0, 0);
   ctx.fillStyle = "#071b2a";
   const contentWidth = GAME_CONFIG.screen.width * viewport.scale;
@@ -1218,8 +1215,8 @@ function renderFrame(now: number): void {
     const visible = snapshot?.frigates ?? [];
     for (const frigate of visible) if (frigate.playerId !== ownId) drawFrigate(frigate, serverNow, debugVisible);
     if (own) drawFrigate(own, serverNow, debugVisible);
-    for (const shell of snapshot?.shells ?? []) drawShell(shell);
-    for (const torpedo of snapshot?.torpedoes ?? []) drawTorpedo(torpedo);
+    for (const shell of renderedProjectiles.shells) drawShell(shell);
+    for (const torpedo of renderedProjectiles.torpedoes) drawTorpedo(torpedo);
     for (const effect of effects) drawExplosion(effect, now);
     if (own) drawReticle(own, serverNow);
     ctx.restore();

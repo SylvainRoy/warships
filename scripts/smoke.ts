@@ -1,18 +1,22 @@
 import WebSocket from "ws";
-import { INPUT_KEYS } from "../src/shared/sim.js";
+import { INPUT_KEYS, type Shell, type Torpedo } from "../src/shared/sim.js";
 import type { ServerMessage } from "../src/shared/protocol.js";
 
 const address = process.env.WARSHIPS_WS ?? "ws://127.0.0.1:8080/ws";
 const timeoutMs = 10_000;
 type SnapshotMessage = Extract<ServerMessage, { type: "snapshot" }>;
+type ProjectilesMessage = Extract<ServerMessage, { type: "projectiles" }>;
 const clients = new Set<Client>();
 
 class Client {
   readonly socket = new WebSocket(address);
   readonly messages: ServerMessage[] = [];
+  readonly projectileMessages: ProjectilesMessage[] = [];
   snapshotTimes: number[] = [];
   latestSnapshot: SnapshotMessage | undefined;
   latestSnapshotAt = 0;
+  private readonly liveShells = new Map<string, { shell: Shell; serverTime: number }>();
+  private readonly liveTorpedoes = new Map<string, Torpedo>();
   receivedBytes = 0;
   bytesByType: Record<string, number> = {};
   maxShellsAlive = 0;
@@ -34,10 +38,33 @@ class Client {
         this.snapshotTimes.push(Date.now());
         this.latestSnapshot = message;
         this.latestSnapshotAt = Date.now();
-        this.maxShellsAlive = Math.max(this.maxShellsAlive, message.shells.length);
-        this.maxTorpedoesAlive = Math.max(this.maxTorpedoesAlive, message.torpedoes.length);
+      } else if (message.type === "projectiles") {
+        this.projectileMessages.push(message);
+        if (message.reset) {
+          this.liveShells.clear();
+          this.liveTorpedoes.clear();
+        }
+        for (const id of message.removed) {
+          this.liveShells.delete(id);
+          this.liveTorpedoes.delete(id);
+        }
+        for (const shell of message.shells) this.liveShells.set(shell.id, { shell, serverTime: message.serverTime });
+        for (const torpedo of message.torpedoes) this.liveTorpedoes.set(torpedo.id, torpedo);
+        this.pruneExpiredShells(message.serverTime);
+        this.updateMaxProjectileCounts();
       }
     });
+  }
+
+  private pruneExpiredShells(serverTime: number): void {
+    for (const [id, stored] of this.liveShells) {
+      if (stored.shell.elapsed + serverTime - stored.serverTime >= stored.shell.duration) this.liveShells.delete(id);
+    }
+  }
+
+  private updateMaxProjectileCounts(): void {
+    this.maxShellsAlive = Math.max(this.maxShellsAlive, this.liveShells.size);
+    this.maxTorpedoesAlive = Math.max(this.maxTorpedoesAlive, this.liveTorpedoes.size);
   }
 
   async open(): Promise<void> {
@@ -62,6 +89,8 @@ class Client {
     this.bytesByType = {};
     this.maxShellsAlive = 0;
     this.maxTorpedoesAlive = 0;
+    if (this.latestSnapshot) this.pruneExpiredShells(this.latestSnapshot.serverTime);
+    this.updateMaxProjectileCounts();
     this.measuring = true;
   }
 
@@ -122,12 +151,12 @@ async function main(): Promise<void> {
   if (!moved || Math.hypot(moved.x - initialFrigate.x, moved.y - initialFrigate.y) < 20) {
     throw new Error("Forward input did not move the frigate");
   }
-  const projectileSnapshots = players[1]!.messages.filter((message) => message.type === "snapshot");
-  if (!projectileSnapshots.some((snapshot) => snapshot.type === "snapshot" && snapshot.shells.length > 0)) {
-    throw new Error("No cannon shell appeared in snapshots");
+  const projectileMessages = players[1]!.projectileMessages;
+  if (!projectileMessages.some((message) => message.shells.length > 0)) {
+    throw new Error("No cannon shell appeared in projectiles messages");
   }
-  if (!projectileSnapshots.some((snapshot) => snapshot.type === "snapshot" && snapshot.torpedoes.length > 0)) {
-    throw new Error("No torpedo appeared in snapshots");
+  if (!projectileMessages.some((message) => message.torpedoes.length > 0)) {
+    throw new Error("No torpedo appeared in projectiles messages");
   }
 
   const extra = [new Client(), new Client()];
