@@ -2,7 +2,7 @@
 
 ## Dimensions and appearance
 
-- Length **60 u**, beam (width) **20 u**. Collision shape: a rotated rectangle (or capsule) of that size.
+- Length **30 u**, beam (width) **10 u**. Collision shape: a rotated rectangle (or capsule) of that size.
 - Each player has a distinct colour (slot 1–4: e.g. blue, red, yellow, purple). The colour is used for the hull, the name label and the scoreboard.
 - The player's name is displayed above their frigate. A health bar is displayed under it.
 - Visual style: simple flat vector graphics; a wake trail behind moving boats.

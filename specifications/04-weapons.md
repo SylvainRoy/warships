@@ -23,7 +23,7 @@ Ballistic weapon: shells fly in the air, over water and land, and land on the ai
 
 ### Impact
 
-- On landing, each shell explodes. Any frigate whose hull is within **60 u (one boat length)** of the impact point takes damage: **10 HP per shell**. A frigate hit by both shells takes 20 HP.
+- On landing, each shell explodes. Any frigate whose hull is within **60 u** of the impact point takes damage: **10 HP per shell**. A frigate hit by both shells takes 20 HP.
 - The firer's own frigate CAN be hit by its own shells.
 - Visuals: splash on water, small explosion on land or on a boat.
 

@@ -76,12 +76,14 @@ describe("frigate movement and land contact", () => {
     const world = openWorld();
     const wallColumn = 100;
     for (let row = 0; row < GAME_CONFIG.world.rows; row += 1) world.grid[row * GAME_CONFIG.world.columns + wallColumn] = 1;
-    let ship = frigate("coast", 1970, 4500);
+    const wallX = wallColumn * GAME_CONFIG.world.tileSize;
+    const contactX = wallX - GAME_CONFIG.frigate.length / 2;
+    let ship = frigate("coast", contactX, 4500);
     ship.speed = GAME_CONFIG.frigate.maxForwardSpeed;
     ship = awaitApply(ship, { ...quietInput, throttle: 3 }, dt, world, 0);
     expect(ship.hp).toBe(maxHp - GAME_CONFIG.land.damage);
 
-    let slower = frigate("slower", 1970, 4500);
+    let slower = frigate("slower", contactX, 4500);
     const partialSpeed = GAME_CONFIG.frigate.maxForwardSpeed * 2 / 3;
     slower.speed = partialSpeed;
     slower = awaitApply(slower, { ...quietInput, throttle: 2 }, dt, world, 0);
@@ -89,7 +91,11 @@ describe("frigate movement and land contact", () => {
 
     const shallowImpactSpeed = GAME_CONFIG.land.grazeSpeed / 2;
     const maxForwardSpeed = GAME_CONFIG.frigate.maxForwardSpeed;
-    let slider = frigate("slider", 1982, 4500, Math.acos(shallowImpactSpeed / maxForwardSpeed));
+    const heading = Math.acos(shallowImpactSpeed / maxForwardSpeed);
+    const halfLength = GAME_CONFIG.frigate.length / 2;
+    const halfBeam = GAME_CONFIG.frigate.beam / 2;
+    const halfWidthX = Math.abs(Math.cos(heading)) * halfLength + Math.abs(Math.sin(heading)) * halfBeam;
+    let slider = frigate("slider", wallX - halfWidthX - shallowImpactSpeed * dt / 2, 4500, heading);
     slider.speed = maxForwardSpeed;
     for (let tick = 0; tick < 8; tick += 1) {
       slider = awaitApply(slider, { ...quietInput, throttle: 3 }, dt, world, tick * dt);
@@ -101,15 +107,25 @@ describe("frigate movement and land contact", () => {
 
   it("preserves speed while a 45-degree heading slides along a vertical wall", () => {
     const world = openWorld();
-    for (let row = 0; row < GAME_CONFIG.world.rows; row += 1) world.grid[row * GAME_CONFIG.world.columns + 100] = 1;
-    let ship = frigate("coast-slide", 1970, 4500, Math.PI / 4);
+    const wallColumn = 100;
+    for (let row = 0; row < GAME_CONFIG.world.rows; row += 1) world.grid[row * GAME_CONFIG.world.columns + wallColumn] = 1;
+    const wallX = wallColumn * GAME_CONFIG.world.tileSize;
+    const heading = Math.PI / 4;
+    const halfLength = GAME_CONFIG.frigate.length / 2;
+    const halfBeam = GAME_CONFIG.frigate.beam / 2;
+    const halfWidthX = Math.abs(Math.cos(heading)) * halfLength + Math.abs(Math.sin(heading)) * halfBeam;
+    const dx = Math.cos(heading) * GAME_CONFIG.frigate.maxForwardSpeed * dt;
+    const startX = wallX - halfWidthX - 1.5 * dx;
+    let ship = frigate("coast-slide", startX, 4500, heading);
     ship.speed = GAME_CONFIG.frigate.maxForwardSpeed;
     ship = awaitApply(ship, { ...quietInput, throttle: 3 }, dt, world, 0);
+    expect(ship.x).toBeCloseTo(startX + dx);
+    ship = awaitApply(ship, { ...quietInput, throttle: 3 }, dt, world, dt);
     const blockedX = ship.x;
-    for (let tick = 1; tick < 8; tick += 1) {
+    for (let tick = 2; tick < 8; tick += 1) {
       ship = awaitApply(ship, { ...quietInput, throttle: 3 }, dt, world, tick * dt);
     }
-    expect(blockedX).toBeGreaterThan(1970);
+    expect(blockedX).toBeGreaterThan(startX);
     expect(ship.x).toBeCloseTo(blockedX);
     expect(ship.y).toBeGreaterThan(4500);
     expect(ship.speed).toBe(GAME_CONFIG.frigate.maxForwardSpeed);
@@ -117,8 +133,9 @@ describe("frigate movement and land contact", () => {
 
   it("does no further damage while pushing against a coast after a head-on impact", () => {
     const world = openWorld();
-    for (let row = 0; row < GAME_CONFIG.world.rows; row += 1) world.grid[row * GAME_CONFIG.world.columns + 100] = 1;
-    let ship = frigate("coast", 1970, 4500);
+    const wallColumn = 100;
+    for (let row = 0; row < GAME_CONFIG.world.rows; row += 1) world.grid[row * GAME_CONFIG.world.columns + wallColumn] = 1;
+    let ship = frigate("coast", wallColumn * GAME_CONFIG.world.tileSize - GAME_CONFIG.frigate.length / 2, 4500);
     ship.speed = GAME_CONFIG.frigate.maxForwardSpeed;
     ship = awaitApply(ship, { ...quietInput, throttle: 3 }, dt, world, 0);
     for (let tick = 1; tick <= 3 * GAME_CONFIG.network.tickRate; tick += 1) {
@@ -129,8 +146,9 @@ describe("frigate movement and land contact", () => {
 
   it("ignores land damage during spawn protection", () => {
     const world = openWorld();
-    for (let row = 0; row < GAME_CONFIG.world.rows; row += 1) world.grid[row * GAME_CONFIG.world.columns + 100] = 1;
-    let protectedShip = frigate("protected", 1970, 4500);
+    const wallColumn = 100;
+    for (let row = 0; row < GAME_CONFIG.world.rows; row += 1) world.grid[row * GAME_CONFIG.world.columns + wallColumn] = 1;
+    let protectedShip = frigate("protected", wallColumn * GAME_CONFIG.world.tileSize - GAME_CONFIG.frigate.length / 2, 4500);
     protectedShip.speed = GAME_CONFIG.frigate.maxForwardSpeed;
     protectedShip.spawnProtectedUntil = 3;
     protectedShip = awaitApply(protectedShip, { ...quietInput, throttle: 3 }, dt, world, 0);
@@ -139,8 +157,9 @@ describe("frigate movement and land contact", () => {
 
   it("self-sinks on a damaging land impact and applies the score penalty", () => {
     const world = openWorld();
-    for (let row = 0; row < GAME_CONFIG.world.rows; row += 1) world.grid[row * GAME_CONFIG.world.columns + 100] = 1;
-    const ship = frigate("coast", 1970, 4500);
+    const wallColumn = 100;
+    for (let row = 0; row < GAME_CONFIG.world.rows; row += 1) world.grid[row * GAME_CONFIG.world.columns + wallColumn] = 1;
+    const ship = frigate("coast", wallColumn * GAME_CONFIG.world.tileSize - GAME_CONFIG.frigate.length / 2, 4500);
     ship.speed = GAME_CONFIG.frigate.maxForwardSpeed;
     ship.hp = GAME_CONFIG.land.damage;
     const state = createGameState(world);
@@ -164,7 +183,9 @@ describe("frigate movement and land contact", () => {
     state.scores = scores(first, second);
     stepGame(state, { one: quietInput, two: quietInput }, dt, dt);
     const distance = Math.hypot(first.x - second.x, first.y - second.y);
-    expect(distance).toBeGreaterThanOrEqual(59);
+    const halfExtent = GAME_CONFIG.frigate.hitCircleRadius
+      + Math.max(...GAME_CONFIG.frigate.collisionCircleOffsets.map((offset) => Math.abs(offset)));
+    expect(distance).toBeGreaterThanOrEqual(2 * halfExtent - 1);
     expect(first.hp).toBe(maxHp);
     expect(second.hp).toBe(maxHp);
   });
@@ -222,8 +243,9 @@ describe("host settings in simulation", () => {
 
   it("keeps full-speed head-on land damage capped at 10 HP when boat speed is scaled", () => {
     const world = openWorld();
-    for (let row = 0; row < GAME_CONFIG.world.rows; row += 1) world.grid[row * GAME_CONFIG.world.columns + 100] = 1;
-    const ship = frigate("coast", 1970, 4500);
+    const wallColumn = 100;
+    for (let row = 0; row < GAME_CONFIG.world.rows; row += 1) world.grid[row * GAME_CONFIG.world.columns + wallColumn] = 1;
+    const ship = frigate("coast", wallColumn * GAME_CONFIG.world.tileSize - GAME_CONFIG.frigate.length / 2, 4500);
     ship.speed = GAME_CONFIG.frigate.maxForwardSpeed * 2;
 
     const damaged = awaitApply(
@@ -291,10 +313,11 @@ describe("cannons", () => {
     return { world, shooter, target, state };
   }
 
-  it("fires two parallel shells 30 units apart and damages hulls within 60 units, including both-shell damage", () => {
+  it("fires two parallel shells at the configured muzzle spacing and damages hulls within 60 units, including both-shell damage", () => {
     const { state, target } = shootAt();
     expect(state.shells).toHaveLength(2);
-    expect(Math.hypot(state.shells[0]!.impactX - state.shells[1]!.impactX, state.shells[0]!.impactY - state.shells[1]!.impactY)).toBeCloseTo(30);
+    expect(Math.hypot(state.shells[0]!.impactX - state.shells[1]!.impactX, state.shells[0]!.impactY - state.shells[1]!.impactY))
+      .toBeCloseTo(2 * GAME_CONFIG.cannon.shellOffset);
     const flightTicks = Math.ceil(state.shells[0]!.duration / dt);
     for (let tick = 1; tick <= flightTicks; tick += 1) stepGame(state, {}, dt, tick * dt);
     expect(target.hp).toBe(maxHp - 2 * GAME_CONFIG.cannon.damage);
@@ -333,7 +356,7 @@ describe("torpedoes and scoring", () => {
   it("launches a 3-torpedo spread, hits hulls for configured damage, and uses the configured reload", () => {
     const world = openWorld();
     const shooter = frigate("shooter");
-    const target = frigate("target", 5120, 4512);
+    const target = frigate("target", 5120, 4507);
     const state = createGameState(world);
     expect(GAME_CONFIG.torpedo.spread).toBeCloseTo(Math.PI / 90);
     state.frigates.shooter = shooter;

@@ -661,30 +661,30 @@ function drawFrigate(frigate: SnapshotFrigate, now: number, debug: boolean): voi
   ctx.globalAlpha = 1 - sinkingProgress * 0.8;
   ctx.fillStyle = "rgba(0, 12, 19, .38)";
   ctx.beginPath();
-  ctx.ellipse(-2, 3, 31, 12, 0, 0, Math.PI * 2);
+  ctx.ellipse(-1, 1.5, 15.5, 6, 0, 0, Math.PI * 2);
   ctx.fill();
   ctx.fillStyle = frigate.status === "sinking" ? "#58646a" : color;
   ctx.strokeStyle = "#e9f7f6";
-  ctx.lineWidth = 1.6;
+  ctx.lineWidth = 1;
   ctx.beginPath();
-  ctx.moveTo(32, 0);
-  ctx.lineTo(20, -8);
-  ctx.lineTo(-23, -9);
-  ctx.lineTo(-29, -5);
-  ctx.lineTo(-29, 5);
-  ctx.lineTo(-23, 9);
-  ctx.lineTo(20, 8);
+  ctx.moveTo(16, 0);
+  ctx.lineTo(10, -4);
+  ctx.lineTo(-11.5, -4.5);
+  ctx.lineTo(-14.5, -2.5);
+  ctx.lineTo(-14.5, 2.5);
+  ctx.lineTo(-11.5, 4.5);
+  ctx.lineTo(10, 4);
   ctx.closePath();
   ctx.fill();
   ctx.stroke();
   ctx.fillStyle = "rgba(10, 35, 45, .72)";
-  ctx.fillRect(-14, -5, 16, 10);
+  ctx.fillRect(-7, -2.5, 8, 5);
   ctx.fillStyle = "rgba(242, 250, 242, .85)";
-  ctx.fillRect(5, -2, 8, 4);
+  ctx.fillRect(2.5, -1, 4, 2);
   if (debug) {
     ctx.strokeStyle = "#ff4d63";
     ctx.lineWidth = 1;
-    ctx.strokeRect(-30, -10, 60, 20);
+    ctx.strokeRect(-15, -5, 30, 10);
     ctx.strokeStyle = "#faeb68";
     for (const offset of GAME_CONFIG.frigate.collisionCircleOffsets) {
       ctx.beginPath();
@@ -698,12 +698,12 @@ function drawFrigate(frigate: SnapshotFrigate, now: number, debug: boolean): voi
   ctx.font = "600 13px Manrope, sans-serif";
   ctx.textAlign = "center";
   ctx.textBaseline = "bottom";
-  ctx.fillText(frigate.name, frigate.x, frigate.y - 19);
+  ctx.fillText(frigate.name, frigate.x, frigate.y - 12);
   if (frigate.playerId !== ownId) {
     ctx.fillStyle = "rgba(5, 20, 25, .78)";
-    ctx.fillRect(frigate.x - 21, frigate.y + 16, 42, 4);
+    ctx.fillRect(frigate.x - 21, frigate.y + 10, 42, 4);
     ctx.fillStyle = frigate.hp > 35 ? "#62d3b2" : "#ff776c";
-    ctx.fillRect(frigate.x - 21, frigate.y + 16, 42 * Math.max(0, frigate.hp / GAME_CONFIG.player.maxHp), 4);
+    ctx.fillRect(frigate.x - 21, frigate.y + 10, 42 * Math.max(0, frigate.hp / GAME_CONFIG.player.maxHp), 4);
   }
 }
 
@@ -786,12 +786,12 @@ function drawReticle(frigate: Frigate, now: number): void {
   ctx.arc(x, y, GAME_CONFIG.cannon.damageRadius, 0, Math.PI * 2);
   ctx.stroke();
   ctx.beginPath();
-  ctx.arc(x, y, 2.5, 0, Math.PI * 2);
+  ctx.arc(x, y, 1.25, 0, Math.PI * 2);
   ctx.fill();
   for (let i = 0; i < 4; i += 1) {
     const a = angle + i * Math.PI / 2;
     ctx.beginPath();
-    ctx.moveTo(x + Math.cos(a) * 45, y + Math.sin(a) * 45);
+    ctx.moveTo(x + Math.cos(a) * 50, y + Math.sin(a) * 50);
     ctx.lineTo(x + Math.cos(a) * 55, y + Math.sin(a) * 55);
     ctx.stroke();
   }
@@ -807,16 +807,16 @@ function drawReticle(frigate: Frigate, now: number): void {
   const cannonPerpendicularY = cannonAxisX;
   ctx.beginPath();
   ctx.moveTo(
-    frigate.x + cannonAxisX * 140,
-    frigate.y + cannonAxisY * 140,
+    frigate.x + cannonAxisX * 70,
+    frigate.y + cannonAxisY * 70,
   );
   ctx.lineTo(
-    frigate.x + cannonAxisX * 120 + cannonPerpendicularX * 8,
-    frigate.y + cannonAxisY * 120 + cannonPerpendicularY * 8,
+    frigate.x + cannonAxisX * 60 + cannonPerpendicularX * 4,
+    frigate.y + cannonAxisY * 60 + cannonPerpendicularY * 4,
   );
   ctx.lineTo(
-    frigate.x + cannonAxisX * 120 - cannonPerpendicularX * 8,
-    frigate.y + cannonAxisY * 120 - cannonPerpendicularY * 8,
+    frigate.x + cannonAxisX * 60 - cannonPerpendicularX * 4,
+    frigate.y + cannonAxisY * 60 - cannonPerpendicularY * 4,
   );
   ctx.closePath();
   ctx.fillStyle = "#5dffac";
@@ -830,12 +830,12 @@ function drawReticle(frigate: Frigate, now: number): void {
   const axisY = Math.sin(torpedoAngle);
   const perpendicularX = -axisY;
   const perpendicularY = axisX;
-  const dashLength = (96 - 38 - 3 * 4) / 5;
+  const dashLength = (48 - 19 - 3 * 1.5) / 5;
   ctx.strokeStyle = "#7dff70";
   ctx.lineCap = "butt";
-  ctx.lineWidth = 2.5;
+  ctx.lineWidth = 1.25;
   for (let i = 0; i < 5; i += 1) {
-    const startRadius = 38 + i * (dashLength + 3);
+    const startRadius = 19 + i * (dashLength + 1.5);
     ctx.globalAlpha = ready || i < filled ? .95 : .25;
     ctx.beginPath();
     ctx.moveTo(frigate.x + axisX * startRadius, frigate.y + axisY * startRadius);
@@ -843,26 +843,26 @@ function drawReticle(frigate: Frigate, now: number): void {
     ctx.stroke();
   }
   ctx.globalAlpha = ready ? .95 : .25;
-  const tipX = frigate.x + axisX * 112;
-  const tipY = frigate.y + axisY * 112;
+  const tipX = frigate.x + axisX * 56;
+  const tipY = frigate.y + axisY * 56;
   for (const side of [-1, 1]) {
-    const baseX = frigate.x + axisX * 98 + perpendicularX * 9 * side;
-    const baseY = frigate.y + axisY * 98 + perpendicularY * 9 * side;
+    const baseX = frigate.x + axisX * 49 + perpendicularX * 4.5 * side;
+    const baseY = frigate.y + axisY * 49 + perpendicularY * 4.5 * side;
     ctx.beginPath();
     ctx.moveTo(tipX, tipY);
     ctx.lineTo(baseX, baseY);
     ctx.stroke();
   }
   ctx.globalAlpha = ready ? .95 : .6;
-  ctx.lineWidth = 1.5;
+  ctx.lineWidth = 1;
   ctx.beginPath();
   ctx.moveTo(
-    frigate.x + axisX * 38 - perpendicularX * 6,
-    frigate.y + axisY * 38 - perpendicularY * 6,
+    frigate.x + axisX * 19 - perpendicularX * 3,
+    frigate.y + axisY * 19 - perpendicularY * 3,
   );
   ctx.lineTo(
-    frigate.x + axisX * 38 + perpendicularX * 6,
-    frigate.y + axisY * 38 + perpendicularY * 6,
+    frigate.x + axisX * 19 + perpendicularX * 3,
+    frigate.y + axisY * 19 + perpendicularY * 3,
   );
   ctx.stroke();
   ctx.restore();

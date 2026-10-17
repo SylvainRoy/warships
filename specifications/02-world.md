@@ -6,7 +6,7 @@ Physical sizes like "2 cm" depend on the player's monitor, so the game uses an a
 
 - The **reference screen** is **1600 u × 900 u** (16:9).
 - The browser canvas fits the reference screen inside the window, leaving plain dark **#071b2a** bands when the aspect ratio differs; no terrain appears in the bands. Every player sees exactly **1600 × 900 u**, so the visible area does not depend on window shape.
-- On a typical 24" 1920 × 1080 monitor in full screen, 1 u ≈ 0.33 mm, so a 60 u frigate ≈ 2 cm, matching the original intent.
+- On a typical 24" 1920 × 1080 monitor in full screen, 1 u ≈ 0.33 mm, so a 30 u frigate ≈ 1 cm.
 
 ## Dimensions
 
