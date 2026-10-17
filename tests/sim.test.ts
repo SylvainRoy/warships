@@ -25,6 +25,18 @@ function scores(...ships: Frigate[]) {
   }]));
 }
 
+function turnedAfterOneSecond(settings: GameSettings, keys: number): Frigate {
+  const state = createGameState(openWorld());
+  const ship = frigate("captain");
+  state.frigates.captain = ship;
+  state.scores = scores(ship);
+  state.settings = settings;
+  for (let tick = 0; tick < GAME_CONFIG.network.tickRate; tick += 1) {
+    stepGame(state, { captain: { ...quietInput, keys } }, dt, tick * dt);
+  }
+  return ship;
+}
+
 describe("frigate movement and land contact", () => {
   it("uses five throttle settings, clamps and rounds levels, and turns while stopped", () => {
     const world = openWorld();
@@ -185,6 +197,27 @@ describe("host settings in simulation", () => {
     }
 
     expect(ship.heading).toBeCloseTo(GAME_CONFIG.frigate.rotationSpeed * 2, 5);
+  });
+
+  it("turns cannon and torpedo bearings at 54 degrees per second by default", () => {
+    const cannon = turnedAfterOneSecond(DEFAULT_SETTINGS, INPUT_KEYS.cannonRight);
+    const torpedo = turnedAfterOneSecond(DEFAULT_SETTINGS, INPUT_KEYS.torpedoRight);
+
+    expect(cannon.cannonBearing).toBeCloseTo(Math.PI * 0.3, 6);
+    expect(torpedo.torpedoBearing).toBeCloseTo(Math.PI * 0.3, 6);
+  });
+
+  it("scales cannon and torpedo bearing rotation independently", () => {
+    const cannon = turnedAfterOneSecond({ ...DEFAULT_SETTINGS, cannonRotationPct: 200 }, INPUT_KEYS.cannonRight);
+    const torpedo = turnedAfterOneSecond({ ...DEFAULT_SETTINGS, torpedoRotationPct: 200 }, INPUT_KEYS.torpedoRight);
+    const cannonWithOnlyTorpedoBoost = turnedAfterOneSecond(
+      { ...DEFAULT_SETTINGS, torpedoRotationPct: 200 },
+      INPUT_KEYS.cannonRight,
+    );
+
+    expect(cannon.cannonBearing).toBeCloseTo(Math.PI * 0.6, 6);
+    expect(torpedo.torpedoBearing).toBeCloseTo(Math.PI * 0.6, 6);
+    expect(cannonWithOnlyTorpedoBoost.cannonBearing).toBeCloseTo(Math.PI * 0.3, 6);
   });
 
   it("keeps full-speed head-on land damage capped at 10 HP when boat speed is scaled", () => {
