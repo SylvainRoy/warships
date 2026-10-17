@@ -775,15 +775,16 @@ function drawReticle(frigate: Frigate, now: number): void {
   const angle = frigate.heading + frigate.cannonBearing;
   const x = frigate.x + Math.cos(angle) * frigate.cannonRange;
   const y = frigate.y + Math.sin(angle) * frigate.cannonRange;
+  const reticleRadius = 30;
   const reloading = Math.max(0, frigate.cannonReadyAt - now);
   const progress = 1 - reloading / gameSettings.cannonReload;
   ctx.save();
   ctx.globalAlpha = reloading > 0 ? .35 : .95;
   ctx.strokeStyle = "#5dffac";
   ctx.fillStyle = "#5dffac";
-  ctx.lineWidth = 1.8;
+  ctx.lineWidth = 1.2;
   ctx.beginPath();
-  ctx.arc(x, y, GAME_CONFIG.cannon.damageRadius, 0, Math.PI * 2);
+  ctx.arc(x, y, reticleRadius, 0, Math.PI * 2);
   ctx.stroke();
   ctx.beginPath();
   ctx.arc(x, y, 1.25, 0, Math.PI * 2);
@@ -791,14 +792,14 @@ function drawReticle(frigate: Frigate, now: number): void {
   for (let i = 0; i < 4; i += 1) {
     const a = angle + i * Math.PI / 2;
     ctx.beginPath();
-    ctx.moveTo(x + Math.cos(a) * 50, y + Math.sin(a) * 50);
-    ctx.lineTo(x + Math.cos(a) * 55, y + Math.sin(a) * 55);
+    ctx.moveTo(x + Math.cos(a) * 25, y + Math.sin(a) * 25);
+    ctx.lineTo(x + Math.cos(a) * 27.5, y + Math.sin(a) * 27.5);
     ctx.stroke();
   }
   if (reloading > 0) {
-    ctx.lineWidth = 4;
+    ctx.lineWidth = 2;
     ctx.beginPath();
-    ctx.arc(x, y, GAME_CONFIG.cannon.damageRadius + 7, angle, angle + Math.PI * 2 * progress);
+    ctx.arc(x, y, reticleRadius + 3.5, angle, angle + Math.PI * 2 * progress);
     ctx.stroke();
   }
   const cannonAxisX = Math.cos(angle);
