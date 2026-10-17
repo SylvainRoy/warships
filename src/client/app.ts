@@ -830,7 +830,7 @@ function drawReticle(frigate: Frigate, now: number): void {
   const axisY = Math.sin(torpedoAngle);
   const perpendicularX = -axisY;
   const perpendicularY = axisX;
-  const dashLength = (48 - 19 - 3 * 1.5) / 5;
+  const dashLength = (48 - 19 - 4 * 1.5) / 5;
   ctx.strokeStyle = "#7dff70";
   ctx.lineCap = "butt";
   ctx.lineWidth = 1.25;
