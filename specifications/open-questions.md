@@ -44,3 +44,10 @@ All questions raised during the specification phase are resolved. Each line give
 - **Q28 — Channel width:** every water tile belongs to an all-water 8 × 8 tile square, giving channels a minimum width of 160 u. Decided 2026-10-16 after playtest.
 - **Q29 — Frigate speeds:** maximum forward speed 80 u/s, reverse speed 25 u/s, acceleration 40 u/s², with no drag. Decided 2026-10-16 after playtest.
 - **Q30 — Torpedo spread:** fire the three torpedoes at −2°, 0°, and +2°. Decided 2026-10-16 after playtest.
+
+## Playtest decisions — 2026-10-17
+
+- **Q31 — Own frigate HP bar:** show the small HP bar below enemy frigates only; own hull integrity remains in the HUD. Decided 2026-10-17 after playtest.
+- **Q32 — Torpedo indicator:** use a five-dash radar-style arrow with an open chevron and base tick; show reload by filling completed dashes, dimming the rest, and no reload arc. Decided 2026-10-17 after playtest.
+- **Q33 — Cannon sight orientation:** orient the four reticle ticks with the frigate heading and start the reload arc at that heading. Decided 2026-10-17 after playtest.
+- **Q34 — Camera framing:** keep the frigate and the cannon reticle (including its 60 u radius) on screen by shifting the world-clamped camera as needed; show boundary land when the view extends beyond the world. Decided 2026-10-17 after playtest.
