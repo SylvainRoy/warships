@@ -7,6 +7,7 @@ import { computeCamera, computeViewport } from "./camera.js";
 import { ProjectileStore } from "./projectiles.js";
 import { RADAR, radarBearing, radarContacts, worldToRadar } from "./radar.js";
 import { shouldResetWake, torpedoWakeLength, wakeArmOffset, wakeLife } from "./wake.js";
+import { noise, resetTerrainStyleCache, terrainFields, type TerrainStyle } from "./terrainStyle.js";
 
 type Snapshot = Extract<ServerMessage, { type: "snapshot" }>;
 type StoredSnapshot = { receivedAt: number; value: Snapshot };
@@ -22,6 +23,7 @@ declare global {
       predictedOwnFrigate: Readonly<Frigate> | null;
       projectiles: Readonly<{ shells: Shell[]; torpedoes: Torpedo[] }>;
       projectileServerTime: number;
+      setTerrainStyle(style: TerrainStyle): void;
     }>;
   }
 }
@@ -53,6 +55,7 @@ let radarMapCanvas: HTMLCanvasElement | null = null;
 let radarMapWorld: World | null = null;
 const terrainChunkSize = 800;
 let worldCacheResolution = 0;
+let terrainStyle: TerrainStyle = "flat";
 const wakeTrails = new Map<string, WakeSample[]>();
 const wakeObservations = new Map<string, WakeObservation>();
 const effects: Array<{ event: GameEvent; at: number }> = [];
@@ -102,6 +105,12 @@ function resetWorldCaches(): void {
   worldCache.clear();
   radarMapCanvas = null;
   radarMapWorld = null;
+  resetTerrainStyleCache();
+}
+
+function setTerrainStyle(style: TerrainStyle): void {
+  terrainStyle = style;
+  worldCache.clear();
 }
 
 Object.defineProperty(window, "__warships", {
@@ -113,6 +122,7 @@ Object.defineProperty(window, "__warships", {
     predictedOwnFrigate: predictedOwn ? deepFreeze({ ...predictedOwn }) : null,
     projectiles: deepFreeze(structuredClone(renderedProjectiles)),
     projectileServerTime,
+    setTerrainStyle,
   }),
 });
 
@@ -562,6 +572,73 @@ function renderTerrain(
   ctx.restore();
 }
 
+type RGB = readonly [number, number, number];
+
+function blendRgb(from: RGB, to: RGB, amount: number): RGB {
+  const t = Math.max(0, Math.min(1, amount));
+  return [
+    from[0] + (to[0] - from[0]) * t,
+    from[1] + (to[1] - from[1]) * t,
+    from[2] + (to[2] - from[2]) * t,
+  ];
+}
+
+function waterRgb(distance: number): RGB {
+  const shore: RGB = [63, 183, 176];
+  const mid: RGB = [26, 95, 122];
+  const deep: RGB = [15, 61, 85];
+  if (distance <= 120) return blendRgb(shore, mid, distance / 120);
+  if (distance < 400) return blendRgb(mid, deep, (distance - 120) / 280);
+  return deep;
+}
+
+function buildTerrainImage(
+  worldState: World,
+  chunkX: number,
+  chunkY: number,
+  kind: "water" | "land",
+): HTMLCanvasElement {
+  const tile = GAME_CONFIG.world.tileSize;
+  const chunkTiles = terrainChunkSize / tile;
+  const imageCanvas = document.createElement("canvas");
+  imageCanvas.width = chunkTiles + 2;
+  imageCanvas.height = chunkTiles + 2;
+  const imageContext = imageCanvas.getContext("2d");
+  if (!imageContext) return imageCanvas;
+  const image = imageContext.createImageData(imageCanvas.width, imageCanvas.height);
+  const fields = terrainFields(worldState);
+  const columns = GAME_CONFIG.world.columns;
+  const rows = GAME_CONFIG.world.rows;
+
+  for (let localRow = 0; localRow < imageCanvas.height; localRow += 1) {
+    const row = chunkY * chunkTiles + localRow - 1;
+    if (row < 0 || row >= rows) continue;
+    for (let localColumn = 0; localColumn < imageCanvas.width; localColumn += 1) {
+      const column = chunkX * chunkTiles + localColumn - 1;
+      if (column < 0 || column >= columns) continue;
+      const index = row * columns + column;
+      let color: RGB;
+      if (kind === "water") {
+        color = waterRgb(fields.waterDistance[index] ?? 0);
+      } else {
+        const edge = fields.landDistance[index] ?? 0;
+        const variation = noise(column, row);
+        if (edge < 20) color = [216, 198, 144];
+        else if (edge >= 160) color = blendRgb([111, 154, 79], [138, 133, 119], variation);
+        else if (edge >= 40 && variation > 0.55) color = [63, 107, 56];
+        else color = [111, 154, 79];
+      }
+      const pixel = (localRow * imageCanvas.width + localColumn) * 4;
+      image.data[pixel] = Math.round(color[0]);
+      image.data[pixel + 1] = Math.round(color[1]);
+      image.data[pixel + 2] = Math.round(color[2]);
+      image.data[pixel + 3] = 255;
+    }
+  }
+  imageContext.putImageData(image, 0, 0);
+  return imageCanvas;
+}
+
 function buildTerrainChunk(worldState: World, chunkX: number, chunkY: number, resolution: number): HTMLCanvasElement {
   const chunkSize = terrainChunkSize;
   const tile = GAME_CONFIG.world.tileSize;
@@ -574,7 +651,7 @@ function buildTerrainChunk(worldState: World, chunkX: number, chunkY: number, re
   const terrain = chunk.getContext("2d", { alpha: false });
   if (!terrain) return chunk;
   terrain.scale(resolution, resolution);
-  terrain.fillStyle = "#103e4d";
+  terrain.fillStyle = terrainStyle === "chart" ? "#174b5e" : terrainStyle === "natural" || terrainStyle === "animated" ? "#0f3d55" : "#103e4d";
   terrain.fillRect(0, 0, paddedSize, paddedSize);
   const landCases: string[][][] = [
     [],
@@ -594,11 +671,13 @@ function buildTerrainChunk(worldState: World, chunkX: number, chunkY: number, re
     [["t", "tr", "br", "bl", "l"]],
     [["tl", "tr", "br", "bl"]],
   ];
-  const startColumn = Math.max(0, chunkX * chunkTiles - 1);
-  const endColumn = Math.min(GAME_CONFIG.world.columns - 2, chunkX * chunkTiles + chunkTiles);
-  const startRow = Math.max(0, chunkY * chunkTiles - 1);
-  const endRow = Math.min(GAME_CONFIG.world.rows - 2, chunkY * chunkTiles + chunkTiles);
-  terrain.fillStyle = landColor;
+  const marginTiles = terrainStyle === "chart" ? 7 : 1;
+  const startColumn = Math.max(0, chunkX * chunkTiles - marginTiles);
+  const endColumn = Math.min(GAME_CONFIG.world.columns - 2, chunkX * chunkTiles + chunkTiles - 1 + marginTiles);
+  const startRow = Math.max(0, chunkY * chunkTiles - marginTiles);
+  const endRow = Math.min(GAME_CONFIG.world.rows - 2, chunkY * chunkTiles + chunkTiles - 1 + marginTiles);
+  const landPolygons: Path2D[] = [];
+  const landClip = new Path2D();
   for (let row = startRow; row <= endRow; row += 1) {
     for (let column = startColumn; column <= endColumn; column += 1) {
       const topLeft = isLandAt(worldState, column * tile + tile / 2, row * tile + tile / 2);
@@ -624,18 +703,132 @@ function buildTerrainChunk(worldState: World, chunkX: number, chunkY: number, re
         const firstKey = polygon[0];
         const first = firstKey ? points[firstKey] : undefined;
         if (!first) continue;
-        terrain.beginPath();
-        terrain.moveTo(first[0], first[1]);
+        const path = new Path2D();
+        path.moveTo(first[0], first[1]);
         for (const key of polygon.slice(1)) {
           const point = points[key];
-          if (point) terrain.lineTo(point[0], point[1]);
+          if (point) path.lineTo(point[0], point[1]);
         }
-        terrain.closePath();
-        terrain.fill();
+        path.closePath();
+        landPolygons.push(path);
+        landClip.addPath(path);
       }
     }
   }
+
+  if (terrainStyle === "flat") {
+    terrain.fillStyle = landColor;
+    for (const polygon of landPolygons) terrain.fill(polygon);
+    return chunk;
+  }
+
+  terrain.lineJoin = "round";
+  terrain.lineCap = "round";
+  if (terrainStyle === "chart") {
+    const bands = [
+      { radius: 120, color: "#1d5a6e" },
+      { radius: 80, color: "#24687c" },
+      { radius: 40, color: "#2f7a8c" },
+    ];
+    for (const band of bands) {
+      terrain.strokeStyle = "rgba(220, 240, 245, .35)";
+      terrain.lineWidth = band.radius * 2 + 1.5;
+      for (const polygon of landPolygons) terrain.stroke(polygon);
+      terrain.strokeStyle = band.color;
+      terrain.lineWidth = band.radius * 2;
+      for (const polygon of landPolygons) terrain.stroke(polygon);
+    }
+    terrain.strokeStyle = "#5b4a2e";
+    terrain.lineWidth = 1.5;
+    for (const polygon of landPolygons) terrain.stroke(polygon);
+    terrain.fillStyle = "#d9c9a0";
+    for (const polygon of landPolygons) terrain.fill(polygon);
+    return chunk;
+  }
+
+  terrain.imageSmoothingEnabled = true;
+  const waterImage = buildTerrainImage(worldState, chunkX, chunkY, "water");
+  terrain.drawImage(waterImage, 0, 0, paddedSize, paddedSize);
+  terrain.strokeStyle = "rgba(255, 255, 255, .15)";
+  terrain.lineWidth = 12;
+  for (const polygon of landPolygons) terrain.stroke(polygon);
+  terrain.strokeStyle = "rgba(255, 255, 255, .6)";
+  terrain.lineWidth = 5;
+  for (const polygon of landPolygons) terrain.stroke(polygon);
+  const landImage = buildTerrainImage(worldState, chunkX, chunkY, "land");
+  terrain.save();
+  terrain.clip(landClip);
+  terrain.drawImage(landImage, 0, 0, paddedSize, paddedSize);
+  terrain.restore();
   return chunk;
+}
+
+function terrainGlintHash(column: number, row: number, salt: number): number {
+  let hash = Math.imul(column | 0, 0x1f123bb5) ^ Math.imul(row | 0, 0x5f356495) ^ salt;
+  hash = Math.imul(hash ^ (hash >>> 15), 0x2c1b3c6d);
+  hash ^= hash >>> 12;
+  return (hash >>> 0) / 0xffffffff;
+}
+
+function isNearLand(worldState: World, x: number, y: number): boolean {
+  const margin = 40;
+  const offsets = [
+    [0, 0],
+    [margin, 0],
+    [-margin, 0],
+    [0, margin],
+    [0, -margin],
+    [margin * 0.7, margin * 0.7],
+    [margin * 0.7, -margin * 0.7],
+    [-margin * 0.7, margin * 0.7],
+    [-margin * 0.7, -margin * 0.7],
+  ] as const;
+  for (const [dx, dy] of offsets) {
+    if (isLandAt(worldState, x + dx, y + dy)) return true;
+  }
+  return false;
+}
+
+function drawAnimatedTerrainOverlay(
+  worldState: World,
+  cameraX: number,
+  cameraY: number,
+  viewWidth: number,
+  viewHeight: number,
+  now: number,
+): void {
+  const cellSize = 200;
+  const firstColumn = Math.floor(cameraX / cellSize);
+  const lastColumn = Math.floor((cameraX + viewWidth) / cellSize);
+  const firstRow = Math.floor(cameraY / cellSize);
+  const lastRow = Math.floor((cameraY + viewHeight) / cellSize);
+  ctx.save();
+  ctx.beginPath();
+  ctx.rect(0, 0, GAME_CONFIG.world.width, GAME_CONFIG.world.height);
+  ctx.clip();
+  ctx.lineCap = "round";
+  ctx.lineWidth = 1;
+  for (let row = firstRow; row <= lastRow; row += 1) {
+    for (let column = firstColumn; column <= lastColumn; column += 1) {
+      const count = terrainGlintHash(column, row, 0) < 0.5 ? 2 : 1;
+      for (let index = 0; index < count; index += 1) {
+        const phase = terrainGlintHash(column, row, index + 1) * 3;
+        const age = ((now + phase) % 3 + 3) % 3;
+        const fade = 1 - Math.abs(age - 1.5) / 1.5;
+        if (fade <= 0) continue;
+        const x = column * cellSize + ((terrainGlintHash(column, row, index + 4) * cellSize + now * 8) % cellSize);
+        const y = row * cellSize + terrainGlintHash(column, row, index + 7) * cellSize;
+        if (isNearLand(worldState, x, y)) continue;
+        ctx.globalAlpha = 0.15 * fade;
+        ctx.strokeStyle = "#ffffff";
+        ctx.beginPath();
+        ctx.moveTo(x - 3, y);
+        ctx.lineTo(x + 3, y);
+        ctx.stroke();
+      }
+    }
+  }
+  ctx.restore();
 }
 
 function sternPoint(sample: WakeSample): { x: number; y: number } {
@@ -1555,6 +1748,9 @@ function renderFrame(now: number): void {
       viewport.scale,
       viewport.dpr,
     );
+    if (terrainStyle === "animated") {
+      drawAnimatedTerrainOverlay(world, camera.x, camera.y, GAME_CONFIG.screen.width, GAME_CONFIG.screen.height, serverNow);
+    }
     const visible = snapshot?.frigates ?? [];
     drawWakes(visible, serverNow);
     for (const shell of renderedProjectiles.shells) drawShell(shell);
