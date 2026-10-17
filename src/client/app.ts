@@ -485,10 +485,9 @@ function interpolateAngle(first: number, second: number, amount: number): number
 function resizeCanvas(): {
   width: number;
   height: number;
-  worldScale: number;
-  hudScale: number;
-  viewWidth: number;
-  viewHeight: number;
+  scale: number;
+  offsetX: number;
+  offsetY: number;
   dpr: number;
 } {
   const dpr = Math.min(window.devicePixelRatio || 1, 2);
@@ -1218,23 +1217,30 @@ function renderFrame(now: number): void {
   ctx.setTransform(viewport.dpr, 0, 0, viewport.dpr, 0, 0);
   ctx.fillStyle = "#071b2a";
   ctx.fillRect(0, 0, viewport.width, viewport.height);
-  ctx.setTransform(viewport.dpr * viewport.worldScale, 0, 0, viewport.dpr * viewport.worldScale, 0, 0);
+  ctx.setTransform(
+    viewport.dpr * viewport.scale,
+    0,
+    0,
+    viewport.dpr * viewport.scale,
+    viewport.dpr * viewport.offsetX,
+    viewport.dpr * viewport.offsetY,
+  );
   const snapshot = getRenderSnapshot();
   const own = predictedOwn ?? snapshot?.frigates.find((frigate) => frigate.playerId === ownId) as Frigate | undefined;
   if (world && own) {
-    const camera = computeCamera(
-      { x: own.x, y: own.y },
-      { width: viewport.viewWidth, height: viewport.viewHeight },
-    );
+    const camera = computeCamera({ x: own.x, y: own.y });
     ctx.save();
+    ctx.beginPath();
+    ctx.rect(0, 0, GAME_CONFIG.screen.width, GAME_CONFIG.screen.height);
+    ctx.clip();
     ctx.translate(-camera.x, -camera.y);
     renderTerrain(
       world,
       camera.x,
       camera.y,
-      viewport.viewWidth,
-      viewport.viewHeight,
-      viewport.worldScale,
+      GAME_CONFIG.screen.width,
+      GAME_CONFIG.screen.height,
+      viewport.scale,
       viewport.dpr,
     );
     const visible = snapshot?.frigates ?? [];
@@ -1246,9 +1252,9 @@ function renderFrame(now: number): void {
     if (own) drawReticle(own, serverNow);
     ctx.restore();
   } else {
-    ctx.setTransform(viewport.dpr * viewport.hudScale, 0, 0, viewport.dpr * viewport.hudScale, 0, 0);
-    const logicalWidth = viewport.width / viewport.hudScale;
-    const logicalHeight = viewport.height / viewport.hudScale;
+    ctx.setTransform(viewport.dpr * viewport.scale, 0, 0, viewport.dpr * viewport.scale, 0, 0);
+    const logicalWidth = viewport.width / viewport.scale;
+    const logicalHeight = viewport.height / viewport.scale;
     ctx.fillStyle = "#071b2a";
     ctx.fillRect(0, 0, logicalWidth, logicalHeight);
     ctx.fillStyle = "#88adaf";
@@ -1257,8 +1263,8 @@ function renderFrame(now: number): void {
     ctx.fillText("CONNECTING TO THE FLEET…", logicalWidth / 2, logicalHeight / 2);
   }
   if (snapshot) {
-    ctx.setTransform(viewport.dpr * viewport.hudScale, 0, 0, viewport.dpr * viewport.hudScale, 0, 0);
-    drawHud(snapshot, own, serverNow, viewport.width / viewport.hudScale, viewport.height / viewport.hudScale);
+    ctx.setTransform(viewport.dpr * viewport.scale, 0, 0, viewport.dpr * viewport.scale, 0, 0);
+    drawHud(snapshot, own, serverNow, viewport.width / viewport.scale, viewport.height / viewport.scale);
   }
   effects.splice(0, effects.length, ...effects.filter((effect) => now - effect.at < 1200));
   const frameDelta = Math.min(100, now - lastFrameAt);

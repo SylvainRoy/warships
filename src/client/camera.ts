@@ -7,16 +7,15 @@ function clamp(value: number, min: number, max: number): number {
 export function computeViewport(
   width: number,
   height: number,
-): { worldScale: number; hudScale: number; viewWidth: number; viewHeight: number } {
-  const widthScale = width / GAME_CONFIG.screen.width;
-  const heightScale = height / GAME_CONFIG.screen.height;
-  const worldScale = Math.max(widthScale, heightScale);
-  const hudScale = Math.min(widthScale, heightScale);
+): { scale: number; offsetX: number; offsetY: number } {
+  const scale = Math.min(
+    width / GAME_CONFIG.screen.width,
+    height / GAME_CONFIG.screen.height,
+  );
   return {
-    worldScale,
-    hudScale,
-    viewWidth: width / worldScale,
-    viewHeight: height / worldScale,
+    scale,
+    offsetX: (width - GAME_CONFIG.screen.width * scale) / 2,
+    offsetY: (height - GAME_CONFIG.screen.height * scale) / 2,
   };
 }
 
