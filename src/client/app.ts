@@ -1080,7 +1080,10 @@ function renderFrame(now: number): void {
     ctx.textAlign = "center";
     ctx.fillText("CONNECTING TO THE FLEET…", GAME_CONFIG.screen.width / 2, GAME_CONFIG.screen.height / 2);
   }
-  if (snapshot) drawHud(snapshot, own, serverNow, GAME_CONFIG.screen.width, GAME_CONFIG.screen.height);
+  if (snapshot) {
+    ctx.setTransform(viewport.dpr * viewport.scale, 0, 0, viewport.dpr * viewport.scale, 0, 0);
+    drawHud(snapshot, own, serverNow, viewport.width / viewport.scale, viewport.height / viewport.scale);
+  }
   effects.splice(0, effects.length, ...effects.filter((effect) => now - effect.at < 1200));
   const frameDelta = Math.min(100, now - lastFrameAt);
   accumulator += frameDelta;
