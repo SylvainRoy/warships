@@ -47,7 +47,7 @@ In Settings, the rows are Boat speed, Rotation speed, Cannon rotation, Torpedo r
 
 ## HUD (screen space)
 
-- HUD panels and overlays are anchored to the browser window edges, not the 16:9 reference frame; positions and sizing remain in reference units and scale with the reference scale.
+- HUD panels and overlays are anchored to the browser window edges, not the 16:9 reference frame; positions and sizing remain in reference units and use the reference screen's fit (contain) scale (Q56).
 - Top-right: compact scoreboard (name, colour, score) for all connected players, own line highlighted.
 - Holding Tab shows the full scoreboard; when settings differ from defaults, it adds a `CUSTOM RULES · …` line listing each changed setting.
 - Bottom-left: own HP bar, cannon and torpedo reload status, plus a throttle telegraph with the selected level highlighted and its full label.

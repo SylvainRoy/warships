@@ -1,6 +1,6 @@
 # Warships — Specifications
 
-**Status: APPROVED v1.9** (2026-10-17). Changes after approval must be recorded in the changelog.
+**Status: APPROVED v1.10** (2026-10-17). Changes after approval must be recorded in the changelog.
 
 | # | Document | Content |
 |---|----------|---------|
@@ -22,6 +22,7 @@
 
 ## Changelog
 
+- v1.10 — fill the window with a cover-scaled world view while keeping HUD at fit scale (Q56); approved 2026-10-17.
 - v1.9 — host-adjustable land coverage from 5% to 40%, with immediate map regeneration (Q53–Q55); approved 2026-10-17.
 - v1.8 — camera stays centred on the frigate (Q51); cannon bearing arrow next to the frigate (Q52); approved 2026-10-17.
 - v1.7 — host-adjustable cannon and torpedo aim rotation settings (Q50); approved 2026-10-17.

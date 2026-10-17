@@ -3,7 +3,7 @@ import { INPUT_KEYS, applyFrigateInput, type Frigate, type FrigateInput, type Ga
 import { DEFAULT_SETTINGS, describeSettingsChanges, SETTINGS_LIMITS, type GameSettings } from "../shared/settings.js";
 import { decodeWorld, isLandAt, type World } from "../shared/world.js";
 import type { LobbyMessage, ServerMessage, SnapshotFrigate } from "../shared/protocol.js";
-import { computeCamera } from "./camera.js";
+import { computeCamera, computeViewport } from "./camera.js";
 import { ProjectileStore } from "./projectiles.js";
 
 type Snapshot = Extract<ServerMessage, { type: "snapshot" }>;
@@ -45,6 +45,7 @@ const colours = ["#4b9bff", "#ff6266", "#f3c94e", "#c084fc"];
 const landColor = "#c5b58b";
 const pressed = new Set<string>();
 const worldCache = new Map<string, HTMLCanvasElement>();
+const terrainChunkSize = 800;
 let worldCacheResolution = 0;
 const wakeTrails = new Map<string, Array<{ x: number; y: number; at: number }>>();
 const effects: Array<{ event: GameEvent; at: number }> = [];
@@ -481,7 +482,15 @@ function interpolateAngle(first: number, second: number, amount: number): number
   return first + delta * amount;
 }
 
-function resizeCanvas(): { width: number; height: number; scale: number; offsetX: number; offsetY: number; dpr: number } {
+function resizeCanvas(): {
+  width: number;
+  height: number;
+  worldScale: number;
+  hudScale: number;
+  viewWidth: number;
+  viewHeight: number;
+  dpr: number;
+} {
   const dpr = Math.min(window.devicePixelRatio || 1, 2);
   const width = window.innerWidth;
   const height = window.innerHeight;
@@ -489,37 +498,37 @@ function resizeCanvas(): { width: number; height: number; scale: number; offsetX
     canvasElement.width = Math.round(width * dpr);
     canvasElement.height = Math.round(height * dpr);
   }
-  const scale = Math.min(width / GAME_CONFIG.screen.width, height / GAME_CONFIG.screen.height);
+  const viewport = computeViewport(width, height);
   return {
-    width, height, scale, dpr,
-    offsetX: (width - GAME_CONFIG.screen.width * scale) / 2,
-    offsetY: (height - GAME_CONFIG.screen.height * scale) / 2,
+    width,
+    height,
+    ...viewport,
+    dpr,
   };
 }
 
-function renderTerrain(worldState: World, cameraX: number, cameraY: number, scale: number, dpr: number): void {
-  const chunkSize = 800;
-  const resolution = Math.max(1, Math.min(2, scale * dpr));
+function renderTerrain(
+  worldState: World,
+  cameraX: number,
+  cameraY: number,
+  viewWidth: number,
+  viewHeight: number,
+  worldScale: number,
+  dpr: number,
+): void {
+  const resolution = Math.max(1, Math.min(2, worldScale * dpr));
   if (resolution !== worldCacheResolution) {
     worldCache.clear();
     worldCacheResolution = resolution;
   }
-  const lastWorldChunkX = Math.ceil(GAME_CONFIG.world.width / chunkSize) - 1;
-  const lastWorldChunkY = Math.ceil(GAME_CONFIG.world.height / chunkSize) - 1;
-  const firstChunkX = Math.max(0, Math.floor(cameraX / chunkSize));
-  const lastChunkX = Math.min(lastWorldChunkX, Math.floor((cameraX + GAME_CONFIG.screen.width) / chunkSize));
-  const firstChunkY = Math.max(0, Math.floor(cameraY / chunkSize));
-  const lastChunkY = Math.min(lastWorldChunkY, Math.floor((cameraY + GAME_CONFIG.screen.height) / chunkSize));
-  ctx.fillStyle = landColor;
-  ctx.fillRect(cameraX, cameraY, GAME_CONFIG.screen.width, GAME_CONFIG.screen.height);
-  const worldLeft = Math.max(0, cameraX);
-  const worldTop = Math.max(0, cameraY);
-  const worldRight = Math.min(GAME_CONFIG.world.width, cameraX + GAME_CONFIG.screen.width);
-  const worldBottom = Math.min(GAME_CONFIG.world.height, cameraY + GAME_CONFIG.screen.height);
-  if (worldRight > worldLeft && worldBottom > worldTop) {
-    ctx.fillStyle = "#0c3445";
-    ctx.fillRect(worldLeft, worldTop, worldRight - worldLeft, worldBottom - worldTop);
-  }
+  const lastWorldChunkX = Math.ceil(GAME_CONFIG.world.width / terrainChunkSize) - 1;
+  const lastWorldChunkY = Math.ceil(GAME_CONFIG.world.height / terrainChunkSize) - 1;
+  const firstChunkX = Math.max(0, Math.floor(cameraX / terrainChunkSize));
+  const lastChunkX = Math.min(lastWorldChunkX, Math.floor((cameraX + viewWidth) / terrainChunkSize));
+  const firstChunkY = Math.max(0, Math.floor(cameraY / terrainChunkSize));
+  const lastChunkY = Math.min(lastWorldChunkY, Math.floor((cameraY + viewHeight) / terrainChunkSize));
+  ctx.fillStyle = "#103e4d";
+  ctx.fillRect(cameraX, cameraY, viewWidth, viewHeight);
   ctx.save();
   ctx.beginPath();
   ctx.rect(0, 0, GAME_CONFIG.world.width, GAME_CONFIG.world.height);
@@ -532,21 +541,29 @@ function renderTerrain(worldState: World, cameraX: number, cameraY: number, scal
         chunk = buildTerrainChunk(worldState, cx, cy, resolution);
         worldCache.set(key, chunk);
       }
-      ctx.drawImage(chunk, cx * chunkSize, cy * chunkSize, chunkSize, chunkSize);
+      const chunkOriginX = cx * terrainChunkSize - GAME_CONFIG.world.tileSize;
+      const chunkOriginY = cy * terrainChunkSize - GAME_CONFIG.world.tileSize;
+      const paddedChunkSize = terrainChunkSize + GAME_CONFIG.world.tileSize * 2;
+      ctx.drawImage(chunk, chunkOriginX, chunkOriginY, paddedChunkSize, paddedChunkSize);
     }
   }
   ctx.restore();
 }
 
 function buildTerrainChunk(worldState: World, chunkX: number, chunkY: number, resolution: number): HTMLCanvasElement {
+  const chunkSize = terrainChunkSize;
+  const tile = GAME_CONFIG.world.tileSize;
+  const chunkTiles = chunkSize / tile;
+  const padding = tile;
+  const paddedSize = chunkSize + padding * 2;
   const chunk = document.createElement("canvas");
-  chunk.width = 800 * resolution;
-  chunk.height = 800 * resolution;
+  chunk.width = Math.ceil(paddedSize * resolution);
+  chunk.height = Math.ceil(paddedSize * resolution);
   const terrain = chunk.getContext("2d", { alpha: false });
   if (!terrain) return chunk;
   terrain.scale(resolution, resolution);
   terrain.fillStyle = "#103e4d";
-  terrain.fillRect(0, 0, 800, 800);
+  terrain.fillRect(0, 0, paddedSize, paddedSize);
   const landCases: string[][][] = [
     [],
     [["tl", "t", "l"]],
@@ -565,11 +582,10 @@ function buildTerrainChunk(worldState: World, chunkX: number, chunkY: number, re
     [["t", "tr", "br", "bl", "l"]],
     [["tl", "tr", "br", "bl"]],
   ];
-  const tile = GAME_CONFIG.world.tileSize;
-  const startColumn = Math.max(0, chunkX * 40 - 1);
-  const endColumn = Math.min(GAME_CONFIG.world.columns - 2, chunkX * 40 + 39);
-  const startRow = Math.max(0, chunkY * 40 - 1);
-  const endRow = Math.min(GAME_CONFIG.world.rows - 2, chunkY * 40 + 39);
+  const startColumn = Math.max(0, chunkX * chunkTiles - 1);
+  const endColumn = Math.min(GAME_CONFIG.world.columns - 2, chunkX * chunkTiles + chunkTiles);
+  const startRow = Math.max(0, chunkY * chunkTiles - 1);
+  const endRow = Math.min(GAME_CONFIG.world.rows - 2, chunkY * chunkTiles + chunkTiles);
   terrain.fillStyle = landColor;
   for (let row = startRow; row <= endRow; row += 1) {
     for (let column = startColumn; column <= endColumn; column += 1) {
@@ -580,8 +596,8 @@ function buildTerrainChunk(worldState: World, chunkX: number, chunkY: number, re
       const code = Number(topLeft) | (Number(topRight) << 1) | (Number(bottomRight) << 2) | (Number(bottomLeft) << 3);
       const polygons = landCases[code] ?? [];
       if (polygons.length === 0) continue;
-      const x = column * tile - chunkX * 800;
-      const y = row * tile - chunkY * 800;
+      const x = column * tile - chunkX * chunkSize + padding;
+      const y = row * tile - chunkY * chunkSize + padding;
       const points: Record<string, [number, number]> = {
         tl: [x, y],
         t: [x + tile / 2, y],
@@ -1201,24 +1217,26 @@ function renderFrame(now: number): void {
   }
   ctx.setTransform(viewport.dpr, 0, 0, viewport.dpr, 0, 0);
   ctx.fillStyle = "#071b2a";
-  const contentWidth = GAME_CONFIG.screen.width * viewport.scale;
-  const contentHeight = GAME_CONFIG.screen.height * viewport.scale;
-  if (viewport.offsetY > 0) ctx.fillRect(0, 0, viewport.width, viewport.offsetY);
-  if (viewport.offsetY + contentHeight < viewport.height) {
-    ctx.fillRect(0, viewport.offsetY + contentHeight, viewport.width, viewport.height - viewport.offsetY - contentHeight);
-  }
-  if (viewport.offsetX > 0) ctx.fillRect(0, viewport.offsetY, viewport.offsetX, contentHeight);
-  if (viewport.offsetX + contentWidth < viewport.width) {
-    ctx.fillRect(viewport.offsetX + contentWidth, viewport.offsetY, viewport.width - viewport.offsetX - contentWidth, contentHeight);
-  }
-  ctx.setTransform(viewport.dpr * viewport.scale, 0, 0, viewport.dpr * viewport.scale, viewport.dpr * viewport.offsetX, viewport.dpr * viewport.offsetY);
+  ctx.fillRect(0, 0, viewport.width, viewport.height);
+  ctx.setTransform(viewport.dpr * viewport.worldScale, 0, 0, viewport.dpr * viewport.worldScale, 0, 0);
   const snapshot = getRenderSnapshot();
   const own = predictedOwn ?? snapshot?.frigates.find((frigate) => frigate.playerId === ownId) as Frigate | undefined;
   if (world && own) {
-    const camera = computeCamera({ x: own.x, y: own.y });
+    const camera = computeCamera(
+      { x: own.x, y: own.y },
+      { width: viewport.viewWidth, height: viewport.viewHeight },
+    );
     ctx.save();
     ctx.translate(-camera.x, -camera.y);
-    renderTerrain(world, camera.x, camera.y, viewport.scale, viewport.dpr);
+    renderTerrain(
+      world,
+      camera.x,
+      camera.y,
+      viewport.viewWidth,
+      viewport.viewHeight,
+      viewport.worldScale,
+      viewport.dpr,
+    );
     const visible = snapshot?.frigates ?? [];
     for (const frigate of visible) if (frigate.playerId !== ownId) drawFrigate(frigate, serverNow, debugVisible);
     if (own) drawFrigate(own, serverNow, debugVisible);
@@ -1228,16 +1246,19 @@ function renderFrame(now: number): void {
     if (own) drawReticle(own, serverNow);
     ctx.restore();
   } else {
+    ctx.setTransform(viewport.dpr * viewport.hudScale, 0, 0, viewport.dpr * viewport.hudScale, 0, 0);
+    const logicalWidth = viewport.width / viewport.hudScale;
+    const logicalHeight = viewport.height / viewport.hudScale;
     ctx.fillStyle = "#071b2a";
-    ctx.fillRect(0, 0, GAME_CONFIG.screen.width, GAME_CONFIG.screen.height);
+    ctx.fillRect(0, 0, logicalWidth, logicalHeight);
     ctx.fillStyle = "#88adaf";
     ctx.font = "14px DM Mono, monospace";
     ctx.textAlign = "center";
-    ctx.fillText("CONNECTING TO THE FLEET…", GAME_CONFIG.screen.width / 2, GAME_CONFIG.screen.height / 2);
+    ctx.fillText("CONNECTING TO THE FLEET…", logicalWidth / 2, logicalHeight / 2);
   }
   if (snapshot) {
-    ctx.setTransform(viewport.dpr * viewport.scale, 0, 0, viewport.dpr * viewport.scale, 0, 0);
-    drawHud(snapshot, own, serverNow, viewport.width / viewport.scale, viewport.height / viewport.scale);
+    ctx.setTransform(viewport.dpr * viewport.hudScale, 0, 0, viewport.dpr * viewport.hudScale, 0, 0);
+    drawHud(snapshot, own, serverNow, viewport.width / viewport.hudScale, viewport.height / viewport.hudScale);
   }
   effects.splice(0, effects.length, ...effects.filter((effect) => now - effect.at < 1200));
   const frameDelta = Math.min(100, now - lastFrameAt);
