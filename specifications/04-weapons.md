@@ -10,7 +10,7 @@ Ballistic weapon: shells fly in the air, over water and land, and land on the ai
 
 - **Bearing**: Left / Right arrow rotate the cannon bearing at 54 °/s at the default setting, scaled by the host's cannon rotation setting. Full 360° allowed.
 - **Range**: Up / Down arrows increase / decrease range at 400 u/s, between **100 u** and the **maximum range**.
-- **Maximum range: 800 u** (half a screen width); the camera shifts to keep it on screen (see [02-world.md#camera](02-world.md#camera)).
+- **Maximum range: 800 u** (half a screen width); a cannon arrow next to the frigate shows the bearing (see [05-controls-and-hud.md](05-controls-and-hud.md)).
 - The aim point is shown by a **green target reticle** drawn on the map (see [05-controls-and-hud.md](05-controls-and-hud.md)).
 
 ### Firing

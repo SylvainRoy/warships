@@ -785,6 +785,26 @@ function drawReticle(frigate: Frigate, now: number): void {
     ctx.arc(x, y, GAME_CONFIG.cannon.damageRadius + 7, angle, angle + Math.PI * 2 * progress);
     ctx.stroke();
   }
+  const cannonAxisX = Math.cos(angle);
+  const cannonAxisY = Math.sin(angle);
+  const cannonPerpendicularX = -cannonAxisY;
+  const cannonPerpendicularY = cannonAxisX;
+  ctx.beginPath();
+  ctx.moveTo(
+    frigate.x + cannonAxisX * 140,
+    frigate.y + cannonAxisY * 140,
+  );
+  ctx.lineTo(
+    frigate.x + cannonAxisX * 120 + cannonPerpendicularX * 8,
+    frigate.y + cannonAxisY * 120 + cannonPerpendicularY * 8,
+  );
+  ctx.lineTo(
+    frigate.x + cannonAxisX * 120 - cannonPerpendicularX * 8,
+    frigate.y + cannonAxisY * 120 - cannonPerpendicularY * 8,
+  );
+  ctx.closePath();
+  ctx.fillStyle = "#5dffac";
+  ctx.fill();
   const torpedoAngle = frigate.heading + frigate.torpedoBearing;
   const torpedoReload = Math.max(0, frigate.torpedoReadyAt - now);
   const torpedoProgress = 1 - torpedoReload / gameSettings.torpedoReload;
@@ -1188,7 +1208,7 @@ function renderFrame(now: number): void {
   const snapshot = getRenderSnapshot();
   const own = predictedOwn ?? snapshot?.frigates.find((frigate) => frigate.playerId === ownId) as Frigate | undefined;
   if (world && own) {
-    const camera = computeCamera(own);
+    const camera = computeCamera({ x: own.x, y: own.y });
     ctx.save();
     ctx.translate(-camera.x, -camera.y);
     renderTerrain(world, camera.x, camera.y, viewport.scale, viewport.dpr);
