@@ -84,6 +84,86 @@ describe("multiplayer room", () => {
     expect(duplicate.last("error")?.code).toBe("name_taken");
   });
 
+  it("resends welcome when the same connection joins with the same name", () => {
+    const { room } = setup();
+    const socket = connect(room);
+    join(room, socket, "A");
+    const firstWelcome = welcome(socket);
+
+    join(room, socket, "a");
+
+    const welcomes = socket.messages.filter((message) => message.type === "welcome");
+    expect(welcomes).toHaveLength(2);
+    expect(welcomes[1]).toMatchObject({
+      playerId: firstWelcome.playerId,
+      token: firstWelcome.token,
+      slot: firstWelcome.slot,
+    });
+    expect(socket.last("error")).toBeUndefined();
+    expect(room.sessions.size).toBe(1);
+    expect(room.sessions.has(firstWelcome.playerId)).toBe(true);
+  });
+
+  it("replaces a session when the same connection joins with a different name", () => {
+    const room = new Room(11, () => 0, openWorld, fixtureSites);
+    const socket = connect(room);
+    join(room, socket, "A");
+    const oldPlayerId = welcome(socket).playerId;
+
+    join(room, socket, "B");
+
+    const newPlayerId = welcome(socket).playerId;
+    expect(socket.readyState).toBe(1);
+    expect(socket.last("error")).toBeUndefined();
+    expect(room.sessions.size).toBe(1);
+    expect(room.sessions.get(newPlayerId)?.name).toBe("B");
+    expect(room.sessions.get(newPlayerId)?.slot).toBe(1);
+    expect(room.sessions.has(oldPlayerId)).toBe(false);
+    expect(room.game.frigates[oldPlayerId]).toBeUndefined();
+    expect(room.game.scores[oldPlayerId]).toBeUndefined();
+    expect(room.game.bases.find((base) => base.kind === "home" && base.homeSlot === 0)?.ownerId).toBe(newPlayerId);
+    expect(socket.last("lobby")).toMatchObject({
+      players: [{ playerId: newPlayerId, name: "B", slot: 1 }],
+      freeSlots: 3,
+      full: false,
+    });
+  });
+
+  it("frees a replacement session after its socket disconnects and grace expires", () => {
+    const { room, setNow } = setup();
+    const observer = connect(room);
+    const socket = connect(room);
+    join(room, socket, "A");
+    join(room, socket, "B");
+    const playerId = welcome(socket).playerId;
+
+    socket.close();
+    setNow(GAME_CONFIG.network.reconnectGrace + 1);
+    room.advanceTick();
+
+    expect(room.sessions.size).toBe(0);
+    expect(room.game.frigates[playerId]).toBeUndefined();
+    expect(room.game.scores[playerId]).toBeUndefined();
+    expect(observer.last("lobby")).toMatchObject({ players: [], freeSlots: 4, full: false });
+  });
+
+  it("never fills the room when one connection repeatedly changes its name", () => {
+    const { room } = setup();
+    const socket = connect(room);
+
+    for (const name of ["A", "B", "C", "D"]) {
+      join(room, socket, name);
+      expect(room.sessions.size).toBe(1);
+      expect(socket.readyState).toBe(1);
+    }
+
+    expect(socket.last("lobby")).toMatchObject({
+      players: [{ name: "D", slot: 1 }],
+      freeSlots: 3,
+      full: false,
+    });
+  });
+
   it("keeps non-host actions blocked, regenerates while keeping scores, resets scores, and kicks", () => {
     const { room } = setup();
     const hostSocket = connect(room);

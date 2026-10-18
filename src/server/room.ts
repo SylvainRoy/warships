@@ -143,6 +143,14 @@ export class Room {
     const now = this.clock();
     this.expireDisconnected(now);
     const normalized = name.toLocaleLowerCase();
+    const currentSession = this.sessionBySocket.get(socket);
+    if (currentSession) {
+      if (currentSession.name.toLocaleLowerCase() === normalized) {
+        this.sendWelcome(socket, currentSession, now);
+        return;
+      }
+      this.removeSession(currentSession, { closeSocket: false });
+    }
     let session = token ? [...this.sessions.values()].find((candidate) => candidate.token === token) : undefined;
     if (session && (session.disconnectedAt === null || now - session.disconnectedAt > GAME_CONFIG.network.reconnectGrace)) session = undefined;
     if (session && session.name.toLocaleLowerCase() !== normalized) session = undefined;
@@ -205,6 +213,10 @@ export class Room {
       session.host = true;
       this.game.scores[session.id] = this.scoreRecord(session);
     }
+    this.sendWelcome(socket, session, now);
+  }
+
+  private sendWelcome(socket: WebSocket, session: PlayerSession, now: number): void {
     this.sessionBySocket.set(socket, session);
     session.lastBasesJson = null;
     this.send(socket, {
@@ -557,13 +569,15 @@ export class Room {
     }
   }
 
-  private removeSession(session: PlayerSession): void {
+  private removeSession(session: PlayerSession, options: { closeSocket?: boolean } = {}): void {
     if (session.socket) {
       const socket = session.socket;
       this.sessionBySocket.delete(socket);
-      this.sockets.delete(socket);
       session.socket = null;
-      if (socket.readyState === 1) socket.close(4000, "Session ended");
+      if (options.closeSocket !== false) {
+        this.sockets.delete(socket);
+        if (socket.readyState === 1) socket.close(4000, "Session ended");
+      }
     }
     for (const base of this.game.bases) {
       const home = base.kind === "home" && base.homeSlot === session.slot - 1;
