@@ -1,21 +1,22 @@
 import { randomBytes } from "node:crypto";
 import { performance } from "node:perf_hooks";
 import type { WebSocket } from "ws";
+import { generateWorldWithBases, placeBases, type BaseSite } from "../shared/bases.js";
 import { GAME_CONFIG } from "../shared/config.js";
 import type { ClientMessage, ServerMessage, SnapshotFrigate } from "../shared/protocol.js";
-import { describeSettingsChanges, sanitizeSettings } from "../shared/settings.js";
+import { DEFAULT_SETTINGS, describeSettingsChanges, sanitizeSettings } from "../shared/settings.js";
 import {
   createGameState,
   createSeededRandom,
   regenerateGameWorld,
-  spawnFrigate,
+  spawnPlayerFrigate,
   stepGame,
   type Frigate,
   type FrigateInput,
   type GameState,
   type GameEvent,
 } from "../shared/sim.js";
-import { encodeWorld, generateWorldWithFallback, type World } from "../shared/world.js";
+import { encodeWorld, type World } from "../shared/world.js";
 
 const SLOT_COLOURS = ["#3b82f6", "#ef4444", "#facc15", "#a855f7"] as const;
 const EMPTY_INPUT: FrigateInput = { seq: 0, keys: 0, throttle: 0, fireCannon: false, fireTorpedo: false };
@@ -52,8 +53,12 @@ export class Room {
     seed = randomBytes(4).readUInt32LE(),
     private readonly clock: () => number = () => performance.now() / 1000,
     initialWorld?: World,
+    initialSites?: readonly BaseSite[],
   ) {
-    this.game = createGameState(initialWorld ?? generateWorldWithFallback(seed, GAME_CONFIG.world.generation.targetLandCoverage));
+    const generated = initialWorld
+      ? { world: initialWorld, sites: initialSites ?? placeBases(initialWorld, DEFAULT_SETTINGS.neutralBases) ?? [] }
+      : generateWorldWithBases(seed, GAME_CONFIG.world.generation.targetLandCoverage, DEFAULT_SETTINGS.neutralBases);
+    this.game = createGameState(generated.world, generated.sites);
     this.random = createSeededRandom(seed ^ 0x753a9);
   }
 
@@ -161,8 +166,13 @@ export class Room {
         ackSeq: 0,
       };
       this.sessions.set(session.id, session);
+      const home = this.game.bases.find((base) => base.kind === "home" && base.homeSlot === slot - 1);
+      if (home) {
+        home.active = true;
+        home.ownerId = session.id;
+      }
       const others = Object.values(this.game.frigates).filter((frigate) => frigate.status === "alive");
-      const frigate = spawnFrigate(session.id, name, slot, this.game.world, others, this.random, now);
+      const frigate = spawnPlayerFrigate(session.id, name, slot, this.game, others, this.random, now);
       this.game.frigates[session.id] = frigate;
       this.game.scores[session.id] = this.scoreRecord(session);
       this.game.events.push({ type: "join", playerId: session.id, name, message: `${name} joined` });
@@ -179,6 +189,7 @@ export class Room {
       token: session.token,
       slot: session.slot,
       world: encodeWorld(this.game.world.grid),
+      bases: this.game.bases,
       settings: { ...this.game.settings },
     });
     this.send(socket, {
@@ -242,6 +253,7 @@ export class Room {
       }
       const changes = describeSettingsChanges(this.game.settings, settings);
       const coverageChanged = this.game.settings.landCoveragePct !== settings.landCoveragePct;
+      const neutralBasesChanged = this.game.settings.neutralBases !== settings.neutralBases;
       this.game.settings = settings;
       for (const player of this.sessions.values()) {
         if (player.socket) this.send(player.socket, { type: "settings", settings: { ...settings } });
@@ -254,7 +266,7 @@ export class Room {
           message: `Host ${session.name}: ${changes.join(", ")}`,
         });
       }
-      if (coverageChanged) this.regenerateWorld(session, now);
+      if (coverageChanged || neutralBasesChanged) this.regenerateWorld(session, now);
       return;
     }
     this.send(session.socket!, { type: "error", code: "invalid_action" });
@@ -262,13 +274,18 @@ export class Room {
 
   private regenerateWorld(session: PlayerSession, now: number): void {
     const seed = randomBytes(4).readUInt32LE();
-    regenerateGameWorld(this.game, seed, now, this.random);
+    const generated = generateWorldWithBases(
+      seed,
+      this.game.settings.landCoveragePct / 100,
+      this.game.settings.neutralBases,
+    );
+    regenerateGameWorld(this.game, generated.world, generated.sites, now, this.random);
     for (const player of this.sessions.values()) {
       const frigate = this.game.frigates[player.id];
       if (frigate) frigate.name = player.name;
     }
     const encoded = encodeWorld(this.game.world.grid);
-    this.broadcast({ type: "world", world: encoded });
+    this.broadcast({ type: "world", world: encoded, bases: this.game.bases });
     this.sentProjectileIds.clear();
     this.broadcastJoined({
       type: "projectiles",
@@ -319,7 +336,15 @@ export class Room {
       const frigate = this.game.frigates[session.id];
       if (!frigate || frigate.status === "alive" || now < frigate.respawnAt) continue;
       const others = Object.values(this.game.frigates).filter((other) => other.playerId !== session.id && other.status === "alive");
-      this.game.frigates[session.id] = spawnFrigate(session.id, session.name, session.slot, this.game.world, others, this.random, now);
+      this.game.frigates[session.id] = spawnPlayerFrigate(
+        session.id,
+        session.name,
+        session.slot,
+        this.game,
+        others,
+        this.random,
+        now,
+      );
     }
   }
 
@@ -350,6 +375,13 @@ export class Room {
         serverTime: now,
         frigates,
         players,
+        bases: this.game.bases.map(({ id, active, ownerId, captureBy, captureProgress }) => ({
+          id,
+          active,
+          ownerId,
+          captureBy,
+          captureProgress,
+        })),
       });
     }
   }
@@ -459,6 +491,20 @@ export class Room {
       this.sockets.delete(socket);
       session.socket = null;
       if (socket.readyState === 1) socket.close(4000, "Session ended");
+    }
+    for (const base of this.game.bases) {
+      const home = base.kind === "home" && base.homeSlot === session.slot - 1;
+      const departingOwnedBase = !home && base.ownerId === session.id;
+      if (home) {
+        base.active = false;
+        base.ownerId = null;
+      } else if (departingOwnedBase) {
+        base.ownerId = null;
+      }
+      if (home || departingOwnedBase || base.captureBy === session.id) {
+        base.captureBy = null;
+        base.captureProgress = 0;
+      }
     }
     this.sessions.delete(session.id);
     delete this.game.frigates[session.id];

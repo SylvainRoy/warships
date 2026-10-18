@@ -4,6 +4,7 @@ import type { WebSocket } from "ws";
 import { GAME_CONFIG } from "../src/shared/config.js";
 import type { ClientMessage, ServerMessage } from "../src/shared/protocol.js";
 import { DEFAULT_SETTINGS } from "../src/shared/settings.js";
+import type { BaseSite } from "../src/shared/bases.js";
 import { Room } from "../src/server/room.js";
 import type { World } from "../src/shared/world.js";
 
@@ -26,6 +27,13 @@ class FakeSocket extends EventEmitter {
 }
 
 const openWorld: World = { seed: 11, grid: new Uint8Array(GAME_CONFIG.world.columns * GAME_CONFIG.world.rows) };
+const fixtureSites: BaseSite[] = [
+  { id: "h0", kind: "home", homeSlot: 0, cityX: 1750, cityY: 4500, harbourX: 1800, harbourY: 4500, facing: 0 },
+  { id: "h1", kind: "home", homeSlot: 1, cityX: 4450, cityY: 4500, harbourX: 4500, harbourY: 4500, facing: Math.PI / 2 },
+  { id: "h2", kind: "home", homeSlot: 2, cityX: 7150, cityY: 4500, harbourX: 7200, harbourY: 4500, facing: Math.PI },
+  { id: "h3", kind: "home", homeSlot: 3, cityX: 9850, cityY: 4500, harbourX: 9900, harbourY: 4500, facing: Math.PI * 1.5 },
+  { id: "n0", kind: "neutral", homeSlot: null, cityX: 12550, cityY: 4500, harbourX: 12600, harbourY: 4500, facing: 0 },
+];
 
 function setup() {
   let now = 0;
@@ -353,5 +361,77 @@ describe("multiplayer room", () => {
     room.advanceTick();
     expect(room.sessions.has(joined.playerId)).toBe(false);
     expect(room.game.scores[joined.playerId]).toBeUndefined();
+  });
+
+  it("activates home harbours before spawning and preserves base state during reconnect grace", () => {
+    let now = 0;
+    const room = new Room(11, () => now, openWorld, fixtureSites);
+    const first = connect(room);
+    join(room, first, "Harbor");
+    const joined = welcome(first);
+    const home = room.game.bases.find((base) => base.id === "h0")!;
+    const frigate = room.game.frigates[joined.playerId]!;
+    expect(home).toMatchObject({ active: true, ownerId: joined.playerId });
+    expect({ x: frigate.x, y: frigate.y, heading: frigate.heading }).toEqual({
+      x: home.harbourX,
+      y: home.harbourY,
+      heading: home.facing,
+    });
+    expect(joined.bases[0]).toHaveProperty("cityX");
+    room.game.bases.find((base) => base.id === "n0")!.ownerId = joined.playerId;
+    room.game.bases.find((base) => base.id === "n0")!.captureBy = joined.playerId;
+    room.game.bases.find((base) => base.id === "n0")!.captureProgress = 0.4;
+    first.close();
+
+    now = 9;
+    const reconnect = connect(room);
+    join(room, reconnect, "Harbor", joined.token);
+    expect(welcome(reconnect).playerId).toBe(joined.playerId);
+    expect(room.game.bases.find((base) => base.id === "h0")).toMatchObject({ active: true, ownerId: joined.playerId });
+    expect(room.game.bases.find((base) => base.id === "n0")).toMatchObject({
+      ownerId: joined.playerId,
+      captureBy: joined.playerId,
+      captureProgress: 0.4,
+    });
+
+    reconnect.close();
+    now = 20;
+    room.advanceTick();
+    expect(room.game.bases.find((base) => base.id === "h0")).toMatchObject({ active: false, ownerId: null });
+    expect(room.game.bases.find((base) => base.id === "n0")).toMatchObject({
+      ownerId: null,
+      captureBy: null,
+      captureProgress: 0,
+    });
+  });
+
+  it("regenerates configured neutral bases and keeps home ownership for connected players", () => {
+    let now = 0;
+    const room = new Room(11, () => now, openWorld, fixtureSites);
+    const socket = connect(room);
+    join(room, socket, "Harbor");
+    const playerId = welcome(socket).playerId;
+    room.game.bases.find((base) => base.id === "n0")!.ownerId = playerId;
+    room.game.bases.find((base) => base.id === "n0")!.captureBy = playerId;
+    room.game.bases.find((base) => base.id === "n0")!.captureProgress = 0.6;
+    const settings = { ...DEFAULT_SETTINGS, neutralBases: 2 };
+
+    send(room, socket, { type: "host", action: "settings", settings });
+
+    expect(room.game.bases).toHaveLength(6);
+    expect(room.game.bases.filter((base) => base.kind === "neutral")).toHaveLength(2);
+    expect(room.game.bases.filter((base) => base.kind === "neutral").every((base) =>
+      base.active && base.ownerId === null && base.captureBy === null && base.captureProgress === 0,
+    )).toBe(true);
+    const home = room.game.bases.find((base) => base.kind === "home" && base.homeSlot === 0)!;
+    expect(home).toMatchObject({ active: true, ownerId: playerId });
+    expect(room.game.frigates[playerId]).toMatchObject({ x: home.harbourX, y: home.harbourY, heading: home.facing });
+    expect(socket.last("world")?.bases).toHaveLength(6);
+
+    room.advanceTick();
+    room.advanceTick();
+    const snapshot = socket.last("snapshot");
+    expect(snapshot?.bases[0]).not.toHaveProperty("cityX");
+    expect(snapshot?.bases[0]).toHaveProperty("captureProgress");
   });
 });

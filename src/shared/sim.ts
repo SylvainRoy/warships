@@ -1,7 +1,8 @@
 import { GAME_CONFIG } from "./config.js";
 import { mulberry32 } from "./rng.js";
+import { hullInsideHarbour, type Base, type BaseSite } from "./bases.js";
 import { DEFAULT_SETTINGS, type GameSettings } from "./settings.js";
-import { generateWorldWithFallback, isLandAt, type World } from "./world.js";
+import { isLandAt, type World } from "./world.js";
 
 export const INPUT_KEYS = {
   turnLeft: 1 << 0,
@@ -82,7 +83,7 @@ export interface PlayerScore {
 }
 
 export interface GameEvent {
-  type: "explosion" | "sank" | "join" | "leave" | "host";
+  type: "explosion" | "sank" | "join" | "leave" | "host" | "capture";
   x?: number;
   y?: number;
   kind?: ExplosionKind;
@@ -97,6 +98,7 @@ export interface GameState {
   tick: number;
   world: World;
   settings: GameSettings;
+  bases: Base[];
   frigates: Record<string, Frigate>;
   shells: Shell[];
   torpedoes: Torpedo[];
@@ -304,11 +306,40 @@ export function spawnFrigate(
   return createFrigate(playerId, name, slot, best.x, best.y, random() * Math.PI * 2, now);
 }
 
-export function createGameState(world: World): GameState {
+export function spawnAtBase(playerId: string, name: string, slot: number, base: BaseSite, now: number): Frigate {
+  return createFrigate(playerId, name, slot, base.harbourX, base.harbourY, base.facing, now);
+}
+
+export function spawnPlayerFrigate(
+  playerId: string,
+  name: string,
+  slot: number,
+  state: GameState,
+  others: readonly Frigate[],
+  random: () => number,
+  now: number,
+): Frigate {
+  const home = state.bases.find((base) =>
+    base.kind === "home" && base.homeSlot === slot - 1 && base.ownerId === playerId,
+  );
+  const owned = home ?? state.bases.find((base) => base.ownerId === playerId);
+  return owned
+    ? spawnAtBase(playerId, name, slot, owned, now)
+    : spawnFrigate(playerId, name, slot, state.world, others, random, now);
+}
+
+export function createGameState(world: World, sites: readonly BaseSite[] = []): GameState {
   return {
     tick: 0,
     world,
     settings: { ...DEFAULT_SETTINGS },
+    bases: sites.map((site): Base => ({
+      ...site,
+      active: site.kind === "neutral",
+      ownerId: null,
+      captureBy: null,
+      captureProgress: 0,
+    })),
     frigates: {},
     shells: [],
     torpedoes: [],
@@ -316,6 +347,42 @@ export function createGameState(world: World): GameState {
     events: [],
     nextProjectileId: 1,
   };
+}
+
+export function stepBases(state: GameState, dt: number, _now: number): void {
+  for (const base of state.bases) {
+    const occupants = Object.values(state.frigates).filter((frigate) =>
+      frigate.status === "alive" && hullInsideHarbour(frigate, base),
+    );
+    const occupant = occupants[0];
+    if (
+      !base.active
+      || occupants.length !== 1
+      || !occupant
+      || occupant.playerId === base.ownerId
+      || base.kind === "home" // Step 1 homes stay uncapturable until turret rules are implemented.
+    ) {
+      base.captureBy = null;
+      base.captureProgress = 0;
+      continue;
+    }
+    if (base.captureBy !== occupant.playerId) {
+      base.captureBy = occupant.playerId;
+      base.captureProgress = 0;
+    }
+    base.captureProgress += dt / state.settings.captureTime;
+    if (base.captureProgress < 1) continue;
+    base.ownerId = occupant.playerId;
+    base.captureBy = null;
+    base.captureProgress = 0;
+    const name = state.scores[occupant.playerId]?.name ?? occupant.name;
+    state.events.push({
+      type: "capture",
+      playerId: occupant.playerId,
+      name,
+      message: `${name} captured a base`,
+    });
+  }
 }
 
 function emitExplosion(state: GameState, x: number, y: number, kind: ExplosionKind): void {
@@ -536,16 +603,38 @@ export function stepGame(state: GameState, inputs: Record<string, FrigateInput |
     }
   }
   state.torpedoes = remainingTorpedoes;
+  stepBases(state, dt, now);
 }
 
-export function regenerateGameWorld(state: GameState, seed: number, now: number, random: () => number): void {
-  state.world = generateWorldWithFallback(seed, state.settings.landCoveragePct / 100);
+export function regenerateGameWorld(
+  state: GameState,
+  world: World,
+  sites: readonly BaseSite[],
+  now: number,
+  random: () => number,
+): void {
+  state.world = world;
+  state.bases = sites.map((site): Base => {
+    const owner = site.kind === "home"
+      ? Object.values(state.scores).find((score) => score.slot === (site.homeSlot ?? -1) + 1)
+      : undefined;
+    return {
+      ...site,
+      active: site.kind === "neutral" || Boolean(owner),
+      ownerId: owner?.playerId ?? null,
+      captureBy: null,
+      captureProgress: 0,
+    };
+  });
   state.shells = [];
   state.torpedoes = [];
   const frigates = Object.values(state.frigates);
   const respawned: Frigate[] = [];
   for (const frigate of frigates) {
-    const fresh = spawnFrigate(frigate.playerId, frigate.name, frigate.slot, state.world, respawned, random, now);
+    const home = state.bases.find((base) => base.kind === "home" && base.homeSlot === frigate.slot - 1);
+    const fresh = home
+      ? spawnAtBase(frigate.playerId, frigate.name, frigate.slot, home, now)
+      : spawnFrigate(frigate.playerId, frigate.name, frigate.slot, state.world, respawned, random, now);
     const score = state.scores[frigate.playerId];
     const host = score?.host ?? false;
     const connected = score?.connected ?? true;

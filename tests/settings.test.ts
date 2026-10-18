@@ -4,6 +4,8 @@ import { DEFAULT_SETTINGS, describeSettingsChanges, sanitizeSettings } from "../
 describe("game settings", () => {
   it("accepts defaults and valid edge values as fresh objects", () => {
     expect(DEFAULT_SETTINGS.landCoveragePct).toBe(25);
+    expect(DEFAULT_SETTINGS.neutralBases).toBe(4);
+    expect(DEFAULT_SETTINGS.captureTime).toBe(5);
     const defaults = sanitizeSettings(DEFAULT_SETTINGS);
     expect(defaults).toEqual(DEFAULT_SETTINGS);
     expect(defaults).not.toBe(DEFAULT_SETTINGS);
@@ -18,6 +20,8 @@ describe("game settings", () => {
       cannonReload: 0.5,
       torpedoReload: 20,
       landCoveragePct: 5,
+      neutralBases: 0,
+      captureTime: 1,
     })).toEqual({
       boatSpeedPct: 50,
       rotationPct: 200,
@@ -28,6 +32,8 @@ describe("game settings", () => {
       cannonReload: 0.5,
       torpedoReload: 20,
       landCoveragePct: 5,
+      neutralBases: 0,
+      captureTime: 1,
     });
     expect(sanitizeSettings({ ...DEFAULT_SETTINGS, cannonReload: 10, torpedoReload: 1 })).toEqual({
       ...DEFAULT_SETTINGS,
@@ -53,6 +59,12 @@ describe("game settings", () => {
     expect(sanitizeSettings({ ...DEFAULT_SETTINGS, landCoveragePct: 2.5 })).toBeNull();
     expect(sanitizeSettings({ ...DEFAULT_SETTINGS, landCoveragePct: 45 })).toBeNull();
     expect(sanitizeSettings({ ...DEFAULT_SETTINGS, landCoveragePct: 12 })).toBeNull();
+    expect(sanitizeSettings({ ...DEFAULT_SETTINGS, neutralBases: -1 })).toBeNull();
+    expect(sanitizeSettings({ ...DEFAULT_SETTINGS, neutralBases: 9 })).toBeNull();
+    expect(sanitizeSettings({ ...DEFAULT_SETTINGS, neutralBases: 2.5 })).toBeNull();
+    expect(sanitizeSettings({ ...DEFAULT_SETTINGS, captureTime: 0 })).toBeNull();
+    expect(sanitizeSettings({ ...DEFAULT_SETTINGS, captureTime: 31 })).toBeNull();
+    expect(sanitizeSettings({ ...DEFAULT_SETTINGS, captureTime: 5.5 })).toBeNull();
 
     const missing = { ...DEFAULT_SETTINGS } as Record<string, unknown>;
     delete missing.torpedoReload;
@@ -74,6 +86,8 @@ describe("game settings", () => {
       cannonReload: 2,
       torpedoReload: 2.5,
       landCoveragePct: 15,
+      neutralBases: 6,
+      captureTime: 10,
     })).toEqual([
       "boat speed 150%",
       "rotation 120%",
@@ -83,6 +97,8 @@ describe("game settings", () => {
       "cannon reload 2 s",
       "torpedo reload 2.5 s",
       "land coverage 15%",
+      "neutral bases 6",
+      "capture time 10 s",
     ]);
   });
 });

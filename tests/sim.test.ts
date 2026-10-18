@@ -4,6 +4,7 @@ import { mulberry32 } from "../src/shared/rng.js";
 import { applyFrigateInput, createGameState, createFrigate, createSeededRandom, INPUT_KEYS, pointToHullDistance, regenerateGameWorld, spawnFrigate, stepGame, type Frigate, type FrigateInput } from "../src/shared/sim.js";
 import { DEFAULT_SETTINGS, type GameSettings } from "../src/shared/settings.js";
 import { generateWorld, isLandAt, type World } from "../src/shared/world.js";
+import { generateWorldWithBases } from "../src/shared/bases.js";
 
 const dt = 1 / GAME_CONFIG.network.tickRate;
 const maxHp = GAME_CONFIG.player.maxHp;
@@ -488,26 +489,28 @@ describe("spawning", () => {
     expect(pointToHullDistance(first.x, first.y, first)).toBe(0);
   });
 
-  it("keeps all four players 2400 units apart after world regeneration", () => {
+  it("regenerates bases and respawns each player at their home harbour", () => {
     const state = createGameState(openWorld());
     state.settings = { ...DEFAULT_SETTINGS, boatSpeedPct: 150, cannonReload: 2, landCoveragePct: 10 };
     const ships = [1, 2, 3, 4].map((slot) => frigate(`p${slot}`, 4000 + slot * 100, 4000));
     for (const ship of ships) state.frigates[ship.playerId] = ship;
     state.scores = scores(...ships);
 
-    regenerateGameWorld(state, 2468, 1, createSeededRandom(17));
+    const generated = generateWorldWithBases(2468, 0.1, state.settings.neutralBases);
+    regenerateGameWorld(state, generated.world, generated.sites, 1, createSeededRandom(17));
 
     expect(state.settings).toEqual({ ...DEFAULT_SETTINGS, boatSpeedPct: 150, cannonReload: 2, landCoveragePct: 10 });
     const coverage = state.world.grid.reduce((sum, cell) => sum + cell, 0) / state.world.grid.length;
     expect(coverage).toBeGreaterThanOrEqual(0.075);
     expect(coverage).toBeLessThanOrEqual(0.125);
     const respawned = Object.values(state.frigates);
-    for (let first = 0; first < respawned.length; first += 1) {
-      for (let second = first + 1; second < respawned.length; second += 1) {
-        expect(Math.hypot(respawned[first]!.x - respawned[second]!.x, respawned[first]!.y - respawned[second]!.y))
-          .toBeGreaterThanOrEqual(GAME_CONFIG.player.spawnDistance);
-      }
+    for (const ship of respawned) {
+      const home = state.bases.find((base) => base.kind === "home" && base.homeSlot === ship.slot - 1);
+      expect(ship.x).toBe(home?.harbourX);
+      expect(ship.y).toBe(home?.harbourY);
+      expect(ship.heading).toBe(home?.facing);
     }
+    expect(state.bases.filter((base) => base.kind === "neutral")).toHaveLength(DEFAULT_SETTINGS.neutralBases);
   });
 });
 

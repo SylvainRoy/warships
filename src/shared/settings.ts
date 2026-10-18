@@ -10,6 +10,8 @@ export interface GameSettings {
   cannonReload: number;
   torpedoReload: number;
   landCoveragePct: number;
+  neutralBases: number;
+  captureTime: number;
 }
 
 export const DEFAULT_SETTINGS: GameSettings = {
@@ -22,6 +24,8 @@ export const DEFAULT_SETTINGS: GameSettings = {
   cannonReload: GAME_CONFIG.cannon.reload,
   torpedoReload: GAME_CONFIG.torpedo.reload,
   landCoveragePct: GAME_CONFIG.world.generation.targetLandCoverage * 100,
+  neutralBases: 4,
+  captureTime: 5,
 };
 
 export const SETTINGS_LIMITS: Record<keyof GameSettings, { min: number; max: number; step: number }> = {
@@ -34,6 +38,8 @@ export const SETTINGS_LIMITS: Record<keyof GameSettings, { min: number; max: num
   cannonReload: { min: 0.5, max: 10, step: 0.5 },
   torpedoReload: { min: 1, max: 20, step: 0.5 },
   landCoveragePct: { min: 5, max: 40, step: 5 },
+  neutralBases: { min: 0, max: 8, step: 1 },
+  captureTime: { min: 1, max: 30, step: 1 },
 };
 
 const SETTINGS_KEYS: readonly (keyof GameSettings)[] = [
@@ -46,6 +52,8 @@ const SETTINGS_KEYS: readonly (keyof GameSettings)[] = [
   "cannonReload",
   "torpedoReload",
   "landCoveragePct",
+  "neutralBases",
+  "captureTime",
 ];
 
 const SETTING_LABELS: Record<keyof GameSettings, string> = {
@@ -58,6 +66,8 @@ const SETTING_LABELS: Record<keyof GameSettings, string> = {
   cannonReload: "cannon reload",
   torpedoReload: "torpedo reload",
   landCoveragePct: "land coverage",
+  neutralBases: "neutral bases",
+  captureTime: "capture time",
 };
 
 export function sanitizeSettings(value: unknown): GameSettings | null {
@@ -85,9 +95,11 @@ export function sanitizeSettings(value: unknown): GameSettings | null {
 export function describeSettingsChanges(before: GameSettings, after: GameSettings): string[] {
   return SETTINGS_KEYS.flatMap((key) => {
     if (before[key] === after[key]) return [];
-    const value = key === "cannonReload" || key === "torpedoReload"
+    const value = key === "cannonReload" || key === "torpedoReload" || key === "captureTime"
       ? `${after[key].toFixed(1).replace(/\.0$/, "")} s`
-      : `${after[key]}%`;
+      : key === "neutralBases"
+        ? `${after[key]}`
+        : `${after[key]}%`;
     return [`${SETTING_LABELS[key]} ${value}`];
   });
 }

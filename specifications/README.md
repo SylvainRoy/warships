@@ -1,6 +1,6 @@
 # Warships — Specifications
 
-**Status: APPROVED v2.0** (2026-10-18) — game release v1.0.0 implements spec v1.18; v2.0 is being implemented in three steps.
+**Status: APPROVED v2.0** (2026-10-18) — game release v1.0.0 implements spec v1.18; v2.0 is being implemented in three steps; step 1 (bases, flags, home spawn, capture) implemented.
 
 | # | Document | Content |
 |---|----------|---------|

@@ -1,4 +1,5 @@
 import type { FrigateInput, GameEvent, Frigate, Shell, Torpedo, PlayerScore } from "./sim.js";
+import type { Base, BaseStatus } from "./bases.js";
 import type { GameSettings } from "./settings.js";
 
 export type HostAction =
@@ -27,9 +28,9 @@ export type SnapshotFrigate = Pick<
 
 export type ServerMessage =
   | LobbyMessage
-  | { type: "welcome"; playerId: string; token: string; slot: number; world: number[]; settings: GameSettings }
+  | { type: "welcome"; playerId: string; token: string; slot: number; world: number[]; bases: Base[]; settings: GameSettings }
   | { type: "settings"; settings: GameSettings }
-  | { type: "world"; world: number[] }
+  | { type: "world"; world: number[]; bases: Base[] }
   | { type: "projectiles"; serverTime: number; shells: Shell[]; torpedoes: Torpedo[]; removed: string[]; reset?: true }
   | {
       type: "snapshot";
@@ -38,6 +39,7 @@ export type ServerMessage =
       serverTime: number;
       frigates: SnapshotFrigate[];
       players: PlayerScore[];
+      bases: BaseStatus[];
     }
   | { type: "event"; event: GameEvent }
   | { type: "error"; code: "name_taken" | "full" | "invalid_name" | "not_host" | "invalid_action" | "kicked" };

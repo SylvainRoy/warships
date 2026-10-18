@@ -16,6 +16,13 @@ export const GAME_CONFIG = {
       minChannelTiles: 8,
     },
   },
+  bases: {
+    citySize: 40,
+    harbourSize: 60,
+    minSpacing: 1600,
+    homeSites: 4,
+    harbourApproach: 40,
+  },
   frigate: {
     length: 30,
     beam: 10,

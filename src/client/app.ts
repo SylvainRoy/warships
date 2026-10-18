@@ -1,10 +1,12 @@
 import { GAME_CONFIG } from "../shared/config.js";
+import type { Base } from "../shared/bases.js";
 import { INPUT_KEYS, applyFrigateInput, type Frigate, type FrigateInput, type GameEvent, type Shell, type Torpedo } from "../shared/sim.js";
 import { DEFAULT_SETTINGS, describeSettingsChanges, SETTINGS_LIMITS, type GameSettings } from "../shared/settings.js";
 import { APP_VERSION } from "../shared/version.js";
 import { decodeWorld, isLandAt, type World } from "../shared/world.js";
 import type { LobbyMessage, ServerMessage, SnapshotFrigate } from "../shared/protocol.js";
 import { computeCamera, computeViewport } from "./camera.js";
+import { drawBases, drawCaptureProgress } from "./bases.js";
 import {
   actionForCode,
   assignBinding,
@@ -59,6 +61,7 @@ declare global {
       ownId: string | null;
       latestSnapshot: Readonly<Snapshot> | null;
       predictedOwnFrigate: Readonly<Frigate> | null;
+      bases: ReadonlyArray<Readonly<Base>>;
       projectiles: Readonly<{ shells: Shell[]; torpedoes: Torpedo[] }>;
       projectileServerTime: number;
     }>;
@@ -100,6 +103,7 @@ const effects: Array<{ event: GameEvent; at: number }> = [];
 const feed: Array<{ text: string; at: number }> = [];
 let socket: WebSocket | null = null;
 let world: World | null = null;
+let bases: Base[] = [];
 let ownId: string | null = null;
 let latestSnapshot: Snapshot | null = null;
 let predictedOwn: Frigate | null = null;
@@ -150,6 +154,7 @@ Object.defineProperty(window, "__warships", {
     ownId,
     latestSnapshot: latestSnapshot ? deepFreeze(structuredClone(latestSnapshot)) : null,
     predictedOwnFrigate: predictedOwn ? deepFreeze({ ...predictedOwn }) : null,
+    bases: deepFreeze(structuredClone(bases)),
     projectiles: deepFreeze(structuredClone(renderedProjectiles)),
     projectileServerTime,
   }),
@@ -222,6 +227,7 @@ function handleMessage(message: ServerMessage): void {
     hasServerTimeOffset = false;
     ownId = message.playerId;
     gameSettings = { ...message.settings };
+    bases = message.bases;
     sessionStorage.setItem("warships.token", message.token);
     sessionStorage.setItem("warships.sessionName", nameInput.value.trim());
     world = { seed: 0, grid: decodeWorld(message.world) };
@@ -238,12 +244,15 @@ function handleMessage(message: ServerMessage): void {
     addFeed("Connected to the battle");
   } else if (message.type === "world") {
     throttleLevel = 0;
+    bases = message.bases;
     if (world) world = { ...world, grid: decodeWorld(message.world) };
     resetWorldCaches();
     addFeed("World regenerated");
   } else if (message.type === "settings") {
     gameSettings = { ...message.settings };
   } else if (message.type === "snapshot") {
+    const statuses = new Map(message.bases.map((base) => [base.id, base]));
+    bases = bases.map((base) => ({ ...base, ...statuses.get(base.id) }));
     onSnapshot(message);
   } else if (message.type === "projectiles") {
     projectileStore.apply(message);
@@ -275,6 +284,7 @@ function showKickedMessage(): void {
   joined = false;
   ownId = null;
   world = null;
+  bases = [];
   latestSnapshot = null;
   predictedOwn = null;
   snapshots = [];
@@ -363,6 +373,8 @@ const settingsRows: Array<{ key: keyof GameSettings; label: string }> = [
   { key: "cannonReload", label: "Cannon reload" },
   { key: "torpedoReload", label: "Torpedo reload" },
   { key: "landCoveragePct", label: "Land coverage" },
+  { key: "neutralBases", label: "Neutral bases" },
+  { key: "captureTime", label: "Capture time" },
 ];
 
 function isOwnHost(snapshot: Snapshot | null = latestSnapshot): boolean {
@@ -1362,6 +1374,29 @@ function drawRadar(snapshot: Snapshot, frigate: Frigate, now: number, logicalWid
     }
   }
 
+  for (const base of bases) {
+    if (!base.active) continue;
+    const dx = base.harbourX - frigate.x;
+    const dy = base.harbourY - frigate.y;
+    const distance = Math.hypot(dx, dy);
+    const ownerSlot = snapshot.players.find((player) => player.playerId === base.ownerId)?.slot;
+    ctx.fillStyle = base.ownerId === null ? "#fff" : colours[(ownerSlot ?? 0) - 1] ?? "#fff";
+    if (distance <= RADAR.range) {
+      const [radarX, radarY] = worldToRadar(dx, dy);
+      ctx.fillRect(centerX + radarX - 2, centerY + radarY - 2, 4, 4);
+    } else if (base.ownerId === ownId) {
+      const bearing = radarBearing(frigate.x, frigate.y, base.harbourX, base.harbourY);
+      const inner = RADAR.radius - 8;
+      const outer = RADAR.radius - 2;
+      ctx.lineWidth = 2;
+      ctx.strokeStyle = ctx.fillStyle;
+      ctx.beginPath();
+      ctx.moveTo(centerX + Math.cos(bearing) * inner, centerY + Math.sin(bearing) * inner);
+      ctx.lineTo(centerX + Math.cos(bearing) * outer, centerY + Math.sin(bearing) * outer);
+      ctx.stroke();
+    }
+  }
+
   drawRadarTriangle(centerX, centerY, frigate.heading, 6, 5, "#fff");
   ctx.globalAlpha = .6;
   ctx.strokeStyle = "#5dffac";
@@ -1534,7 +1569,8 @@ function drawMenu(snapshot: Snapshot, width: number, height: number): void {
   const left = width / 2 - 184;
   const centerY = height / 2;
   const panelWidth = controlsPending ? 520 : 440;
-  const panelHeight = controlsPending ? 560 : 350;
+  const settingsView = menuPending?.action === "settings";
+  const panelHeight = controlsPending ? 560 : settingsView ? 480 : 350;
   ctx.fillStyle = "rgba(3, 13, 20, .88)";
   ctx.fillRect(width / 2 - panelWidth / 2, height / 2 - panelHeight / 2, panelWidth, panelHeight);
   ctx.fillStyle = "#eff8f6";
@@ -1577,10 +1613,11 @@ function drawMenu(snapshot: Snapshot, width: number, height: number): void {
     ctx.textAlign = "left";
     return;
   }
-  const landCoverageChanged = menuPending?.action === "settings"
-    && menuPending.draft.landCoveragePct !== gameSettings.landCoveragePct;
+  const mapChanged = menuPending?.action === "settings"
+    && (menuPending.draft.landCoveragePct !== gameSettings.landCoveragePct
+      || menuPending.draft.neutralBases !== gameSettings.neutralBases);
   ctx.fillText(
-    landCoverageChanged
+    mapChanged
       ? "Enter: apply + new map"
       : menuPending?.action === "settings"
         ? "Adjust values for this battle."
@@ -1606,8 +1643,13 @@ function drawMenu(snapshot: Snapshot, width: number, height: number): void {
       ctx.textAlign = "right";
       ctx.fillStyle = value !== DEFAULT_SETTINGS[row.key] ? "#e4ad80" : "#d7e5e9";
       ctx.font = "500 12px DM Mono, monospace";
+      const displayedValue = row.key === "cannonReload" || row.key === "torpedoReload" || row.key === "captureTime"
+        ? `${value.toFixed(1).replace(/\.0$/, "")} s`
+        : row.key === "neutralBases"
+          ? `${value}`
+          : `${value}%`;
       ctx.fillText(
-        row.key === "cannonReload" || row.key === "torpedoReload" ? `${value.toFixed(1)} s` : `${value}%`,
+        displayedValue,
         left + 368,
         y,
       );
@@ -1655,7 +1697,7 @@ function drawMenu(snapshot: Snapshot, width: number, height: number): void {
           ? "C CONTROLS · ESC TO CLOSE"
           : "C controls · Esc close";
   ctx.textAlign = "center";
-  ctx.fillText(footer, width / 2, centerY + 140);
+  ctx.fillText(footer, width / 2, centerY + (menuPending?.action === "settings" ? 218 : 140));
   ctx.textAlign = "left";
 }
 
@@ -1824,6 +1866,11 @@ function renderFrame(now: number): void {
       viewport.dpr,
     );
     const visible = snapshot?.frigates ?? [];
+    const players = snapshot?.players ?? [];
+    drawBases(ctx, bases, (ownerId) => {
+      const owner = players.find((player) => player.playerId === ownerId);
+      return owner ? colours[owner.slot - 1] : undefined;
+    });
     drawWakes(visible, serverNow);
     for (const shell of renderedProjectiles.shells) drawShell(shell);
     for (const torpedo of renderedProjectiles.torpedoes) {
@@ -1834,6 +1881,7 @@ function renderFrame(now: number): void {
     if (own) drawFrigate(own, serverNow, debugVisible);
     for (const effect of effects) drawExplosion(effect, now);
     if (own) drawReticle(own, serverNow);
+    if (own) drawCaptureProgress(ctx, own, bases, own.playerId, gameSettings.captureTime);
     ctx.restore();
   } else {
     ctx.setTransform(viewport.dpr * viewport.scale, 0, 0, viewport.dpr * viewport.scale, 0, 0);
