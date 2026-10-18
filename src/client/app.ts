@@ -4,6 +4,20 @@ import { DEFAULT_SETTINGS, describeSettingsChanges, SETTINGS_LIMITS, type GameSe
 import { decodeWorld, isLandAt, type World } from "../shared/world.js";
 import type { LobbyMessage, ServerMessage, SnapshotFrigate } from "../shared/protocol.js";
 import { computeCamera, computeViewport } from "./camera.js";
+import {
+  actionForCode,
+  assignBinding,
+  bindingLabel,
+  BINDINGS_STORAGE_KEY,
+  CONTROL_ACTIONS,
+  DEFAULT_BINDINGS,
+  loadBindings,
+  RESERVED_CODES,
+  serializeBindings,
+  type Bindings,
+  type ControlAction,
+  type KeyboardLayout,
+} from "./controls.js";
 import { ProjectileStore } from "./projectiles.js";
 import { RADAR, radarBearing, radarContacts, worldToRadar } from "./radar.js";
 import {
@@ -21,6 +35,22 @@ type StoredSnapshot = { receivedAt: number; value: Snapshot };
 type PendingInput = { input: FrigateInput; sentAt: number };
 type WakeSample = { x: number; y: number; heading: number; speed: number; at: number };
 type WakeObservation = { x: number; y: number; heading: number; status: SnapshotFrigate["status"]; at: number };
+type HostMenuPending =
+  | { action: "regenerate" }
+  | { action: "resetScores" }
+  | { action: "kickSelect" }
+  | { action: "kick"; playerId: string; name: string }
+  | { action: "settings"; draft: GameSettings; index: number };
+type ControlsMenuPending = { action: "controls"; index: number; capturing: boolean; hint: string };
+type MenuPending = HostMenuPending | ControlsMenuPending | null;
+
+function storedBindings(): string | null {
+  try {
+    return localStorage.getItem(BINDINGS_STORAGE_KEY);
+  } catch {
+    return null;
+  }
+}
 
 declare global {
   interface Window {
@@ -42,6 +72,7 @@ function requireElement<T extends Element>(selector: string): T {
 
 const canvasElement = requireElement<HTMLCanvasElement>("#game");
 const lobby = requireElement<HTMLElement>("#lobby");
+const lobbyFooter = requireElement<HTMLElement>(".lobby-footer");
 const form = requireElement<HTMLFormElement>("#join-form");
 const nameInput = requireElement<HTMLInputElement>("#player-name");
 const joinButton = requireElement<HTMLButtonElement>("#join-button");
@@ -77,18 +108,15 @@ let projectileServerTime = 0;
 let pendingInputs: PendingInput[] = [];
 let sequence = 0;
 let throttleLevel = 0;
+let bindings = loadBindings(storedBindings());
+let keyboardLayout: KeyboardLayout | undefined;
+let gameCodes = new Set<string>();
 let lobbyState: LobbyMessage | null = null;
 let shouldAutoJoin = false;
 let joined = false;
 let tabHeld = false;
-let hostMenuOpen = false;
-let hostPending:
-  | { action: "regenerate" }
-  | { action: "resetScores" }
-  | { action: "kickSelect" }
-  | { action: "kick"; playerId: string; name: string }
-  | { action: "settings"; draft: GameSettings; index: number }
-  | null = null;
+let menuOpen = false;
+let menuPending: MenuPending = null;
 let debugVisible = false;
 let cannonFirePending = false;
 let torpedoFirePending = false;
@@ -202,6 +230,8 @@ function handleMessage(message: ServerMessage): void {
     pendingInputs = [];
     snapshots = [];
     predictedOwn = null;
+    menuOpen = false;
+    menuPending = null;
     addFeed("Connected to the battle");
   } else if (message.type === "world") {
     throttleLevel = 0;
@@ -254,8 +284,8 @@ function showKickedMessage(): void {
   tabHeld = false;
   cannonFirePending = false;
   torpedoFirePending = false;
-  hostMenuOpen = false;
-  hostPending = null;
+  menuOpen = false;
+  menuPending = null;
   errorBox.textContent = "You were removed from the battle by the host.";
   lobby.hidden = false;
 }
@@ -309,20 +339,16 @@ form.addEventListener("submit", (event) => {
   sendJoin();
 });
 
-const bindingToKey: Record<string, number> = {
-  KeyA: INPUT_KEYS.turnLeft,
-  KeyD: INPUT_KEYS.turnRight,
-  ArrowLeft: INPUT_KEYS.cannonLeft,
-  ArrowRight: INPUT_KEYS.cannonRight,
-  ArrowUp: INPUT_KEYS.rangeUp,
-  ArrowDown: INPUT_KEYS.rangeDown,
-  BracketLeft: INPUT_KEYS.torpedoLeft,
-  BracketRight: INPUT_KEYS.torpedoRight,
+const inputBitsByAction: Partial<Record<ControlAction, number>> = {
+  hullLeft: INPUT_KEYS.turnLeft,
+  hullRight: INPUT_KEYS.turnRight,
+  cannonLeft: INPUT_KEYS.cannonLeft,
+  cannonRight: INPUT_KEYS.cannonRight,
+  rangeUp: INPUT_KEYS.rangeUp,
+  rangeDown: INPUT_KEYS.rangeDown,
+  torpedoLeft: INPUT_KEYS.torpedoLeft,
+  torpedoRight: INPUT_KEYS.torpedoRight,
 };
-const gameCodes = new Set([
-  ...Object.keys(bindingToKey),
-  "KeyW", "KeyS", "ShiftRight", "Backslash", "IntlBackslash", "Tab", "Escape", "F3",
-]);
 
 const settingsRows: Array<{ key: keyof GameSettings; label: string }> = [
   { key: "boatSpeedPct", label: "Boat speed" },
@@ -336,11 +362,82 @@ const settingsRows: Array<{ key: keyof GameSettings; label: string }> = [
   { key: "landCoveragePct", label: "Land coverage" },
 ];
 
+function isOwnHost(snapshot: Snapshot | null = latestSnapshot): boolean {
+  return Boolean(snapshot?.players.find((player) => player.playerId === ownId)?.host);
+}
+
+function rebuildGameCodes(): void {
+  gameCodes = new Set([
+    ...CONTROL_ACTIONS.flatMap(({ action }) => bindings[action]),
+    ...RESERVED_CODES,
+  ]);
+}
+
+function renderLobbyControlsHelp(): void {
+  const label = (action: ControlAction) => bindingLabel(bindings[action], keyboardLayout);
+  lobbyFooter.textContent = `${label("throttleUp")} / ${label("throttleDown")} throttle · ${label("hullLeft")} / ${label("hullRight")} steer · ${label("fireCannon")} fire · ${label("fireTorpedo")} torpedoes · Esc menu`;
+}
+
+function applyBindings(next: Bindings, persist = true): void {
+  bindings = next;
+  pressed.clear();
+  cannonFirePending = false;
+  torpedoFirePending = false;
+  rebuildGameCodes();
+  if (persist) {
+    try {
+      localStorage.setItem(BINDINGS_STORAGE_KEY, serializeBindings(bindings));
+    } catch {
+      // Keep the session's binding even if browser storage is unavailable.
+    }
+  }
+  renderLobbyControlsHelp();
+}
+
+async function refreshKeyboardLayout(): Promise<void> {
+  const keyboard = (navigator as Navigator & {
+    keyboard?: { getLayoutMap?: () => Promise<KeyboardLayout> };
+  }).keyboard;
+  if (!keyboard?.getLayoutMap) return;
+  try {
+    keyboardLayout = await keyboard.getLayoutMap();
+    renderLobbyControlsHelp();
+  } catch {
+    keyboardLayout = undefined;
+    renderLobbyControlsHelp();
+  }
+}
+
+rebuildGameCodes();
+renderLobbyControlsHelp();
+void refreshKeyboardLayout();
+
 window.addEventListener("keydown", (event) => {
   const target = event.target;
   const isTyping = target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement;
-  if (gameCodes.has(event.code) && !isTyping && joined) event.preventDefault();
-  if (!joined || isTyping || !gameCodes.has(event.code)) return;
+  if (!joined || isTyping) return;
+  const capturePending = menuOpen && menuPending?.action === "controls" && menuPending.capturing
+    ? menuPending
+    : null;
+  if (capturePending) {
+    event.preventDefault();
+    event.stopImmediatePropagation();
+    if (event.repeat) return;
+    if (event.code === "Escape") {
+      menuPending = { ...capturePending, capturing: false, hint: "" };
+      return;
+    }
+    if (RESERVED_CODES.has(event.code)) {
+      menuPending = { ...capturePending, hint: "Esc, Tab and F3 can't be assigned" };
+      return;
+    }
+    const row = CONTROL_ACTIONS[capturePending.index];
+    if (!row) return;
+    applyBindings(assignBinding(bindings, row.action, event.code));
+    menuPending = { ...capturePending, capturing: false, hint: "" };
+    return;
+  }
+  if (gameCodes.has(event.code)) event.preventDefault();
   if (event.code === "F3" && !event.repeat) {
     debugVisible = !debugVisible;
     return;
@@ -350,37 +447,39 @@ window.addEventListener("keydown", (event) => {
     return;
   }
   if (event.code === "Escape" && !event.repeat) {
-    if (hostPending) {
-      hostPending = null;
+    if (menuPending) {
+      menuPending = null;
       return;
     }
-    if (latestSnapshot?.players.find((player) => player.playerId === ownId)?.host) {
-      hostMenuOpen = !hostMenuOpen;
-      if (!hostMenuOpen) hostPending = null;
+    menuOpen = !menuOpen;
+    if (menuOpen) {
+      pressed.clear();
+      cannonFirePending = false;
+      torpedoFirePending = false;
     }
     return;
   }
-  if (
-    hostMenuOpen
-    && (event.code === "KeyW" || event.code === "KeyS" || event.code === "ShiftRight"
-      || event.code === "Backslash" || event.code === "IntlBackslash" || bindingToKey[event.code] !== undefined)
-  ) return;
+  if (!gameCodes.has(event.code) || menuOpen) return;
   if (event.repeat) return;
-  if (event.code === "KeyW") {
+  const action = actionForCode(bindings, event.code);
+  if (action === "throttleUp") {
     throttleLevel = Math.min(3, throttleLevel + 1);
     return;
   }
-  if (event.code === "KeyS") {
+  if (action === "throttleDown") {
     throttleLevel = Math.max(-1, throttleLevel - 1);
     return;
   }
-  if (event.code === "ShiftRight") cannonFirePending = true;
-  if (event.code === "Backslash" || event.code === "IntlBackslash") torpedoFirePending = true;
+  if (action === "fireCannon") cannonFirePending = true;
+  if (action === "fireTorpedo") torpedoFirePending = true;
   pressed.add(event.code);
 });
 
 window.addEventListener("keyup", (event) => {
-  if (gameCodes.has(event.code) && joined) event.preventDefault();
+  const target = event.target;
+  const isTyping = target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement;
+  const isCapturing = menuOpen && menuPending?.action === "controls" && menuPending.capturing;
+  if (joined && !isTyping && (gameCodes.has(event.code) || isCapturing)) event.preventDefault();
   pressed.delete(event.code);
   if (event.code === "Tab") tabHeld = false;
 });
@@ -403,6 +502,7 @@ document.addEventListener("visibilitychange", () => {
 
 function onSnapshot(snapshot: Snapshot): void {
   latestSnapshot = snapshot;
+  if (!isOwnHost() && menuPending && menuPending.action !== "controls") menuPending = null;
   const receivedAt = performance.now();
   serverTimeOffset = snapshot.serverTime - receivedAt / 1000;
   hasServerTimeOffset = true;
@@ -435,13 +535,18 @@ function onSnapshot(snapshot: Snapshot): void {
 
 function nextInput(): FrigateInput {
   let keys = 0;
-  for (const [code, bit] of Object.entries(bindingToKey)) if (pressed.has(code)) keys |= bit;
+  if (!menuOpen) {
+    for (const { action } of CONTROL_ACTIONS) {
+      const bit = inputBitsByAction[action];
+      if (bit !== undefined && bindings[action].some((code) => pressed.has(code))) keys |= bit;
+    }
+  }
   return {
     seq: ++sequence,
     keys,
     throttle: throttleLevel,
-    fireCannon: cannonFirePending,
-    fireTorpedo: torpedoFirePending,
+    fireCannon: !menuOpen && cannonFirePending,
+    fireTorpedo: !menuOpen && torpedoFirePending,
   };
 }
 
@@ -1371,7 +1476,7 @@ function drawHud(snapshot: Snapshot, frigate: Frigate | undefined, now: number, 
     ctx.fillText(`RESPAWNING IN ${countdown.toFixed(1)}s`, logicalWidth / 2, logicalHeight / 2 + 22);
   }
   if (tabHeld) drawFullScoreboard(snapshot, logicalWidth, logicalHeight);
-  if (hostMenuOpen) drawHostMenu(snapshot, logicalWidth, logicalHeight);
+  if (menuOpen) drawMenu(snapshot, logicalWidth, logicalHeight);
   if (debugVisible) {
     ctx.fillStyle = "rgba(4, 14, 21, .78)";
     ctx.fillRect(20, logicalHeight - 148, 190, 52);
@@ -1419,36 +1524,71 @@ function drawFullScoreboard(snapshot: Snapshot, width: number, height: number): 
   }
 }
 
-function drawHostMenu(snapshot: Snapshot, width: number, height: number): void {
-  const host = snapshot.players.find((player) => player.playerId === ownId)?.host;
-  if (!host) {
-    hostMenuOpen = false;
-    hostPending = null;
-    return;
-  }
+function drawMenu(snapshot: Snapshot, width: number, height: number): void {
+  const host = snapshot.players.find((player) => player.playerId === ownId)?.host ?? false;
+  if (!host && menuPending && menuPending.action !== "controls") menuPending = null;
+  const controlsPending = menuPending?.action === "controls" ? menuPending : null;
   const left = width / 2 - 184;
   const centerY = height / 2;
+  const panelWidth = controlsPending ? 520 : 440;
+  const panelHeight = controlsPending ? 560 : 350;
   ctx.fillStyle = "rgba(3, 13, 20, .88)";
-  ctx.fillRect(width / 2 - 220, height / 2 - 175, 440, 350);
+  ctx.fillRect(width / 2 - panelWidth / 2, height / 2 - panelHeight / 2, panelWidth, panelHeight);
   ctx.fillStyle = "#eff8f6";
   ctx.font = "800 20px Manrope, sans-serif";
   ctx.textAlign = "left";
-  ctx.fillText("HOST CONTROL", left, centerY - 142);
+  ctx.fillText(controlsPending ? "PLAYER CONTROLS" : host ? "HOST CONTROL" : "MENU", left, centerY - (controlsPending ? 242 : 142));
   ctx.fillStyle = "#9bb4bb";
   ctx.font = "12px Manrope, sans-serif";
-  const landCoverageChanged = hostPending?.action === "settings"
-    && hostPending.draft.landCoveragePct !== gameSettings.landCoveragePct;
+  if (controlsPending) {
+    const selected = CONTROL_ACTIONS[controlsPending.index];
+    const hint = controlsPending.capturing
+      ? controlsPending.hint || `Press a key for ${selected?.label ?? "action"}… Esc cancels`
+      : controlsPending.hint || "Choose a row to change its binding.";
+    ctx.fillText(hint, width / 2 - 236, centerY - 212);
+    CONTROL_ACTIONS.forEach(({ action, label }, index) => {
+      const y = centerY - 174 + index * 24;
+      const selectedRow = index === controlsPending.index;
+      const changed = bindings[action].length !== DEFAULT_BINDINGS[action].length
+        || bindings[action].some((code, codeIndex) => code !== DEFAULT_BINDINGS[action][codeIndex]);
+      if (selectedRow) {
+        ctx.fillStyle = "rgba(107, 224, 207, .14)";
+        ctx.fillRect(width / 2 - 236, y - 17, 472, 22);
+      }
+      ctx.fillStyle = selectedRow ? "#6be0cf" : "#d7e5e9";
+      ctx.font = "600 12px Manrope, sans-serif";
+      ctx.fillText(`${selectedRow ? "▸" : " "}  ${label}`, width / 2 - 228, y);
+      ctx.textAlign = "right";
+      ctx.fillStyle = changed ? "#e4ad80" : "#d7e5e9";
+      ctx.font = "500 12px DM Mono, monospace";
+      const value = controlsPending.capturing && selectedRow
+        ? "…"
+        : bindingLabel(bindings[action], keyboardLayout);
+      ctx.fillText(value, width / 2 + 228, y);
+      ctx.textAlign = "left";
+    });
+    ctx.fillStyle = "#8ea9b0";
+    ctx.font = "10px DM Mono, monospace";
+    ctx.textAlign = "center";
+    ctx.fillText("↑↓ select · Enter change · D defaults · Esc back", width / 2, centerY + 256);
+    ctx.textAlign = "left";
+    return;
+  }
+  const landCoverageChanged = menuPending?.action === "settings"
+    && menuPending.draft.landCoveragePct !== gameSettings.landCoveragePct;
   ctx.fillText(
     landCoverageChanged
       ? "Enter: apply + new map"
-      : hostPending?.action === "settings"
+      : menuPending?.action === "settings"
         ? "Adjust values for this battle."
-        : "Actions are shared with every captain.",
+        : host
+          ? "Host actions · Controls for every captain."
+          : "Configure your controls or return to battle.",
     left,
     centerY - 112,
   );
-  if (hostPending?.action === "settings") {
-    const pending = hostPending;
+  if (menuPending?.action === "settings") {
+    const pending = menuPending;
     settingsRows.forEach((row, index) => {
       const y = centerY - 72 + index * 23;
       const selected = index === pending.index;
@@ -1470,7 +1610,7 @@ function drawHostMenu(snapshot: Snapshot, width: number, height: number): void {
       );
       ctx.textAlign = "left";
     });
-  } else if (hostPending?.action === "kickSelect") {
+  } else if (menuPending?.action === "kickSelect") {
     ctx.fillStyle = "#e4ad80";
     ctx.fillText("Select a player to kick:", left, centerY - 65);
     snapshot.players
@@ -1479,15 +1619,15 @@ function drawHostMenu(snapshot: Snapshot, width: number, height: number): void {
       .forEach((player, index) => {
         ctx.fillText(`${index + 1}  ${player.name}`, left, centerY - 35 + index * 24);
       });
-  } else if (hostPending) {
-    ctx.fillStyle = hostPending.action === "kick" ? "#e4ad80" : "#6be0cf";
-    const question = hostPending.action === "regenerate"
+  } else if (menuPending) {
+    ctx.fillStyle = menuPending.action === "kick" ? "#e4ad80" : "#6be0cf";
+    const question = menuPending.action === "regenerate"
       ? "Regenerate the world? All frigates respawn; scores are kept."
-      : hostPending.action === "resetScores"
+      : menuPending.action === "resetScores"
         ? "Reset all scores and sunk counts?"
-        : `Kick ${hostPending.name}?`;
+        : menuPending.action === "kick" ? `Kick ${menuPending.name}?` : "";
     ctx.fillText(question, left, centerY - 65);
-  } else {
+  } else if (host) {
     ctx.fillStyle = "#6be0cf";
     ctx.fillText("R  Regenerate world", left, centerY - 65);
     ctx.fillText("X  Reset scores", left, centerY - 35);
@@ -1495,16 +1635,22 @@ function drawHostMenu(snapshot: Snapshot, width: number, height: number): void {
     ctx.fillText("K  Kick player", left, centerY - 5);
     ctx.fillStyle = "#6be0cf";
     ctx.fillText("S  Settings", left, centerY + 25);
+    ctx.fillText("C  Controls", left, centerY + 55);
+  } else {
+    ctx.fillStyle = "#6be0cf";
+    ctx.fillText("C  Controls", left, centerY - 65);
   }
   ctx.fillStyle = "#8ea9b0";
   ctx.font = "10px DM Mono, monospace";
-  const footer = hostPending?.action === "settings"
+  const footer = menuPending?.action === "settings"
     ? "↑↓ SELECT · ←→ CHANGE · D DEFAULTS · ENTER APPLY · ESC BACK"
-    : hostPending?.action === "kickSelect"
+    : menuPending?.action === "kickSelect"
       ? "ESC BACK"
-      : hostPending
+      : menuPending
         ? "ENTER CONFIRM · ESC CANCEL"
-        : "ESC TO CLOSE";
+        : host
+          ? "C CONTROLS · ESC TO CLOSE"
+          : "C controls · Esc close";
   ctx.textAlign = "center";
   ctx.fillText(footer, width / 2, centerY + 140);
   ctx.textAlign = "left";
@@ -1527,9 +1673,34 @@ function sendHost(
 }
 
 window.addEventListener("keydown", (event) => {
-  if (!joined || event.target instanceof HTMLInputElement) return;
-  if (!hostMenuOpen) return;
-  const settingsPending = hostPending?.action === "settings" ? hostPending : null;
+  const target = event.target;
+  if (!joined || target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement || !menuOpen) return;
+  if (event.code === "Escape") return;
+  if (!isOwnHost() && menuPending && menuPending.action !== "controls") menuPending = null;
+
+  if (menuPending?.action === "controls") {
+    if (menuPending.capturing || event.repeat) return;
+    if (event.code === "ArrowUp" || event.code === "ArrowDown") {
+      event.preventDefault();
+      const direction = event.code === "ArrowUp" ? -1 : 1;
+      menuPending = {
+        ...menuPending,
+        index: (menuPending.index + direction + CONTROL_ACTIONS.length) % CONTROL_ACTIONS.length,
+        hint: "",
+      };
+    } else if (event.code === "Enter" || event.code === "NumpadEnter") {
+      event.preventDefault();
+      void refreshKeyboardLayout();
+      menuPending = { ...menuPending, capturing: true, hint: "" };
+    } else if (event.code === "KeyD") {
+      event.preventDefault();
+      applyBindings(loadBindings(serializeBindings(DEFAULT_BINDINGS)));
+      menuPending = { ...menuPending, hint: "" };
+    }
+    return;
+  }
+
+  const settingsPending = menuPending?.action === "settings" ? menuPending : null;
   const isSettingsArrow = event.code === "ArrowUp" || event.code === "ArrowDown"
     || event.code === "ArrowLeft" || event.code === "ArrowRight";
   if (settingsPending && isSettingsArrow) {
@@ -1537,7 +1708,7 @@ window.addEventListener("keydown", (event) => {
     if ((event.code === "ArrowUp" || event.code === "ArrowDown") && event.repeat) return;
     const direction = event.code === "ArrowUp" || event.code === "ArrowLeft" ? -1 : 1;
     if (event.code === "ArrowUp" || event.code === "ArrowDown") {
-      hostPending = {
+      menuPending = {
         ...settingsPending,
         index: Math.max(0, Math.min(settingsRows.length - 1, settingsPending.index + direction)),
       };
@@ -1549,49 +1720,58 @@ window.addEventListener("keydown", (event) => {
     const currentSteps = Math.round((settingsPending.draft[row.key] - limits.min) / limits.step);
     const totalSteps = Math.round((limits.max - limits.min) / limits.step);
     const value = Number((limits.min + Math.max(0, Math.min(totalSteps, currentSteps + direction)) * limits.step).toFixed(6));
-    hostPending = { ...settingsPending, draft: { ...settingsPending.draft, [row.key]: value } };
+    menuPending = { ...settingsPending, draft: { ...settingsPending.draft, [row.key]: value } };
     return;
   }
+
   if (event.repeat) return;
   const digit = /^(?:Digit|Numpad)([1-3])$/.exec(event.code);
   const isEnter = event.code === "Enter" || event.code === "NumpadEnter";
   if (isEnter || digit || (settingsPending && event.code === "KeyD")) event.preventDefault();
   if (settingsPending) {
     if (event.code === "KeyD") {
-      hostPending = { ...settingsPending, draft: { ...DEFAULT_SETTINGS } };
+      menuPending = { ...settingsPending, draft: { ...DEFAULT_SETTINGS } };
       return;
     }
     if (isEnter) {
       sendHost("settings", { ...settingsPending.draft });
-      hostPending = null;
-      hostMenuOpen = false;
+      menuPending = null;
+      menuOpen = false;
     }
     return;
   }
-  if (hostPending) {
-    if (hostPending.action === "kickSelect" && digit && latestSnapshot) {
-      const target = latestSnapshot.players
+  if (menuPending) {
+    if (menuPending.action === "kickSelect" && digit && latestSnapshot) {
+      const targetPlayer = latestSnapshot.players
         .filter((player) => player.playerId !== ownId)
         .sort((a, b) => a.slot - b.slot)[Number(digit[1]) - 1];
-      if (target) hostPending = { action: "kick", playerId: target.playerId, name: target.name };
+      if (targetPlayer) menuPending = { action: "kick", playerId: targetPlayer.playerId, name: targetPlayer.name };
       return;
     }
-    if (hostPending.action !== "kickSelect" && isEnter) {
-      if (hostPending.action === "kick") sendHost("kick", hostPending.playerId);
-      else if (hostPending.action === "regenerate" || hostPending.action === "resetScores") sendHost(hostPending.action);
-      hostPending = null;
-      hostMenuOpen = false;
+    if (menuPending.action !== "kickSelect" && isEnter) {
+      if (menuPending.action === "kick") sendHost("kick", menuPending.playerId);
+      else if (menuPending.action === "regenerate" || menuPending.action === "resetScores") sendHost(menuPending.action);
+      menuPending = null;
+      menuOpen = false;
     }
     return;
   }
+
+  if (event.code === "KeyC") {
+    event.preventDefault();
+    void refreshKeyboardLayout();
+    menuPending = { action: "controls", index: 0, capturing: false, hint: "" };
+    return;
+  }
+  if (!isOwnHost()) return;
   if (event.code === "KeyS") {
     for (const code of ["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight"]) pressed.delete(code);
-    hostPending = { action: "settings", draft: { ...gameSettings }, index: 0 };
-  } else if (event.code === "KeyR") hostPending = { action: "regenerate" };
-  else if (event.code === "KeyX") hostPending = { action: "resetScores" };
+    menuPending = { action: "settings", draft: { ...gameSettings }, index: 0 };
+  } else if (event.code === "KeyR") menuPending = { action: "regenerate" };
+  else if (event.code === "KeyX") menuPending = { action: "resetScores" };
   else if (event.code === "KeyK" && latestSnapshot) {
     if (latestSnapshot.players.some((player) => player.playerId !== ownId)) {
-      hostPending = { action: "kickSelect" };
+      menuPending = { action: "kickSelect" };
     }
   }
 });

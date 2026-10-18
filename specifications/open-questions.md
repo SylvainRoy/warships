@@ -94,3 +94,10 @@ All questions raised during the specification phase are resolved. Each line give
 - **Q75 — Terrain contrast:** keep boats, wakes, and the sight legible against the terrain; leave the radar unchanged. Decided 2026-10-17.
 - **Q76 — Mock-up process:** render terrain-style mock-ups before implementing the selected natural style as the real feature. Decided 2026-10-17.
 - **Q77 — Cannon sight on spawn:** start every frigate at the minimum cannon range (100 u), bearing straight ahead, so the player sees the sight immediately. Decided 2026-10-17 after playtest.
+- **Q78 — Key binding storage:** keep player bindings per browser in localStorage under `warships.controls`; no server or protocol changes. Decided 2026-10-17.
+- **Q79 — Remappable actions and defaults:** support throttle up/down, hull left/right, cannon left/right, range +/−, fire cannons, torpedo left/right, and fire torpedoes in that order; fire torpedoes defaults to `Backslash` and `IntlBackslash`. Escape, Tab, and F3 are reserved. Decided 2026-10-17.
+- **Q80 — Shared menu:** Esc opens the menu for every player and C opens Controls; R/X/K/S and their flows remain host-only, and a player losing host status keeps the shared menu while host-only pending actions are dropped. Decided 2026-10-17.
+- **Q81 — Controls navigation and capture:** physical Up/Down select rows, Enter starts capture, the next non-repeat key is assigned and saved immediately, Esc cancels capture or returns to the menu, and D restores defaults outside capture; prevent default while capturing except in an input. Decided 2026-10-17.
+- **Q82 — Binding assignment:** keep one code per action after a change; assigning another action's code swaps the edited action's previous codes to that action, and reserved codes are rejected with a hint. Decided 2026-10-17.
+- **Q83 — Binding labels:** bind by `KeyboardEvent.code`; use the asynchronous keyboard layout map when available and friendly QWERTY names otherwise, keeping arrows and Shift friendly. Decided 2026-10-17.
+- **Q84 — Menu input:** while the menu is open, retain the boat's throttle and ignore every bound game action. Decided 2026-10-17.

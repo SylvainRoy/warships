@@ -11,31 +11,37 @@ The game MUST work on both **Mac and PC** keyboards (Windows/Linux). Implementat
 
 | Action | Code | QWERTY key |
 |---|---|---|
-| Increase throttle one level | `KeyW` | W |
-| Decrease throttle one level | `KeyS` | S |
-| Rotate hull left | `KeyA` | A |
-| Rotate hull right | `KeyD` | D |
-| Cannon bearing left | `ArrowLeft` | ← |
-| Cannon bearing right | `ArrowRight` | → |
-| Cannon range + | `ArrowUp` | ↑ |
-| Cannon range − | `ArrowDown` | ↓ |
+| Throttle up | `KeyW` | W |
+| Throttle down | `KeyS` | S |
+| Hull left | `KeyA` | A |
+| Hull right | `KeyD` | D |
+| Cannon left | `ArrowLeft` | ← |
+| Cannon right | `ArrowRight` | → |
+| Range + | `ArrowUp` | ↑ |
+| Range − | `ArrowDown` | ↓ |
 | Fire cannons | `ShiftRight` | Right Shift |
-| Torpedo bearing left | `BracketLeft` | [ |
-| Torpedo bearing right | `BracketRight` | ] |
-| Fire torpedoes | `Backslash` (or `IntlBackslash`) | \ |
+| Torpedo left | `BracketLeft` | [ |
+| Torpedo right | `BracketRight` | ] |
+| Fire torpedoes | `Backslash` and `IntlBackslash` | \ and ISO \ |
 | Show full scoreboard (hold) | `Tab` | Tab |
-| Host menu | `Escape` | Esc |
+| Menu (all players) | `Escape` | Esc |
+| Toggle debug | `F3` | F3 |
 
 - Holding a fire key does not auto-fire: one press = one salvo.
 - Each non-repeating W press increases throttle by one level; each non-repeating S press decreases it. The five levels are full astern, stop, one-third ahead, two-thirds ahead, and full ahead.
 - Default browser behaviour of these keys (scrolling, focus change) MUST be suppressed while the game has focus.
-- Key remapping: out of scope for v1.
 
 ## Host menu
 
-The host opens the menu with Esc. R requests world regeneration, X requests a score reset, K opens a numbered list of captains to kick, and S opens Settings. Select a kick target with `Digit1`–`Digit3` or `Numpad1`–`Numpad3`. Enter or NumpadEnter confirms a pending action; Esc cancels it or returns from kick selection. Confirmations are shown in-game, not in browser dialogs.
+Every player opens the shared menu with Esc. It is titled HOST CONTROL for the host and MENU for other players. C opens Controls for everyone. The host additionally has R for world regeneration, X for a score reset, K for a numbered list of captains to kick, and S for Settings; these actions remain host-only. Select a kick target with `Digit1`–`Digit3` or `Numpad1`–`Numpad3`. Enter or NumpadEnter confirms a pending action; Esc cancels it or returns from kick selection. Confirmations are shown in-game, not in browser dialogs. If host status is lost while the menu is open, host-only pending actions are dropped while the shared menu and Controls remain usable.
 
 In Settings, the rows are Boat speed, Rotation speed, Cannon rotation, Torpedo rotation, Shell speed, Torpedo speed, Cannon reload, Torpedo reload, and Land coverage. Up/Down selects a row, Left/Right changes its value, D restores defaults, Enter applies the draft, and Esc returns to the host menu. When Land coverage differs from the applied value, the hint says `Enter: apply + new map`; applying it immediately generates a new map while keeping scores.
+
+## Player controls
+
+Each browser stores its own bindings in `localStorage` under `warships.controls`; bindings are client-only and are not sent to the server. Controls lists the 12 actions in the table above. The physical Up/Down arrows select a row regardless of bindings; Enter starts capture, the next non-repeating key is assigned and saved immediately, and Esc cancels capture. Esc outside capture returns to the shared menu. D restores and saves all defaults when not capturing. Escape, Tab, and F3 are reserved and cannot be assigned. Each action has one code after it is changed; assigning a code owned by another action swaps the edited action's previous codes to that action. Fire torpedoes defaults to both `Backslash` and `IntlBackslash` until changed.
+
+Bindings use `KeyboardEvent.code` so they follow physical key positions. When supported, the client reads `navigator.keyboard.getLayoutMap()` at startup and refreshes it when Controls opens, displaying uppercase printed characters; otherwise it uses friendly QWERTY names. Arrows and Shift retain friendly names. While the shared menu is open, the boat keeps its throttle and ignores all bound game actions.
 
 ## In-world indicators
 
