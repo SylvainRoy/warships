@@ -129,7 +129,9 @@ export function drawCaptureProgress(
           frigate.torpedoes / settings.torpedoes,
         );
   const label = repairing
-    ? "Repairing turret"
+    ? repairBase?.turret === "none"
+      ? "Installing turret"
+      : "Repairing turret"
     : capturing
       ? `Capturing ${Math.ceil((1 - progress) * captureTime)} s`
       : "Resupplying";
