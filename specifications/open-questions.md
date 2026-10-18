@@ -169,3 +169,4 @@ All questions raised during the specification phase are resolved. Each line give
 - **Q150 — Contact eligibility and scope:** only alive boats are newly painted; existing blips fade after sinking, waiting, or leaving, while own boat, bases, and land stay unchanged. Decided 2026-10-18.
 - **Q151 — Radar implementation:** keep detection and blip state client-only; snapshots continue to carry all boat positions. Decided 2026-10-18.
 - **Q152 — Radar range per map size:** 3,000 u on Big, 1,500 u on Standard, 750 u on Small (in proportion to the map width); replaces the fixed radar range in Q139. Decided 2026-10-18.
+- **Q153 — Compact scoreboard:** one number (the score) per player, berth order, sunk count only in the Tab scoreboard. Decided 2026-10-18.

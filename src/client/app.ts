@@ -1638,13 +1638,13 @@ function drawHud(snapshot: Snapshot, frigate: Frigate | undefined, now: number, 
     ctx.beginPath();
     ctx.arc(captainsPanelX + 24, y + 5, 4, 0, Math.PI * 2);
     ctx.fill();
-    ctx.fillStyle = own ? "#f0fffa" : "#d7e5e9";
+    const nameColor = own ? "#f0fffa" : "#d7e5e9";
+    ctx.fillStyle = nameColor;
     ctx.font = `${own ? 700 : 500} 12px Manrope, sans-serif`;
     ctx.fillText(`${player.host ? "♛ " : ""}${player.name}`, captainsPanelX + 35, y - 2);
     ctx.textAlign = "right";
-    ctx.fillStyle = "#b7cbd0";
-    ctx.font = "500 11px DM Mono, monospace";
-    ctx.fillText(`${player.score}  ·  ${player.sunk}`, captainsPanelX + 218, y);
+    ctx.fillStyle = nameColor;
+    ctx.fillText(`${player.score}`, captainsPanelX + 218, y - 2);
     ctx.textAlign = "left";
   });
   if (frigate) {
