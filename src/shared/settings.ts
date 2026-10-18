@@ -11,6 +11,10 @@ export interface GameSettings {
   torpedoReload: number;
   landCoveragePct: number;
   neutralBases: number;
+  fuelCrossings: number;
+  shells: number;
+  torpedoes: number;
+  resupplyTime: number;
   captureTime: number;
   repairTime: number;
 }
@@ -26,6 +30,10 @@ export const DEFAULT_SETTINGS: GameSettings = {
   torpedoReload: GAME_CONFIG.torpedo.reload,
   landCoveragePct: GAME_CONFIG.world.generation.targetLandCoverage * 100,
   neutralBases: 4,
+  fuelCrossings: 2,
+  shells: 50,
+  torpedoes: 30,
+  resupplyTime: 5,
   captureTime: 5,
   repairTime: 5,
 };
@@ -41,6 +49,10 @@ export const SETTINGS_LIMITS: Record<keyof GameSettings, { min: number; max: num
   torpedoReload: { min: 1, max: 20, step: 0.5 },
   landCoveragePct: { min: 5, max: 40, step: 5 },
   neutralBases: { min: 0, max: 8, step: 1 },
+  fuelCrossings: { min: 1, max: 10, step: 1 },
+  shells: { min: 10, max: 200, step: 10 },
+  torpedoes: { min: 5, max: 100, step: 5 },
+  resupplyTime: { min: 1, max: 30, step: 1 },
   captureTime: { min: 1, max: 30, step: 1 },
   repairTime: { min: 1, max: 30, step: 1 },
 };
@@ -56,6 +68,10 @@ const SETTINGS_KEYS: readonly (keyof GameSettings)[] = [
   "torpedoReload",
   "landCoveragePct",
   "neutralBases",
+  "fuelCrossings",
+  "shells",
+  "torpedoes",
+  "resupplyTime",
   "captureTime",
   "repairTime",
 ];
@@ -71,6 +87,10 @@ const SETTING_LABELS: Record<keyof GameSettings, string> = {
   torpedoReload: "torpedo reload",
   landCoveragePct: "land coverage",
   neutralBases: "neutral bases",
+  fuelCrossings: "fuel",
+  shells: "shells",
+  torpedoes: "torpedoes",
+  resupplyTime: "resupply time",
   captureTime: "capture time",
   repairTime: "repair time",
 };
@@ -100,10 +120,12 @@ export function sanitizeSettings(value: unknown): GameSettings | null {
 export function describeSettingsChanges(before: GameSettings, after: GameSettings): string[] {
   return SETTINGS_KEYS.flatMap((key) => {
     if (before[key] === after[key]) return [];
-    const value = key === "cannonReload" || key === "torpedoReload" || key === "captureTime" || key === "repairTime"
+    const value = key === "cannonReload" || key === "torpedoReload" || key === "resupplyTime" || key === "captureTime" || key === "repairTime"
       ? `${after[key].toFixed(1).replace(/\.0$/, "")} s`
-      : key === "neutralBases"
+      : key === "neutralBases" || key === "shells" || key === "torpedoes"
         ? `${after[key]}`
+        : key === "fuelCrossings"
+          ? `${after[key]} crossings`
         : `${after[key]}%`;
     return [`${SETTING_LABELS[key]} ${value}`];
   });

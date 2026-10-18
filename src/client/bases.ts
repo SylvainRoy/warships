@@ -1,5 +1,6 @@
 import { GAME_CONFIG } from "../shared/config.js";
 import type { Base } from "../shared/bases.js";
+import type { GameSettings } from "../shared/settings.js";
 
 export function drawBases(
   ctx: CanvasRenderingContext2D,
@@ -105,17 +106,35 @@ export function drawBases(
 
 export function drawCaptureProgress(
   ctx: CanvasRenderingContext2D,
-  frigate: { x: number; y: number },
+  frigate: { x: number; y: number; fuel: number; shells: number; torpedoes: number; resupplying: boolean },
   bases: readonly Base[],
   playerId: string,
   captureTime: number,
   _repairTime: number,
+  settings: Pick<GameSettings, "fuelCrossings" | "shells" | "torpedoes">,
 ): void {
-  const base = bases.find((candidate) => candidate.captureBy === playerId || candidate.repairBy === playerId);
-  if (!base) return;
-  const repairing = base.repairBy === playerId;
-  const progress = repairing ? base.repairProgress : base.captureProgress;
-  const label = repairing ? "Repairing turret" : `Capturing ${Math.ceil((1 - progress) * captureTime)} s`;
+  const repairBase = bases.find((candidate) => candidate.repairBy === playerId);
+  const captureBase = bases.find((candidate) => candidate.captureBy === playerId);
+  const base = repairBase ?? captureBase;
+  const repairing = Boolean(repairBase);
+  const capturing = !repairing && Boolean(captureBase);
+  if (!base && !frigate.resupplying) return;
+  const progress = repairing
+    ? base?.repairProgress ?? 0
+    : capturing
+      ? base?.captureProgress ?? 0
+      : Math.min(
+          frigate.fuel / (settings.fuelCrossings * GAME_CONFIG.world.width),
+          frigate.shells / settings.shells,
+          frigate.torpedoes / settings.torpedoes,
+        );
+  const label = repairing
+    ? "Repairing turret"
+    : capturing
+      ? `Capturing ${Math.ceil((1 - progress) * captureTime)} s`
+      : "Resupplying";
+  const actionColor = repairing ? "#7ee0a1" : capturing ? "#f6d47b" : "#7fd6ff";
+  const labelColor = repairing ? "#d8ffe5" : capturing ? "#fff3c5" : "#d9f4ff";
   const radius = GAME_CONFIG.frigate.length / 2 + 8;
   ctx.save();
   ctx.lineWidth = 2.5;
@@ -123,7 +142,7 @@ export function drawCaptureProgress(
   ctx.beginPath();
   ctx.arc(frigate.x, frigate.y, radius, 0, Math.PI * 2);
   ctx.stroke();
-  ctx.strokeStyle = repairing ? "#7ee0a1" : "#f6d47b";
+  ctx.strokeStyle = actionColor;
   ctx.beginPath();
   ctx.arc(frigate.x, frigate.y, radius, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * progress);
   ctx.stroke();
@@ -133,7 +152,7 @@ export function drawCaptureProgress(
   ctx.lineWidth = 3;
   ctx.strokeStyle = "rgba(3, 13, 20, .9)";
   ctx.strokeText(label, frigate.x, frigate.y + radius + 4);
-  ctx.fillStyle = repairing ? "#d8ffe5" : "#fff3c5";
+  ctx.fillStyle = labelColor;
   ctx.fillText(label, frigate.x, frigate.y + radius + 4);
   ctx.restore();
 }

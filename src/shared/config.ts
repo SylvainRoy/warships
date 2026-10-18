@@ -33,6 +33,7 @@ export const GAME_CONFIG = {
     beam: 10,
     maxForwardSpeed: 48,
     maxReverseSpeed: 15,
+    emptyFuelSpeedFactor: 0.1,
     acceleration: 24,
     rotationSpeed: Math.PI / 5,
     hitCircleRadius: 5,

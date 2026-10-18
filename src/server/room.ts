@@ -8,6 +8,7 @@ import { DEFAULT_SETTINGS, describeSettingsChanges, sanitizeSettings } from "../
 import {
   createGameState,
   createSeededRandom,
+  fuelCapacity,
   regenerateGameWorld,
   spawnPlayerFrigate,
   stepGame,
@@ -267,6 +268,11 @@ export class Room {
       const coverageChanged = this.game.settings.landCoveragePct !== settings.landCoveragePct;
       const neutralBasesChanged = this.game.settings.neutralBases !== settings.neutralBases;
       this.game.settings = settings;
+      for (const frigate of Object.values(this.game.frigates)) {
+        frigate.fuel = Math.min(frigate.fuel, fuelCapacity(settings));
+        frigate.shells = Math.min(frigate.shells, settings.shells);
+        frigate.torpedoes = Math.min(frigate.torpedoes, settings.torpedoes);
+      }
       for (const player of this.sessions.values()) {
         if (player.socket) this.send(player.socket, { type: "settings", settings: { ...settings } });
       }
@@ -389,7 +395,12 @@ export class Room {
       if (!session.socket) continue;
       const frigates: SnapshotFrigate[] = Object.values(this.game.frigates).map((frigate) =>
         frigate.playerId === session.id
-          ? frigate
+          ? {
+              ...frigate,
+              fuel: Number(frigate.fuel.toFixed(1)),
+              shells: Number(frigate.shells.toFixed(2)),
+              torpedoes: Number(frigate.torpedoes.toFixed(2)),
+            }
           : {
               playerId: frigate.playerId,
               name: frigate.name,

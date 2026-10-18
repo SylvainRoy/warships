@@ -34,6 +34,11 @@ export interface Frigate {
   y: number;
   heading: number;
   speed: number;
+  fuel: number;
+  shells: number;
+  torpedoes: number;
+  throttle: number;
+  resupplying: boolean;
   hp: number;
   status: FrigateStatus;
   sinkingStartedAt: number;
@@ -195,18 +200,21 @@ export function applyFrigateInput(
   );
 
   const level = Math.max(-1, Math.min(3, Math.round(input.throttle) || 0));
+  frigate.throttle = level;
   const speedScale = settings.boatSpeedPct / 100;
   const maxForwardSpeed = GAME_CONFIG.frigate.maxForwardSpeed * speedScale;
   const maxReverseSpeed = GAME_CONFIG.frigate.maxReverseSpeed * speedScale;
+  const emptyFuelSpeedFactor = frigate.fuel <= 0 ? GAME_CONFIG.frigate.emptyFuelSpeedFactor : 1;
   const targetSpeed = level < 0
-    ? -maxReverseSpeed
-    : maxForwardSpeed * level / 3;
+    ? -maxReverseSpeed * emptyFuelSpeedFactor
+    : maxForwardSpeed * emptyFuelSpeedFactor * level / 3;
   const speedChange = GAME_CONFIG.frigate.acceleration * speedScale * dt;
   const speedDifference = targetSpeed - frigate.speed;
   const tolerance = Number.EPSILON * maxForwardSpeed * 2;
   frigate.speed = Math.abs(speedDifference) <= speedChange + tolerance
     ? targetSpeed
     : frigate.speed + Math.sign(speedDifference) * speedChange;
+  frigate.fuel = Math.max(0, frigate.fuel - Math.abs(frigate.speed) * dt);
 
   const vx = Math.cos(frigate.heading) * frigate.speed;
   const vy = Math.sin(frigate.heading) * frigate.speed;
@@ -257,14 +265,27 @@ export function createFrigate(
   y: number,
   heading: number,
   now: number,
+  settings: GameSettings = DEFAULT_SETTINGS,
 ): Frigate {
   return {
     playerId, name, slot, x, y, heading, speed: 0, hp: GAME_CONFIG.player.maxHp, status: "alive",
+    fuel: fuelCapacity(settings), shells: settings.shells, torpedoes: settings.torpedoes, throttle: 0, resupplying: false,
     sinkingStartedAt: 0, respawnAt: 0, spawnProtectedUntil: now + GAME_CONFIG.player.spawnProtection,
     cannonBearing: 0, cannonRange: GAME_CONFIG.cannon.minRange, cannonReadyAt: 0,
     torpedoBearing: 0, torpedoReadyAt: 0, landContact: false, lastLandDamageAt: now,
     lastFireCannon: false, lastFireTorpedo: false, lastDamageSource: null,
   };
+}
+
+export function fuelCapacity(settings: GameSettings): number {
+  return settings.fuelCrossings * GAME_CONFIG.world.width;
+}
+
+export function refillSupplies(frigate: Frigate, settings: GameSettings): void {
+  frigate.fuel = fuelCapacity(settings);
+  frigate.shells = settings.shells;
+  frigate.torpedoes = settings.torpedoes;
+  frigate.resupplying = false;
 }
 
 export function spawnFrigate(
@@ -276,6 +297,7 @@ export function spawnFrigate(
   random: () => number,
   now: number,
   attempts: number = GAME_CONFIG.player.spawnAttempts,
+  settings: GameSettings = DEFAULT_SETTINGS,
 ): Frigate {
   let best: { x: number; y: number; nearest: number } | undefined;
   const validPoint = (x: number, y: number) => hasSpawnClearance(world, x, y);
@@ -289,7 +311,7 @@ export function spawnFrigate(
       nearest = Math.min(nearest, Math.hypot(other.x - x, other.y - y));
     }
     if (nearest >= GAME_CONFIG.player.spawnDistance) {
-      return createFrigate(playerId, name, slot, x, y, random() * Math.PI * 2, now);
+      return createFrigate(playerId, name, slot, x, y, random() * Math.PI * 2, now, settings);
     }
     if (!best || nearest > best.nearest) best = { x, y, nearest };
   }
@@ -304,11 +326,18 @@ export function spawnFrigate(
     }
   }
   if (!best) throw new Error("World has no valid spawn point");
-  return createFrigate(playerId, name, slot, best.x, best.y, random() * Math.PI * 2, now);
+  return createFrigate(playerId, name, slot, best.x, best.y, random() * Math.PI * 2, now, settings);
 }
 
-export function spawnAtBase(playerId: string, name: string, slot: number, base: BaseSite, now: number): Frigate {
-  return createFrigate(playerId, name, slot, base.harbourX, base.harbourY, base.facing, now);
+export function spawnAtBase(
+  playerId: string,
+  name: string,
+  slot: number,
+  base: BaseSite,
+  now: number,
+  settings: GameSettings = DEFAULT_SETTINGS,
+): Frigate {
+  return createFrigate(playerId, name, slot, base.harbourX, base.harbourY, base.facing, now, settings);
 }
 
 export function spawnPlayerFrigate(
@@ -325,8 +354,18 @@ export function spawnPlayerFrigate(
   );
   const owned = home ?? state.bases.find((base) => base.ownerId === playerId);
   return owned
-    ? spawnAtBase(playerId, name, slot, owned, now)
-    : spawnFrigate(playerId, name, slot, state.world, others, random, now);
+    ? spawnAtBase(playerId, name, slot, owned, now, state.settings)
+    : spawnFrigate(
+        playerId,
+        name,
+        slot,
+        state.world,
+        others,
+        random,
+        now,
+        GAME_CONFIG.player.spawnAttempts,
+        state.settings,
+      );
 }
 
 export function createGameState(world: World, sites: readonly BaseSite[] = []): GameState {
@@ -530,6 +569,32 @@ export function stepBases(
       message: `${name} ${action} a turret`,
     });
   }
+  for (const frigate of Object.values(state.frigates)) {
+    const canResupply = frigate.status === "alive"
+      && frigate.throttle === 0
+      && state.bases.some((base) =>
+        base.active && base.ownerId === frigate.playerId && hullInsideHarbour(frigate, base),
+      );
+    if (!canResupply) {
+      frigate.resupplying = false;
+      continue;
+    }
+    const maxFuel = fuelCapacity(state.settings);
+    const hasSuppliesMissing = frigate.fuel < maxFuel
+      || frigate.shells < state.settings.shells
+      || frigate.torpedoes < state.settings.torpedoes;
+    if (!hasSuppliesMissing) {
+      frigate.resupplying = false;
+      continue;
+    }
+    const fractionPerSecond = dt / state.settings.resupplyTime;
+    frigate.fuel = Math.min(maxFuel, frigate.fuel + maxFuel * fractionPerSecond);
+    frigate.shells = Math.min(state.settings.shells, frigate.shells + state.settings.shells * fractionPerSecond);
+    frigate.torpedoes = Math.min(state.settings.torpedoes, frigate.torpedoes + state.settings.torpedoes * fractionPerSecond);
+    frigate.resupplying = frigate.fuel < maxFuel
+      || frigate.shells < state.settings.shells
+      || frigate.torpedoes < state.settings.torpedoes;
+  }
 }
 
 function emitExplosion(state: GameState, x: number, y: number, kind: ExplosionKind): void {
@@ -690,13 +755,15 @@ export function stepGame(state: GameState, inputs: Record<string, FrigateInput |
       if (frigate.hp <= 0) sinkFrigate(state, frigate, frigate.playerId, now);
       const cannonEdge = input.fireCannon && !frigate.lastFireCannon;
       const torpedoEdge = input.fireTorpedo && !frigate.lastFireTorpedo;
-      if (cannonEdge && now >= frigate.cannonReadyAt) {
+      if (cannonEdge && now >= frigate.cannonReadyAt && frigate.shells >= 1) {
         fireCannon(state, frigate, now, state.settings);
+        frigate.shells -= 1;
         frigate.spawnProtectedUntil = now;
         firedPlayers.add(frigate.playerId);
       }
-      if (torpedoEdge && now >= frigate.torpedoReadyAt) {
+      if (torpedoEdge && now >= frigate.torpedoReadyAt && frigate.torpedoes >= 1) {
         fireTorpedoes(state, frigate, now, state.settings);
+        frigate.torpedoes -= 1;
         frigate.spawnProtectedUntil = now;
         firedPlayers.add(frigate.playerId);
       }
@@ -830,8 +897,18 @@ export function regenerateGameWorld(
   for (const frigate of frigates) {
     const home = state.bases.find((base) => base.kind === "home" && base.homeSlot === frigate.slot - 1);
     const fresh = home
-      ? spawnAtBase(frigate.playerId, frigate.name, frigate.slot, home, now)
-      : spawnFrigate(frigate.playerId, frigate.name, frigate.slot, state.world, respawned, random, now);
+      ? spawnAtBase(frigate.playerId, frigate.name, frigate.slot, home, now, state.settings)
+      : spawnFrigate(
+          frigate.playerId,
+          frigate.name,
+          frigate.slot,
+          state.world,
+          respawned,
+          random,
+          now,
+          GAME_CONFIG.player.spawnAttempts,
+          state.settings,
+        );
     const score = state.scores[frigate.playerId];
     const host = score?.host ?? false;
     const connected = score?.connected ?? true;

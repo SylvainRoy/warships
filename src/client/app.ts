@@ -377,6 +377,10 @@ const settingsRows: Array<{ key: keyof GameSettings; label: string }> = [
   { key: "torpedoReload", label: "Torpedo reload" },
   { key: "landCoveragePct", label: "Land coverage" },
   { key: "neutralBases", label: "Neutral bases" },
+  { key: "fuelCrossings", label: "Fuel" },
+  { key: "shells", label: "Shells" },
+  { key: "torpedoes", label: "Torpedoes" },
+  { key: "resupplyTime", label: "Resupply time" },
   { key: "captureTime", label: "Capture time" },
   { key: "repairTime", label: "Repair time" },
 ];
@@ -1459,7 +1463,8 @@ function drawHud(snapshot: Snapshot, frigate: Frigate | undefined, now: number, 
   const captainsPanelX = logicalWidth - hudMargin - 230;
   const captainsPanelY = hudMargin;
   const hullPanelX = hudMargin;
-  const hullPanelY = logicalHeight - hudMargin - 110;
+  const hullPanelHeight = 152;
+  const hullPanelY = logicalHeight - hudMargin - hullPanelHeight;
   const hullPanelWidth = 380;
   const hullBarWidth = hullPanelWidth - 28;
   ctx.save();
@@ -1492,7 +1497,7 @@ function drawHud(snapshot: Snapshot, frigate: Frigate | undefined, now: number, 
   });
   if (frigate) {
     ctx.fillStyle = "rgba(5, 20, 29, .78)";
-    ctx.fillRect(hullPanelX, hullPanelY, hullPanelWidth, 110);
+    ctx.fillRect(hullPanelX, hullPanelY, hullPanelWidth, hullPanelHeight);
     ctx.fillStyle = "#90a8b0";
     ctx.font = "500 10px DM Mono, monospace";
     ctx.fillText("HULL INTEGRITY", hullPanelX + 14, hullPanelY + 14);
@@ -1533,6 +1538,37 @@ function drawHud(snapshot: Snapshot, frigate: Frigate | undefined, now: number, 
     ctx.font = "600 11px DM Mono, monospace";
     ctx.fillText(throttleLabels[activeStep] ?? "STOP", hullPanelX + 14, hullPanelY + 94);
     ctx.textBaseline = "top";
+    const fuelCapacity = gameSettings.fuelCrossings * GAME_CONFIG.world.width;
+    const fuelFraction = Math.max(0, Math.min(1, frigate.fuel / fuelCapacity));
+    const fuelColor = frigate.fuel <= 0
+      ? "#ff776c"
+      : fuelFraction < 0.2
+        ? "#ffb347"
+        : "#62d3b2";
+    const shellsColor = frigate.shells < 1
+      ? "#ff776c"
+      : frigate.shells / gameSettings.shells < 0.2
+        ? "#ffb347"
+        : "#62d3b2";
+    const torpedoesColor = frigate.torpedoes < 1
+      ? "#ff776c"
+      : frigate.torpedoes / gameSettings.torpedoes < 0.2
+        ? "#ffb347"
+        : "#62d3b2";
+    ctx.fillStyle = "#90a8b0";
+    ctx.font = "500 10px DM Mono, monospace";
+    ctx.fillText("FUEL", hullPanelX + 14, hullPanelY + 109);
+    ctx.fillStyle = "rgba(215, 237, 238, .17)";
+    ctx.fillRect(hullPanelX + 52, hullPanelY + 111, 160, 7);
+    ctx.fillStyle = fuelColor;
+    ctx.fillRect(hullPanelX + 52, hullPanelY + 111, 160 * fuelFraction, 7);
+    ctx.fillStyle = fuelColor;
+    ctx.fillText(`${Math.floor(fuelFraction * 100)}%`, hullPanelX + 224, hullPanelY + 109);
+    ctx.font = "600 10px DM Mono, monospace";
+    ctx.fillStyle = shellsColor;
+    ctx.fillText(`SHELLS ${Math.floor(frigate.shells)}`, hullPanelX + 14, hullPanelY + 132);
+    ctx.fillStyle = torpedoesColor;
+    ctx.fillText(`TORPEDOES ${Math.floor(frigate.torpedoes)}`, hullPanelX + 150, hullPanelY + 132);
   }
   const feedNow = performance.now();
   const visibleFeed = feed.filter((entry) => feedNow - entry.at < 5000).slice(-5);
@@ -1690,10 +1726,12 @@ function drawMenu(snapshot: Snapshot, width: number, height: number): void {
       ctx.textAlign = "right";
       ctx.fillStyle = value !== DEFAULT_SETTINGS[row.key] ? "#e4ad80" : "#d7e5e9";
       ctx.font = "500 12px DM Mono, monospace";
-      const displayedValue = row.key === "cannonReload" || row.key === "torpedoReload" || row.key === "captureTime" || row.key === "repairTime"
+      const displayedValue = row.key === "cannonReload" || row.key === "torpedoReload" || row.key === "resupplyTime" || row.key === "captureTime" || row.key === "repairTime"
         ? `${value.toFixed(1).replace(/\.0$/, "")} s`
-        : row.key === "neutralBases"
+        : row.key === "neutralBases" || row.key === "shells" || row.key === "torpedoes"
           ? `${value}`
+          : row.key === "fuelCrossings"
+            ? `${value} crossings`
           : `${value}%`;
       ctx.fillText(
         displayedValue,
@@ -1928,7 +1966,15 @@ function renderFrame(now: number): void {
     if (own) drawFrigate(own, serverNow, debugVisible);
     for (const effect of effects) drawExplosion(effect, now);
     if (own) drawReticle(own, serverNow);
-    if (own) drawCaptureProgress(ctx, own, bases, own.playerId, gameSettings.captureTime, gameSettings.repairTime);
+    if (own) drawCaptureProgress(
+      ctx,
+      own,
+      bases,
+      own.playerId,
+      gameSettings.captureTime,
+      gameSettings.repairTime,
+      gameSettings,
+    );
     ctx.restore();
   } else {
     ctx.setTransform(viewport.dpr * viewport.scale, 0, 0, viewport.dpr * viewport.scale, 0, 0);

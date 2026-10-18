@@ -14,7 +14,7 @@
 
 ### Resupply
 
-- A frigate in a base it owns MUST be at throttle STOP to resupply. Fuel, shells, and torpedoes refill gradually, from empty to full in the configured **resupply time**.
+- A frigate MUST be alive, have its whole hull inside an active base it owns, and have commanded throttle STOP to resupply. Fuel, shells, and torpedoes MUST refill simultaneously; each resource MUST take exactly the configured **resupply time** to fill from empty to capacity. Firing MUST NOT interrupt resupply (Q128).
 - Leaving the harbour MUST stop resupply; fuel and ammunition already refilled remain on board (Q112).
 
 ### Capture

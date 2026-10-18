@@ -143,3 +143,8 @@ All questions raised during the specification phase are resolved. Each line give
 - **Q124 — Turret hit test:** a shell landing within 60 u of the building square deals 10 damage to its turret. Decided 2026-10-18.
 - **Q125 — Owner recaptures lost home:** restored as on automatic return, with a full turret. Decided 2026-10-18.
 - **Q126 — Holder of a lost home leaves:** the home returns to its original owner immediately, with a full turret. Decided 2026-10-18.
+- **Q127 — Fuel burn:** fuel is burned at |speed| × time, so sliding along a coast or being pushed doesn't burn fuel; with an empty tank the speed limit is 10% of the scaled top speed, both ways. Decided 2026-10-18.
+- **Q128 — Resupply condition:** STOP means the commanded throttle level, not an exact speed of 0; all three resources refill at the same time, each from empty to full in the resupply time; firing doesn't interrupt resupply. Decided 2026-10-18.
+- **Q129 — Ring priority:** Repairing turret, then Capturing, then Resupplying; the resupply ring shows the least-full resource and disappears once all are full. Decided 2026-10-18.
+- **Q130 — Ammunition colours:** the shell and torpedo counts use the same colours as fuel (orange below 20%, red when empty). Decided 2026-10-18.
+- **Q131 — Only the own boat's fuel and ammunition are sent; other players' amounts stay hidden.** Decided 2026-10-18.

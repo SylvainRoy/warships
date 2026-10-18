@@ -5,6 +5,10 @@ describe("game settings", () => {
   it("accepts defaults and valid edge values as fresh objects", () => {
     expect(DEFAULT_SETTINGS.landCoveragePct).toBe(25);
     expect(DEFAULT_SETTINGS.neutralBases).toBe(4);
+    expect(DEFAULT_SETTINGS.fuelCrossings).toBe(2);
+    expect(DEFAULT_SETTINGS.shells).toBe(50);
+    expect(DEFAULT_SETTINGS.torpedoes).toBe(30);
+    expect(DEFAULT_SETTINGS.resupplyTime).toBe(5);
     expect(DEFAULT_SETTINGS.captureTime).toBe(5);
     expect(DEFAULT_SETTINGS.repairTime).toBe(5);
     const defaults = sanitizeSettings(DEFAULT_SETTINGS);
@@ -22,6 +26,10 @@ describe("game settings", () => {
       torpedoReload: 20,
       landCoveragePct: 5,
       neutralBases: 0,
+      fuelCrossings: 1,
+      shells: 10,
+      torpedoes: 5,
+      resupplyTime: 1,
       captureTime: 1,
       repairTime: 1,
     })).toEqual({
@@ -35,6 +43,10 @@ describe("game settings", () => {
       torpedoReload: 20,
       landCoveragePct: 5,
       neutralBases: 0,
+      fuelCrossings: 1,
+      shells: 10,
+      torpedoes: 5,
+      resupplyTime: 1,
       captureTime: 1,
       repairTime: 1,
     });
@@ -65,6 +77,18 @@ describe("game settings", () => {
     expect(sanitizeSettings({ ...DEFAULT_SETTINGS, neutralBases: -1 })).toBeNull();
     expect(sanitizeSettings({ ...DEFAULT_SETTINGS, neutralBases: 9 })).toBeNull();
     expect(sanitizeSettings({ ...DEFAULT_SETTINGS, neutralBases: 2.5 })).toBeNull();
+    expect(sanitizeSettings({ ...DEFAULT_SETTINGS, fuelCrossings: 0 })).toBeNull();
+    expect(sanitizeSettings({ ...DEFAULT_SETTINGS, fuelCrossings: 11 })).toBeNull();
+    expect(sanitizeSettings({ ...DEFAULT_SETTINGS, fuelCrossings: 1.5 })).toBeNull();
+    expect(sanitizeSettings({ ...DEFAULT_SETTINGS, shells: 0 })).toBeNull();
+    expect(sanitizeSettings({ ...DEFAULT_SETTINGS, shells: 210 })).toBeNull();
+    expect(sanitizeSettings({ ...DEFAULT_SETTINGS, shells: 55 })).toBeNull();
+    expect(sanitizeSettings({ ...DEFAULT_SETTINGS, torpedoes: 0 })).toBeNull();
+    expect(sanitizeSettings({ ...DEFAULT_SETTINGS, torpedoes: 105 })).toBeNull();
+    expect(sanitizeSettings({ ...DEFAULT_SETTINGS, torpedoes: 6 })).toBeNull();
+    expect(sanitizeSettings({ ...DEFAULT_SETTINGS, resupplyTime: 0 })).toBeNull();
+    expect(sanitizeSettings({ ...DEFAULT_SETTINGS, resupplyTime: 31 })).toBeNull();
+    expect(sanitizeSettings({ ...DEFAULT_SETTINGS, resupplyTime: 2.5 })).toBeNull();
     expect(sanitizeSettings({ ...DEFAULT_SETTINGS, captureTime: 0 })).toBeNull();
     expect(sanitizeSettings({ ...DEFAULT_SETTINGS, captureTime: 31 })).toBeNull();
     expect(sanitizeSettings({ ...DEFAULT_SETTINGS, captureTime: 5.5 })).toBeNull();
@@ -93,6 +117,10 @@ describe("game settings", () => {
       torpedoReload: 2.5,
       landCoveragePct: 15,
       neutralBases: 6,
+      fuelCrossings: 4,
+      shells: 100,
+      torpedoes: 60,
+      resupplyTime: 3,
       captureTime: 10,
       repairTime: 10,
     })).toEqual([
@@ -105,6 +133,10 @@ describe("game settings", () => {
       "torpedo reload 2.5 s",
       "land coverage 15%",
       "neutral bases 6",
+      "fuel 4 crossings",
+      "shells 100",
+      "torpedoes 60",
+      "resupply time 3 s",
       "capture time 10 s",
       "repair time 10 s",
     ]);

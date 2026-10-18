@@ -128,7 +128,15 @@ describe("multiplayer room", () => {
 
     const initialSeed = room.game.world.seed;
     const initialWorldMessageCount = hostSocket.messages.filter((message) => message.type === "world").length;
-    const settings = { ...DEFAULT_SETTINGS, boatSpeedPct: 150, cannonReload: 2 };
+    const settings = {
+      ...DEFAULT_SETTINGS,
+      boatSpeedPct: 150,
+      cannonReload: 2,
+      fuelCrossings: 3,
+      shells: 100,
+      torpedoes: 60,
+      resupplyTime: 6,
+    };
     send(room, hostSocket, { type: "host", action: "settings", settings });
     expect(room.game.settings).toEqual(settings);
     expect(room.game.world.seed).toBe(initialSeed);
@@ -136,15 +144,18 @@ describe("multiplayer room", () => {
     expect(hostSocket.last("settings")?.settings).toEqual(settings);
     expect(guestSocket.last("settings")?.settings).toEqual(settings);
     expect(guestSocket.messages.some((message) =>
-      message.type === "event" && message.event.message === "Host Harbor: boat speed 150%, cannon reload 2 s",
+      message.type === "event"
+        && message.event.message === "Host Harbor: boat speed 150%, cannon reload 2 s, fuel 3 crossings, shells 100, torpedoes 60, resupply time 6 s",
     )).toBe(true);
 
     const eventCount = hostSocket.messages.filter((message) =>
-      message.type === "event" && message.event.message === "Host Harbor: boat speed 150%, cannon reload 2 s",
+      message.type === "event"
+        && message.event.message === "Host Harbor: boat speed 150%, cannon reload 2 s, fuel 3 crossings, shells 100, torpedoes 60, resupply time 6 s",
     ).length;
     send(room, hostSocket, { type: "host", action: "settings", settings });
     expect(hostSocket.messages.filter((message) =>
-      message.type === "event" && message.event.message === "Host Harbor: boat speed 150%, cannon reload 2 s",
+      message.type === "event"
+        && message.event.message === "Host Harbor: boat speed 150%, cannon reload 2 s, fuel 3 crossings, shells 100, torpedoes 60, resupply time 6 s",
     )).toHaveLength(eventCount);
   });
 
@@ -431,6 +442,11 @@ describe("multiplayer room", () => {
       y: home.harbourY,
       heading: home.facing,
     });
+    expect(frigate).toMatchObject({
+      fuel: DEFAULT_SETTINGS.fuelCrossings * GAME_CONFIG.world.width,
+      shells: DEFAULT_SETTINGS.shells,
+      torpedoes: DEFAULT_SETTINGS.torpedoes,
+    });
     expect(joined.bases[0]).toHaveProperty("cityX");
     home.turretHp = 37;
     home.turretReadyAt = 4;
@@ -441,6 +457,9 @@ describe("multiplayer room", () => {
     room.game.bases.find((base) => base.id === "n0")!.turretHp = 30;
     room.game.bases.find((base) => base.id === "n0")!.repairBy = joined.playerId;
     room.game.bases.find((base) => base.id === "n0")!.repairProgress = 0.3;
+    frigate.fuel = 12345.6;
+    frigate.shells = 12.34;
+    frigate.torpedoes = 5.67;
     first.close();
 
     now = 9;
@@ -457,6 +476,11 @@ describe("multiplayer room", () => {
       ownerId: joined.playerId,
       captureBy: joined.playerId,
       captureProgress: 0.4,
+    });
+    expect(room.game.frigates[joined.playerId]).toMatchObject({
+      fuel: 12345.6,
+      shells: 12.34,
+      torpedoes: 5.67,
     });
     room.advanceTick();
     room.advanceTick();
@@ -578,5 +602,52 @@ describe("multiplayer room", () => {
     const snapshot = socket.last("snapshot");
     expect(snapshot?.bases?.[0]).not.toHaveProperty("cityX");
     expect(snapshot?.bases?.[0]).toHaveProperty("captureProgress");
+  });
+
+  it("clamps supplies on setting changes, respawns full with current settings, and hides other players' supplies", () => {
+    const { room, setNow } = setup();
+    const hostSocket = connect(room);
+    const guestSocket = connect(room);
+    join(room, hostSocket, "Host");
+    join(room, guestSocket, "Guest");
+    const hostId = welcome(hostSocket).playerId;
+    const guestId = welcome(guestSocket).playerId;
+    const host = room.game.frigates[hostId]!;
+    host.fuel = 20000;
+    host.shells = 25;
+    host.torpedoes = 6;
+
+    const lower = { ...DEFAULT_SETTINGS, fuelCrossings: 1, shells: 10, torpedoes: 5 };
+    send(room, hostSocket, { type: "host", action: "settings", settings: lower });
+    expect(host).toMatchObject({ fuel: 16000, shells: 10, torpedoes: 5 });
+
+    const higher = { ...DEFAULT_SETTINGS, fuelCrossings: 4, shells: 100, torpedoes: 50 };
+    send(room, hostSocket, { type: "host", action: "settings", settings: higher });
+    expect(host).toMatchObject({ fuel: 16000, shells: 10, torpedoes: 5 });
+    host.fuel = 12345.678;
+    host.shells = 9.876;
+    host.torpedoes = 4.567;
+
+    const guest = room.game.frigates[guestId]!;
+    guest.status = "sinking";
+    guest.respawnAt = 1;
+    setNow(1);
+    room.advanceTick();
+    expect(room.game.frigates[guestId]).toMatchObject({
+      fuel: higher.fuelCrossings * GAME_CONFIG.world.width,
+      shells: higher.shells,
+      torpedoes: higher.torpedoes,
+      status: "alive",
+    });
+    room.advanceTick();
+
+    const snapshot = hostSocket.last("snapshot");
+    const own = snapshot?.frigates.find((frigate) => frigate.playerId === hostId);
+    const other = snapshot?.frigates.find((frigate) => frigate.playerId === guestId);
+    expect(own).toMatchObject({ fuel: 12345.7, shells: 9.88, torpedoes: 4.57 });
+    expect(other).toBeDefined();
+    expect(other).not.toHaveProperty("fuel");
+    expect(other).not.toHaveProperty("shells");
+    expect(other).not.toHaveProperty("torpedoes");
   });
 });
