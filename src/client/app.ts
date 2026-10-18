@@ -22,7 +22,7 @@ import {
   type KeyboardLayout,
 } from "./controls.js";
 import { ProjectileStore } from "./projectiles.js";
-import { RADAR, radarBearing, radarContacts, worldToRadar } from "./radar.js";
+import { RADAR, RadarSweep, radarBearing, worldToRadar } from "./radar.js";
 import {
   landColorAt,
   noise,
@@ -91,6 +91,10 @@ if (!context) throw new Error("Canvas 2D is unavailable");
 const ctx = context;
 
 const colours = ["#4b9bff", "#ff6266", "#f3c94e", "#c084fc"];
+const radarSweep = new RadarSweep((slot) => colours[slot - 1] ?? "#fff");
+let previousRadarSweepAngle: number | null = null;
+let radarSweepOwnerId: string | null = null;
+let radarOwnStatus: SnapshotFrigate["status"] | null = null;
 const pressed = new Set<string>();
 const worldCache = new Map<string, HTMLCanvasElement>();
 let radarMapCanvas: HTMLCanvasElement | null = null;
@@ -140,10 +144,18 @@ let hasServerTimeOffset = false;
 let reconnectTimer: number | undefined;
 let reconnectForLobby = false;
 
+function resetRadarSweep(): void {
+  radarSweep.clear();
+  previousRadarSweepAngle = null;
+  radarSweepOwnerId = ownId;
+  radarOwnStatus = null;
+}
+
 function resetWorldCaches(): void {
   worldCache.clear();
   radarMapCanvas = null;
   radarMapWorld = null;
+  resetRadarSweep();
   resetTerrainStyleCache();
 }
 
@@ -198,6 +210,7 @@ function connect(): void {
       shouldAutoJoin = false;
       sessionStorage.removeItem("warships.token");
       ownId = null;
+      resetRadarSweep();
       world = null;
       bases = [];
       latestSnapshot = null;
@@ -313,6 +326,7 @@ function showKickedMessage(): void {
   shouldAutoJoin = false;
   joined = false;
   ownId = null;
+  resetRadarSweep();
   world = null;
   bases = [];
   latestSnapshot = null;
@@ -587,6 +601,8 @@ function onSnapshot(snapshot: Snapshot): void {
   snapshots = snapshots.slice(-6);
   const own = snapshotWithBases.frigates.find((frigate) => frigate.playerId === ownId) as Frigate | undefined;
   if (own) {
+    if (own.status === "alive" && radarOwnStatus !== null && radarOwnStatus !== "alive") resetRadarSweep();
+    radarOwnStatus = own.status;
     if (own.status !== "alive") throttleLevel = 0;
     const acknowledgedAt = pendingInputs.find((entry) => entry.input.seq === snapshotWithBases.ackSeq)?.sentAt;
     if (acknowledgedAt !== undefined) {
@@ -1336,6 +1352,10 @@ function drawRadarTriangle(x: number, y: number, angle: number, length: number, 
 
 function drawRadar(snapshot: Snapshot, frigate: Frigate, now: number, logicalWidth: number, logicalHeight: number): void {
   if (!world) return;
+  if (radarSweepOwnerId !== frigate.playerId) {
+    resetRadarSweep();
+    radarSweepOwnerId = frigate.playerId;
+  }
   const centerX = logicalWidth - RADAR.margin - RADAR.radius;
   const centerY = logicalHeight - RADAR.margin - RADAR.radius;
   const worldScale = RADAR.radius / RADAR.range;
@@ -1398,6 +1418,19 @@ function drawRadar(snapshot: Snapshot, frigate: Frigate, now: number, logicalWid
   ctx.stroke();
 
   const sweepAngle = now / RADAR.sweepPeriod * Math.PI * 2;
+  if (previousRadarSweepAngle === null) {
+    previousRadarSweepAngle = sweepAngle;
+  } else {
+    radarSweep.update(
+      previousRadarSweepAngle,
+      sweepAngle,
+      frigate,
+      snapshot.frigates,
+      frigate.playerId,
+      now,
+    );
+    previousRadarSweepAngle = sweepAngle;
+  }
   ctx.globalAlpha = .1;
   ctx.fillStyle = "#5dffac";
   ctx.beginPath();
@@ -1412,37 +1445,32 @@ function drawRadar(snapshot: Snapshot, frigate: Frigate, now: number, logicalWid
   ctx.stroke();
   ctx.globalAlpha = 1;
 
-  const contacts = radarContacts(
-    snapshot.frigates,
-    frigate.playerId,
-    (slot) => colours[slot - 1] ?? "#fff",
-  );
-  for (const contact of contacts) {
-    const dx = contact.x - frigate.x;
-    const dy = contact.y - frigate.y;
-    if (contact.kind === "position") {
-      if (Math.hypot(dx, dy) > RADAR.range) continue;
+  for (const blip of radarSweep.blips(now)) {
+    ctx.globalAlpha = blip.alpha;
+    if (blip.kind === "position") {
+      const dx = blip.x - frigate.x;
+      const dy = blip.y - frigate.y;
       const [radarX, radarY] = worldToRadar(dx, dy);
-      ctx.fillStyle = contact.color;
+      ctx.fillStyle = blip.color;
       ctx.beginPath();
-      ctx.arc(centerX + radarX, centerY + radarY, 3, 0, Math.PI * 2);
+      ctx.arc(centerX + radarX, centerY + radarY, 3.5, 0, Math.PI * 2);
       ctx.fill();
       ctx.lineWidth = 1;
       ctx.strokeStyle = RADAR_OUTLINE;
       ctx.stroke();
     } else {
-      const bearing = radarBearing(frigate.x, frigate.y, contact.x, contact.y);
       const distance = RADAR.radius - 6;
       drawRadarTriangle(
-        centerX + Math.cos(bearing) * distance,
-        centerY + Math.sin(bearing) * distance,
-        bearing,
+        centerX + Math.cos(blip.bearing) * distance,
+        centerY + Math.sin(blip.bearing) * distance,
+        blip.bearing,
         7,
         6,
-        contact.color,
+        blip.color,
       );
     }
   }
+  ctx.globalAlpha = 1;
 
   for (const base of bases) {
     if (!base.active) continue;

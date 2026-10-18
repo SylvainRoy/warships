@@ -161,3 +161,10 @@ All questions raised during the specification phase are resolved. Each line give
 - **Q142 — Bottom-left console HUD:** replace the bottom-left bars with hull/fuel dials, cannon/torpedo tiles (count, max, status, reload bar), and vertical throttle stops; numbers are white normally, orange below 20%, or red when empty, with the hull number red at ≤35 HP. Decided 2026-10-18.
 - **Q143 — Join on an already-joined connection:** a same-name repeat (case-insensitive) resends the current welcome; a different-name repeat removes the previous session without closing the socket before creating the new session. Decided 2026-10-18.
 - **Q144 — Install label:** the ring reads `Installing turret` when the base has never had a turret (or none since capture), `Repairing turret` when rebuilding a destroyed one. Decided 2026-10-18.
+- **Q145 — Sweep-detected contacts:** crossing an alive boat within 3,000 u paints a 7 u dot at its world position; each pass replaces that player's previous blip. Decided 2026-10-18.
+- **Q146 — Contact fade:** blips stay fully visible for 0.3 s, then fade linearly to zero over 2 s. Decided 2026-10-18.
+- **Q147 — Radar sweep period:** keep one sweep turn every 4 s, with no setting. Decided 2026-10-18.
+- **Q148 — Out-of-range contacts:** beyond 3,000 u, paint the existing edge direction triangle only on bearing crossing and freeze its bearing. Decided 2026-10-18.
+- **Q149 — In-range marker:** use a round 7 u diameter player-coloured dot with the existing 1 u `RADAR_OUTLINE`, without a heading. Decided 2026-10-18.
+- **Q150 — Contact eligibility and scope:** only alive boats are newly painted; existing blips fade after sinking, waiting, or leaving, while own boat, bases, and land stay unchanged. Decided 2026-10-18.
+- **Q151 — Radar implementation:** keep detection and blip state client-only; snapshots continue to carry all boat positions. Decided 2026-10-18.
