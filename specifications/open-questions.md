@@ -159,3 +159,4 @@ All questions raised during the specification phase are resolved. Each line give
 - **Q140 — Default and compatibility:** Standard is the default; Big must reproduce today's same-seed world grid and base placement exactly. Decided 2026-10-18.
 - **Q141 — Small-map tile alignment:** round the nominal 2,250 u Small height to 2,240 u (112 tiles of 20 u). Decided 2026-10-18.
 - **Q143 — Join on an already-joined connection:** a same-name repeat (case-insensitive) resends the current welcome; a different-name repeat removes the previous session without closing the socket before creating the new session. Decided 2026-10-18.
+- **Q144 — Install label:** the ring reads `Installing turret` when the base has never had a turret (or none since capture), `Repairing turret` when rebuilding a destroyed one. Decided 2026-10-18.
