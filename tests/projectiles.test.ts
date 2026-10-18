@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { ProjectileStore } from "../src/client/projectiles.js";
+import { GAME_CONFIG } from "../src/shared/config.js";
 import type { Shell, Torpedo } from "../src/shared/sim.js";
 import { mapDimensions } from "../src/shared/world.js";
 
@@ -23,7 +24,7 @@ const torpedo: Torpedo = {
   y: 200,
   angle: Math.PI / 3,
   elapsed: 0.1,
-  speed: 120,
+  speed: GAME_CONFIG.torpedo.speed,
 };
 
 describe("projectile store", () => {

@@ -23,6 +23,7 @@
 
 ## Changelog
 
+- v2.5 — faster boats, shells and torpedoes (Q154–Q159).
 - v2.1 — host map size setting: Small / Standard / Big (Q132–Q141).
 - v2.2 — bottom-left HUD redesigned as a ship's console (Q142).
 - v2.0 — bases (home and neutral), harbours, capture, turrets, fuel and ammunition (Q91–Q131).
