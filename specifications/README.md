@@ -1,6 +1,6 @@
 # Warships — Specifications
 
-**Status: APPROVED v1.17** (2026-10-17). Changes after approval must be recorded in the changelog.
+**Status: APPROVED v1.18** (2026-10-18). Changes after approval must be recorded in the changelog.
 
 | # | Document | Content |
 |---|----------|---------|
@@ -22,6 +22,7 @@
 
 ## Changelog
 
+- v1.18 — show the game version in the lobby and the server log; release versioning and changelog (Q86–Q90); approved 2026-10-18.
 - v1.17 — player-configurable key bindings stored per browser, Controls menu for every player, and revised fire/torpedo defaults after playtesting (Q78–Q85); approved 2026-10-17.
 - v1.16 — the cannon sight starts at minimum range (100 u) on every spawn so it is visible (Q77); approved 2026-10-17.
 - v1.15 — natural terrain with rounded 60 u shallows, smooth biome transitions, beaches, grass, forest, and noise-gated rock (Q72–Q76); approved 2026-10-17.

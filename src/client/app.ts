@@ -1,6 +1,7 @@
 import { GAME_CONFIG } from "../shared/config.js";
 import { INPUT_KEYS, applyFrigateInput, type Frigate, type FrigateInput, type GameEvent, type Shell, type Torpedo } from "../shared/sim.js";
 import { DEFAULT_SETTINGS, describeSettingsChanges, SETTINGS_LIMITS, type GameSettings } from "../shared/settings.js";
+import { APP_VERSION } from "../shared/version.js";
 import { decodeWorld, isLandAt, type World } from "../shared/world.js";
 import type { LobbyMessage, ServerMessage, SnapshotFrigate } from "../shared/protocol.js";
 import { computeCamera, computeViewport } from "./camera.js";
@@ -73,6 +74,8 @@ function requireElement<T extends Element>(selector: string): T {
 const canvasElement = requireElement<HTMLCanvasElement>("#game");
 const lobby = requireElement<HTMLElement>("#lobby");
 const lobbyFooter = requireElement<HTMLElement>(".lobby-footer");
+const lobbyVersion = requireElement<HTMLElement>("#lobby-version");
+lobbyVersion.textContent = `v${APP_VERSION}`;
 const form = requireElement<HTMLFormElement>("#join-form");
 const nameInput = requireElement<HTMLInputElement>("#player-name");
 const joinButton = requireElement<HTMLButtonElement>("#join-button");

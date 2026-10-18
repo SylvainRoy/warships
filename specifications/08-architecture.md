@@ -35,6 +35,12 @@ The server serves the static client files **and** the WebSocket endpoint on the 
 - Server: 4 players + up to ~100 projectiles at 30 Hz with negligible CPU.
 - Bandwidth: < 50 kB/s per client.
 
+## Versioning
+
+- Release versions MUST follow semantic versioning independently of the specification version; the first public release is `v1.0.0`.
+- Each release MUST use an annotated `vX.Y.Z` git tag on `main`; the lobby and server startup log MUST show the version from `package.json`.
+- Before tagging, maintainers MUST bump `package.json` and add a `CHANGELOG.md` entry; use patch for fixes, minor for new features, and major for breaking changes such as incompatible clients.
+
 ## Quality
 
 - Gameplay constants in one shared config file.

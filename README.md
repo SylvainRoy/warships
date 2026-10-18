@@ -26,8 +26,12 @@ Share `http://<server-computer-LAN-IP>:8080` with players on the same network. T
 | Aim torpedoes | `BracketLeft` / `Backslash` or `IntlBackslash` |
 | Fire torpedoes | `BracketRight` |
 | Full scoreboard (hold) | `Tab` |
-| Host menu | `Escape` |
+| Menu (Controls for everyone; host actions for the host) | `Escape` |
 | Debug overlay | `F3` |
+
+## Releases
+
+Release notes are in [CHANGELOG.md](CHANGELOG.md). Versions are tagged `vX.Y.Z`; the running version is shown in the lobby and in the server log.
 
 ## Development
 

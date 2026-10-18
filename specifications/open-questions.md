@@ -102,3 +102,8 @@ All questions raised during the specification phase are resolved. Each line give
 - **Q83 — Binding labels:** bind by `KeyboardEvent.code`; use the asynchronous keyboard layout map when available and friendly QWERTY names otherwise, keeping arrows and Shift friendly. Decided 2026-10-17.
 - **Q84 — Menu input:** while the menu is open, retain the boat's throttle and ignore every bound game action. Decided 2026-10-17.
 - **Q85 — Revised default keys:** after playtesting, fire cannons defaults to `Space`, torpedo right to `Backslash` and `IntlBackslash`, and fire torpedoes to `BracketRight`; supersedes the fire defaults in Q79. Decided 2026-10-17.
+- **Q86 — Release version:** the first public release is `v1.0.0`; release versions follow semantic versioning and are independent of the specification version. Decided 2026-10-18.
+- **Q87 — Release tags:** each release is an annotated git tag `vX.Y.Z` on main. Decided 2026-10-18.
+- **Q88 — Release notes:** each tag gets a GitHub Release with short notes (features, how to run, specification version). Decided 2026-10-18.
+- **Q89 — Visible version:** the client lobby and the server startup log show the version from `package.json`. Decided 2026-10-18.
+- **Q90 — Later releases:** patch for fixes, minor for new features, major for breaking changes such as incompatible clients; bump `package.json` and add a CHANGELOG.md entry before tagging. Decided 2026-10-18.

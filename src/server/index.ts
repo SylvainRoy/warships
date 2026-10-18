@@ -3,6 +3,7 @@ import { createServer } from "node:http";
 import { networkInterfaces } from "node:os";
 import { extname, join, normalize, resolve } from "node:path";
 import { WebSocketServer } from "ws";
+import { APP_VERSION } from "../shared/version.js";
 import { Room } from "./room.js";
 
 const port = Number.parseInt(process.env.PORT ?? "8080", 10);
@@ -48,7 +49,7 @@ server.listen(port, "0.0.0.0", () => {
   const addresses = Object.values(networkInterfaces()).flatMap((items) =>
     (items ?? []).filter((item) => item.family === "IPv4" && !item.internal).map((item) => `http://${item.address}:${port}`),
   );
-  process.stdout.write(`Warships listening on port ${port}\n`);
+  process.stdout.write(`Warships v${APP_VERSION} listening on port ${port}\n`);
   for (const address of addresses) process.stdout.write(`${address}\n`);
 });
 

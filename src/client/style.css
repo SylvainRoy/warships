@@ -74,6 +74,7 @@ button {
 .player-meta { margin-left: auto; color: #78919b; font: 10px "DM Mono", monospace; }
 .full-note { margin-top: 13px; color: #e2bd68; font-size: 12px; }
 .lobby-footer { margin-top: 24px; color: #627d87; line-height: 1.8; }
+.lobby-version { margin-top: 2px; color: #627d87; font: 11px "DM Mono", monospace; text-align: right; }
 
 @media (max-width: 500px) {
   .lobby { padding: 28px 24px 20px; }
