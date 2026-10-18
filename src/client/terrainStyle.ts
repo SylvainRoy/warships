@@ -1,7 +1,7 @@
 import { GAME_CONFIG } from "../shared/config.js";
 import type { World } from "../shared/world.js";
 
-const { columns, rows, tileSize } = GAME_CONFIG.world;
+const { tileSize } = GAME_CONFIG.world;
 const infiniteDistance = Number.POSITIVE_INFINITY;
 const sandColor: readonly [number, number, number] = [216, 198, 144];
 const grassColor: readonly [number, number, number] = [111, 154, 79];
@@ -25,8 +25,8 @@ export function terrainFields(world: World): TerrainFields {
   if (cachedWorld !== world || !cachedFields) {
     cachedWorld = world;
     cachedFields = {
-      waterDistance: euclideanDistanceField(world.grid, columns, rows, true, true, tileSize),
-      landDistance: euclideanDistanceField(world.grid, columns, rows, false, false, tileSize),
+      waterDistance: euclideanDistanceField(world.grid, world.columns, world.rows, true, true, tileSize),
+      landDistance: euclideanDistanceField(world.grid, world.columns, world.rows, false, false, tileSize),
     };
   }
   return cachedFields;

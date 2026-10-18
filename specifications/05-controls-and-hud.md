@@ -35,7 +35,7 @@ The game MUST work on both **Mac and PC** keyboards (Windows/Linux). Implementat
 
 Every player opens the shared menu with Esc. It is titled HOST CONTROL for the host and MENU for other players. C opens Controls for everyone. The host additionally has R for world regeneration, X for a score reset, K for a numbered list of captains to kick, and S for Settings; these actions remain host-only. Select a kick target with `Digit1`–`Digit3` or `Numpad1`–`Numpad3`. Enter or NumpadEnter confirms a pending action; Esc cancels it or returns from kick selection. Confirmations are shown in-game, not in browser dialogs. If host status is lost while the menu is open, host-only pending actions are dropped while the shared menu and Controls remain usable.
 
-In Settings, the rows include Boat speed, Rotation speed, Cannon rotation, Torpedo rotation, Shell speed, Torpedo speed, Cannon reload, Torpedo reload, and Land coverage, followed by Neutral bases, Fuel, Shells, Torpedoes, Resupply time, Capture time, and Repair time (Q120). Up/Down selects a row, Left/Right changes its value, D restores defaults, Enter applies the draft, and Esc returns to the host menu. When Land coverage differs from the applied value, the hint says `Enter: apply + new map`; applying it immediately generates a new map while keeping scores.
+In Settings, the rows include Boat speed, Rotation speed, Cannon rotation, Torpedo rotation, Shell speed, Torpedo speed, Cannon reload, Torpedo reload, Land coverage, Map size, Neutral bases, Fuel, Shells, Torpedoes, Resupply time, Capture time, and Repair time (Q120, Q133). Map size MUST default to Standard and offer Small, Standard, and Big; its row MUST immediately follow Land coverage. Up/Down selects a row, Left/Right changes its value, D restores defaults, Enter applies the draft, and Esc returns to the host menu. Changing Map size or Land coverage MUST make the hint say `Enter: apply + new map`; applying either immediately generates a new map while keeping scores.
 
 ## Player controls
 
@@ -61,7 +61,7 @@ The own boat is a white 6 u triangle pointing along its heading. Every other ali
 
 - HUD panels and overlays use the reference screen's fit (contain) scale and are anchored to the browser window edges (Q41, Q56); positions and sizing remain in reference units.
 - Top-right: compact scoreboard (name, colour, score) for all connected players, own line highlighted.
-- Holding Tab shows the full scoreboard; when settings differ from defaults, it adds a `CUSTOM RULES · …` line listing each changed setting.
+- Holding Tab shows the full scoreboard; when settings differ from defaults, it adds a `CUSTOM RULES · …` line listing each changed setting, including Map size.
 - Bottom-left: the HUD MUST show the own HP bar, cannon and torpedo reload status, throttle telegraph with selected level highlighted and full label, fuel gauge, and shell and torpedo counts. Fuel and ammunition MUST be orange below 20% of capacity and red when empty (Q108, Q130).
 - A progress ring around the own boat MUST prioritize `Repairing turret`, then `Capturing <time>`, then `Resupplying`. The resupply ring MUST show the least-full of fuel, shells, and torpedoes and disappear when all are full (Q98, Q129).
 - The server MUST send fuel and ammunition only for the receiving player's own boat; other players' amounts MUST remain hidden (Q131).

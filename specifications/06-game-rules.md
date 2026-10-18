@@ -9,7 +9,7 @@ A frigate spawns when its player joins, after being sunk, and when the world is 
 - Every spawn starts at speed 0.
 - Random-point fallback: choose a water point such that
   - the whole frigate is on water with at least 60 u clearance from land,
-  - it is at least **2 400 u** (1.5 screen widths) from every other living frigate. If no such point is found after N attempts, the point maximising the distance to the nearest frigate is used.
+  - it is at least **15% of the current map width** from every other living frigate: 2 400 u on Big, 1 200 u on Standard, or 600 u on Small (Q138). If no such point is found after N attempts, the point maximising the distance to the nearest frigate is used.
 - For a random-point fallback, heading is random.
 - **Spawn protection**: 3 s of invulnerability, ended early if the player fires. Shown by a blinking hull.
 

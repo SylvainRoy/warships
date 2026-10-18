@@ -1,5 +1,6 @@
 import { GAME_CONFIG } from "../shared/config.js";
 import type { Base } from "../shared/bases.js";
+import { mapDimensions } from "../shared/world.js";
 import type { GameSettings } from "../shared/settings.js";
 
 export function drawBases(
@@ -111,7 +112,7 @@ export function drawCaptureProgress(
   playerId: string,
   captureTime: number,
   _repairTime: number,
-  settings: Pick<GameSettings, "fuelCrossings" | "shells" | "torpedoes">,
+  settings: Pick<GameSettings, "mapSize" | "fuelCrossings" | "shells" | "torpedoes">,
 ): void {
   const repairBase = bases.find((candidate) => candidate.repairBy === playerId);
   const captureBase = bases.find((candidate) => candidate.captureBy === playerId);
@@ -124,7 +125,7 @@ export function drawCaptureProgress(
     : capturing
       ? base?.captureProgress ?? 0
       : Math.min(
-          frigate.fuel / (settings.fuelCrossings * GAME_CONFIG.world.width),
+          frigate.fuel / (settings.fuelCrossings * mapDimensions(settings.mapSize).width),
           frigate.shells / settings.shells,
           frigate.torpedoes / settings.torpedoes,
         );

@@ -4,7 +4,7 @@
 
 - The world MUST have four home sites, one for each player slot, plus the configured number of neutral bases (Q91, Q107).
 - Each base MUST have a **40 × 40 u** building on land at the coast and a **60 × 60 u** square harbour of open water directly in front. Bases MUST use existing coasts and MUST NOT change the terrain.
-- Any two bases MUST be at least **1,600 u** apart, measured between their harbour centres (Q92, Q120). If the generator cannot place every base, it MUST silently try the next seed (Q93). The placement algorithm is an implementation detail.
+- Any two bases MUST be at least **10% of the current map width** apart, measured between their harbour centres: 1,600 u on Big, 800 u on Standard, and 400 u on Small (Q135). If the generator cannot place every requested base, it MUST try the next seed; if the requested neutral count still cannot fit, it MUST place as many as possible, retain the requested setting, and send `Only N neutral bases fit on this map` to every player (Q93, Q136). The placement algorithm is an implementation detail.
 - A base building MUST show a flag in its owner's colour; a neutral base uses white. A home site MUST remain inactive until its player joins: it has no flag or turret and cannot be captured.
 - When a player's **10 s** reconnect grace expires, their home site becomes inactive and every other base they held becomes neutral (Q91, Q117).
 - Buildings MUST block frigates as land does; cannon shells fly over them. Because buildings stand on land, torpedoes stop there; turret rubble adds no additional blocking (Q93, Q120).

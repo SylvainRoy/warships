@@ -1,6 +1,6 @@
 import { GAME_CONFIG } from "./config.js";
 import { mulberry32 } from "./rng.js";
-import { generateWorld, type World } from "./world.js";
+import { generateWorld, type MapDimensions, type World } from "./world.js";
 
 export type BaseKind = "home" | "neutral";
 
@@ -55,8 +55,8 @@ export function restoreHome(base: Base, now: number): void {
 type Candidate = Omit<BaseSite, "id" | "kind" | "homeSlot">;
 type Rect = { left: number; top: number; right: number; bottom: number };
 
-const { columns, rows, tileSize, width, height } = GAME_CONFIG.world;
-const { citySize, harbourSize, minSpacing, homeSites, harbourApproach } = GAME_CONFIG.bases;
+const { tileSize } = GAME_CONFIG.world;
+const { citySize, harbourSize, homeSites, harbourApproach } = GAME_CONFIG.bases;
 const directions = [
   { x: 1, y: 0, facing: 0 },
   { x: 0, y: 1, facing: Math.PI / 2 },
@@ -65,6 +65,7 @@ const directions = [
 ] as const;
 
 function landAreaFor(world: World): Int32Array {
+  const { columns, rows } = world;
   const stride = columns + 1;
   const area = new Int32Array(stride * (rows + 1));
   for (let y = 0; y < rows; y += 1) {
@@ -77,13 +78,13 @@ function landAreaFor(world: World): Int32Array {
   return area;
 }
 
-function landCount(area: Int32Array, rect: Rect): number | null {
-  if (rect.left < 0 || rect.top < 0 || rect.right > width || rect.bottom > height) return null;
+function landCount(area: Int32Array, rect: Rect, world: World): number | null {
+  if (rect.left < 0 || rect.top < 0 || rect.right > world.width || rect.bottom > world.height) return null;
   const left = Math.floor(rect.left / tileSize);
   const top = Math.floor(rect.top / tileSize);
   const right = Math.ceil(rect.right / tileSize);
   const bottom = Math.ceil(rect.bottom / tileSize);
-  const stride = columns + 1;
+  const stride = world.columns + 1;
   return area[bottom * stride + right]!
     - area[top * stride + right]!
     - area[bottom * stride + left]!
@@ -129,11 +130,11 @@ function approachRects(harbour: Rect, directionIndex: number): Rect[] {
   }
 }
 
-function candidateAt(area: Int32Array, left: number, top: number, directionIndex: number): Candidate | null {
+function candidateAt(area: Int32Array, left: number, top: number, directionIndex: number, world: World): Candidate | null {
   const harbour: Rect = { left, top, right: left + harbourSize, bottom: top + harbourSize };
-  if (landCount(area, harbour) !== 0) return null;
+  if (landCount(area, harbour, world) !== 0) return null;
   for (const approach of approachRects(harbour, directionIndex)) {
-    if (landCount(area, approach) !== 0) return null;
+    if (landCount(area, approach, world) !== 0) return null;
   }
 
   const harbourX = left + harbourSize / 2;
@@ -146,10 +147,10 @@ function candidateAt(area: Int32Array, left: number, top: number, directionIndex
   if (
     city.left < borderClearance
     || city.top < borderClearance
-    || city.right > width - borderClearance
-    || city.bottom > height - borderClearance
+    || city.right > world.width - borderClearance
+    || city.bottom > world.height - borderClearance
   ) return null;
-  const count = landCount(area, city);
+  const count = landCount(area, city, world);
   if (count === null) return null;
   const tileColumns = Math.ceil(city.right / tileSize) - Math.floor(city.left / tileSize);
   const tileRows = Math.ceil(city.bottom / tileSize) - Math.floor(city.top / tileSize);
@@ -162,7 +163,7 @@ function distanceBetween(first: Candidate, second: Candidate): number {
   return Math.hypot(first.harbourX - second.harbourX, first.harbourY - second.harbourY);
 }
 
-function spaced(candidate: Candidate, chosen: readonly Candidate[]): boolean {
+function spaced(candidate: Candidate, chosen: readonly Candidate[], minSpacing: number): boolean {
   return chosen.every((other) => distanceBetween(candidate, other) >= minSpacing);
 }
 
@@ -178,13 +179,14 @@ function shuffledIndices(length: number, random: () => number): number[] {
 export function placeBases(world: World, neutralCount: number): BaseSite[] | null {
   if (!Number.isInteger(neutralCount) || neutralCount < 0) return null;
   const area = landAreaFor(world);
+  const minSpacing = GAME_CONFIG.bases.minSpacingRatio * world.width;
   const candidates: Candidate[] = [];
-  for (let row = 0; row <= rows - harbourSize / tileSize; row += 1) {
-    for (let column = 0; column <= columns - harbourSize / tileSize; column += 1) {
+  for (let row = 0; row <= world.rows - harbourSize / tileSize; row += 1) {
+    for (let column = 0; column <= world.columns - harbourSize / tileSize; column += 1) {
       const left = column * tileSize;
       const top = row * tileSize;
       for (let directionIndex = 0; directionIndex < directions.length; directionIndex += 1) {
-        const candidate = candidateAt(area, left, top, directionIndex);
+        const candidate = candidateAt(area, left, top, directionIndex, world);
         if (candidate) candidates.push(candidate);
       }
     }
@@ -218,7 +220,7 @@ export function placeBases(world: World, neutralCount: number): BaseSite[] | nul
   if (neutralCount > 0) {
     for (const index of remaining) {
       const candidate = candidates[index]!;
-      if (!spaced(candidate, chosen)) continue;
+      if (!spaced(candidate, chosen, minSpacing)) continue;
       selectedIndices.add(index);
       chosen.push(candidate);
       neutrals.push(candidate);
@@ -247,16 +249,25 @@ export function generateWorldWithBases(
   seed: number,
   landCoverage: number,
   neutralCount: number,
-): { world: World; sites: BaseSite[] } {
+  dimensions: MapDimensions,
+): { world: World; sites: BaseSite[]; neutralPlaced: number } {
   let lastError: unknown;
+  const worlds: World[] = [];
   for (let offset = 0; offset < 16; offset += 1) {
     try {
-      const world = generateWorld(seed + offset, landCoverage);
+      const world = generateWorld(seed + offset, landCoverage, dimensions);
+      worlds.push(world);
       const sites = placeBases(world, neutralCount);
-      if (sites) return { world, sites };
+      if (sites) return { world, sites, neutralPlaced: neutralCount };
       lastError = new Error(`Could not place ${homeSites + neutralCount} bases in world seed ${world.seed}`);
     } catch (error) {
       lastError = error;
+    }
+  }
+  for (let count = neutralCount - 1; count >= 0; count -= 1) {
+    for (const world of worlds) {
+      const sites = placeBases(world, count);
+      if (sites) return { world, sites, neutralPlaced: count };
     }
   }
   throw lastError ?? new Error("Could not generate a world with bases");

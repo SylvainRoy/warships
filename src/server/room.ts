@@ -17,7 +17,7 @@ import {
   type GameState,
   type GameEvent,
 } from "../shared/sim.js";
-import { encodeWorld, type World } from "../shared/world.js";
+import { encodeWorld, mapDimensions, type World } from "../shared/world.js";
 
 const SLOT_COLOURS = ["#3b82f6", "#ef4444", "#facc15", "#a855f7"] as const;
 const EMPTY_INPUT: FrigateInput = { seq: 0, keys: 0, throttle: 0, fireCannon: false, fireTorpedo: false };
@@ -59,8 +59,19 @@ export class Room {
   ) {
     const generated = initialWorld
       ? { world: initialWorld, sites: initialSites ?? placeBases(initialWorld, DEFAULT_SETTINGS.neutralBases) ?? [] }
-      : generateWorldWithBases(seed, GAME_CONFIG.world.generation.targetLandCoverage, DEFAULT_SETTINGS.neutralBases);
+      : generateWorldWithBases(
+        seed,
+        GAME_CONFIG.world.generation.targetLandCoverage,
+        DEFAULT_SETTINGS.neutralBases,
+        mapDimensions(DEFAULT_SETTINGS.mapSize),
+      );
     this.game = createGameState(generated.world, generated.sites);
+    if (initialWorld) {
+      const matchingSize = GAME_CONFIG.world.mapSizes.findIndex(
+        ({ columns, rows }) => columns === initialWorld.columns && rows === initialWorld.rows,
+      );
+      if (matchingSize >= 0) this.game.settings.mapSize = matchingSize;
+    }
     this.random = createSeededRandom(seed ^ 0x753a9);
   }
 
@@ -202,6 +213,8 @@ export class Room {
       token: session.token,
       slot: session.slot,
       world: encodeWorld(this.game.world.grid),
+      columns: this.game.world.columns,
+      rows: this.game.world.rows,
       bases: this.game.bases,
       settings: { ...this.game.settings },
     });
@@ -267,6 +280,7 @@ export class Room {
       const changes = describeSettingsChanges(this.game.settings, settings);
       const coverageChanged = this.game.settings.landCoveragePct !== settings.landCoveragePct;
       const neutralBasesChanged = this.game.settings.neutralBases !== settings.neutralBases;
+      const mapSizeChanged = this.game.settings.mapSize !== settings.mapSize;
       this.game.settings = settings;
       for (const frigate of Object.values(this.game.frigates)) {
         frigate.fuel = Math.min(frigate.fuel, fuelCapacity(settings));
@@ -284,7 +298,7 @@ export class Room {
           message: `Host ${session.name}: ${changes.join(", ")}`,
         });
       }
-      if (coverageChanged || neutralBasesChanged) this.regenerateWorld(session, now);
+      if (coverageChanged || neutralBasesChanged || mapSizeChanged) this.regenerateWorld(session, now);
       return;
     }
     this.send(session.socket!, { type: "error", code: "invalid_action" });
@@ -296,6 +310,7 @@ export class Room {
       seed,
       this.game.settings.landCoveragePct / 100,
       this.game.settings.neutralBases,
+      mapDimensions(this.game.settings.mapSize),
     );
     regenerateGameWorld(this.game, generated.world, generated.sites, now, this.random);
     for (const player of this.sessions.values()) player.lastBasesJson = null;
@@ -304,7 +319,13 @@ export class Room {
       if (frigate) frigate.name = player.name;
     }
     const encoded = encodeWorld(this.game.world.grid);
-    this.broadcast({ type: "world", world: encoded, bases: this.game.bases });
+    this.broadcast({
+      type: "world",
+      world: encoded,
+      columns: this.game.world.columns,
+      rows: this.game.world.rows,
+      bases: this.game.bases,
+    });
     this.sentProjectileIds.clear();
     this.broadcastJoined({
       type: "projectiles",
@@ -315,6 +336,14 @@ export class Room {
       removed: [],
     });
     this.broadcastEvent({ type: "host", playerId: session.id, name: session.name, message: `${session.name} regenerated the world` });
+    if (generated.neutralPlaced < this.game.settings.neutralBases) {
+      this.broadcastEvent({
+        type: "host",
+        playerId: session.id,
+        name: session.name,
+        message: `Only ${generated.neutralPlaced} neutral bases fit on this map`,
+      });
+    }
   }
 
   private tick(): void {

@@ -1,9 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { hullInsideHarbour, placeBases, restoreHome } from "../src/shared/bases.js";
+import { generateWorldWithBases, hullInsideHarbour, placeBases, restoreHome } from "../src/shared/bases.js";
 import { GAME_CONFIG } from "../src/shared/config.js";
 import { createGameState, createFrigate, stepBases, stepGame, type Frigate } from "../src/shared/sim.js";
 import { DEFAULT_SETTINGS } from "../src/shared/settings.js";
-import { generateWorld, type World } from "../src/shared/world.js";
+import { createEmptyWorld, generateWorld, mapDimensions, type World } from "../src/shared/world.js";
 
 const tileSize = GAME_CONFIG.world.tileSize;
 
@@ -17,7 +17,7 @@ function expectValidPlacement(world: World, sites: ReturnType<typeof placeBases>
       expect(Math.hypot(
         bases[first]!.harbourX - bases[second]!.harbourX,
         bases[first]!.harbourY - bases[second]!.harbourY,
-      )).toBeGreaterThanOrEqual(GAME_CONFIG.bases.minSpacing);
+      )).toBeGreaterThanOrEqual(GAME_CONFIG.bases.minSpacingRatio * world.width);
     }
   }
   for (const base of bases) {
@@ -25,7 +25,7 @@ function expectValidPlacement(world: World, sites: ReturnType<typeof placeBases>
     const harbourTop = base.harbourY - GAME_CONFIG.bases.harbourSize / 2;
     for (let y = harbourTop; y < harbourTop + GAME_CONFIG.bases.harbourSize; y += tileSize) {
       for (let x = harbourLeft; x < harbourLeft + GAME_CONFIG.bases.harbourSize; x += tileSize) {
-        expect(world.grid[(y / tileSize) * GAME_CONFIG.world.columns + x / tileSize]).toBe(0);
+        expect(world.grid[(y / tileSize) * world.columns + x / tileSize]).toBe(0);
       }
     }
     const cityLeft = base.cityX - GAME_CONFIG.bases.citySize / 2;
@@ -35,18 +35,18 @@ function expectValidPlacement(world: World, sites: ReturnType<typeof placeBases>
     const borderClearance = (GAME_CONFIG.world.generation.borderTiles + 1) * tileSize;
     expect(cityLeft).toBeGreaterThanOrEqual(borderClearance);
     expect(cityTop).toBeGreaterThanOrEqual(borderClearance);
-    expect(GAME_CONFIG.world.width - right).toBeGreaterThanOrEqual(borderClearance);
-    expect(GAME_CONFIG.world.height - bottom).toBeGreaterThanOrEqual(borderClearance);
+    expect(world.width - right).toBeGreaterThanOrEqual(borderClearance);
+    expect(world.height - bottom).toBeGreaterThanOrEqual(borderClearance);
     for (let row = Math.floor(cityTop / tileSize); row < Math.ceil(bottom / tileSize); row += 1) {
       for (let column = Math.floor(cityLeft / tileSize); column < Math.ceil(right / tileSize); column += 1) {
-        expect(world.grid[row * GAME_CONFIG.world.columns + column]).toBe(1);
+        expect(world.grid[row * world.columns + column]).toBe(1);
       }
     }
   }
 }
 
 function openWorld(): World {
-  return { seed: 1, grid: new Uint8Array(GAME_CONFIG.world.columns * GAME_CONFIG.world.rows) };
+  return createEmptyWorld(mapDimensions(2), 1);
 }
 
 function neutralSite(id = "n0") {
@@ -70,17 +70,29 @@ function ship(id: string, x = 5050, y = 4500): Frigate {
 
 describe("base placement", () => {
   it.each([11, 73, 512])("places deterministic, spaced bases in seed %i", (seed) => {
-    const world = generateWorld(seed, 0.25);
+    const world = generateWorld(seed, 0.25, mapDimensions(2));
     const sites = placeBases(world, 4);
     expectValidPlacement(world, sites, 4);
     expect(placeBases(world, 4)).toEqual(sites);
   });
 
   it("supports zero and eight neutral bases at 25% land coverage", () => {
-    const world = generateWorld(173, 0.25);
+    const world = generateWorld(173, 0.25, mapDimensions(2));
     expectValidPlacement(world, placeBases(world, 0), 0);
     expectValidPlacement(world, placeBases(world, 8), 8);
   });
+
+  it.each([0, 1])("places four homes and four neutrals with width-scaled spacing on map size %i", (mapSize) => {
+    const world = generateWorld(73, 0.25, mapDimensions(mapSize));
+    expectValidPlacement(world, placeBases(world, 4), 4);
+  });
+
+  it("places as many neutral bases as fit on Small while preserving the requested count in the result", () => {
+    const generated = generateWorldWithBases(11, 0.05, 8, mapDimensions(0));
+    expect(generated.neutralPlaced).toBeLessThan(8);
+    expect(generated.neutralPlaced).toBeGreaterThanOrEqual(0);
+    expect(generated.sites.filter((site) => site.kind === "neutral")).toHaveLength(generated.neutralPlaced);
+  }, 120_000);
 
   it("requires the complete frigate hull to fit in the harbour", () => {
     const base = neutralSite();

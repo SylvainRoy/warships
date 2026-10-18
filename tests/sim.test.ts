@@ -3,7 +3,7 @@ import { GAME_CONFIG } from "../src/shared/config.js";
 import { mulberry32 } from "../src/shared/rng.js";
 import { applyFrigateInput, createGameState, createFrigate, createSeededRandom, fuelCapacity, INPUT_KEYS, pointToHullDistance, regenerateGameWorld, refillSupplies, spawnFrigate, spawnPlayerFrigate, stepBases, stepGame, stepTurrets, type Frigate, type FrigateInput } from "../src/shared/sim.js";
 import { DEFAULT_SETTINGS, type GameSettings } from "../src/shared/settings.js";
-import { generateWorld, isLandAt, type World } from "../src/shared/world.js";
+import { createEmptyWorld, generateWorld, isLandAt, mapDimensions, type World } from "../src/shared/world.js";
 import { generateWorldWithBases } from "../src/shared/bases.js";
 
 const dt = 1 / GAME_CONFIG.network.tickRate;
@@ -11,7 +11,7 @@ const maxHp = GAME_CONFIG.player.maxHp;
 const quietInput: FrigateInput = { seq: 0, keys: 0, throttle: 0, fireCannon: false, fireTorpedo: false };
 
 function openWorld(): World {
-  return { seed: 1, grid: new Uint8Array(GAME_CONFIG.world.columns * GAME_CONFIG.world.rows) };
+  return createEmptyWorld(mapDimensions(2), 1);
 }
 
 function frigate(id: string, x = 5000, y = 4500, heading = 0): Frigate {
@@ -89,7 +89,7 @@ describe("frigate movement and land contact", () => {
   it("scales head-on coast damage by impact speed and ignores shallow slides", () => {
     const world = openWorld();
     const wallColumn = 100;
-    for (let row = 0; row < GAME_CONFIG.world.rows; row += 1) world.grid[row * GAME_CONFIG.world.columns + wallColumn] = 1;
+    for (let row = 0; row < world.rows; row += 1) world.grid[row * world.columns + wallColumn] = 1;
     const wallX = wallColumn * GAME_CONFIG.world.tileSize;
     const contactX = wallX - GAME_CONFIG.frigate.length / 2;
     let ship = frigate("coast", contactX, 4500);
@@ -122,7 +122,7 @@ describe("frigate movement and land contact", () => {
   it("preserves speed while a 45-degree heading slides along a vertical wall", () => {
     const world = openWorld();
     const wallColumn = 100;
-    for (let row = 0; row < GAME_CONFIG.world.rows; row += 1) world.grid[row * GAME_CONFIG.world.columns + wallColumn] = 1;
+    for (let row = 0; row < world.rows; row += 1) world.grid[row * world.columns + wallColumn] = 1;
     const wallX = wallColumn * GAME_CONFIG.world.tileSize;
     const heading = Math.PI / 4;
     const halfLength = GAME_CONFIG.frigate.length / 2;
@@ -148,7 +148,7 @@ describe("frigate movement and land contact", () => {
   it("does no further damage while pushing against a coast after a head-on impact", () => {
     const world = openWorld();
     const wallColumn = 100;
-    for (let row = 0; row < GAME_CONFIG.world.rows; row += 1) world.grid[row * GAME_CONFIG.world.columns + wallColumn] = 1;
+    for (let row = 0; row < world.rows; row += 1) world.grid[row * world.columns + wallColumn] = 1;
     let ship = frigate("coast", wallColumn * GAME_CONFIG.world.tileSize - GAME_CONFIG.frigate.length / 2, 4500);
     ship.speed = GAME_CONFIG.frigate.maxForwardSpeed;
     ship = awaitApply(ship, { ...quietInput, throttle: 3 }, dt, world, 0);
@@ -161,7 +161,7 @@ describe("frigate movement and land contact", () => {
   it("ignores land damage during spawn protection", () => {
     const world = openWorld();
     const wallColumn = 100;
-    for (let row = 0; row < GAME_CONFIG.world.rows; row += 1) world.grid[row * GAME_CONFIG.world.columns + wallColumn] = 1;
+    for (let row = 0; row < world.rows; row += 1) world.grid[row * world.columns + wallColumn] = 1;
     let protectedShip = frigate("protected", wallColumn * GAME_CONFIG.world.tileSize - GAME_CONFIG.frigate.length / 2, 4500);
     protectedShip.speed = GAME_CONFIG.frigate.maxForwardSpeed;
     protectedShip.spawnProtectedUntil = 3;
@@ -172,7 +172,7 @@ describe("frigate movement and land contact", () => {
   it("self-sinks on a damaging land impact and applies the score penalty", () => {
     const world = openWorld();
     const wallColumn = 100;
-    for (let row = 0; row < GAME_CONFIG.world.rows; row += 1) world.grid[row * GAME_CONFIG.world.columns + wallColumn] = 1;
+    for (let row = 0; row < world.rows; row += 1) world.grid[row * world.columns + wallColumn] = 1;
     const ship = frigate("coast", wallColumn * GAME_CONFIG.world.tileSize - GAME_CONFIG.frigate.length / 2, 4500);
     ship.speed = GAME_CONFIG.frigate.maxForwardSpeed;
     ship.hp = GAME_CONFIG.land.damage;
@@ -258,7 +258,7 @@ describe("host settings in simulation", () => {
   it("keeps full-speed head-on land damage capped at 10 HP when boat speed is scaled", () => {
     const world = openWorld();
     const wallColumn = 100;
-    for (let row = 0; row < GAME_CONFIG.world.rows; row += 1) world.grid[row * GAME_CONFIG.world.columns + wallColumn] = 1;
+    for (let row = 0; row < world.rows; row += 1) world.grid[row * world.columns + wallColumn] = 1;
     const ship = frigate("coast", wallColumn * GAME_CONFIG.world.tileSize - GAME_CONFIG.frigate.length / 2, 4500);
     ship.speed = GAME_CONFIG.frigate.maxForwardSpeed * 2;
 
@@ -396,7 +396,7 @@ describe("torpedoes and scoring", () => {
 
   it("stops torpedoes at land and at the world edge", () => {
     const world = openWorld();
-    for (let row = 0; row < GAME_CONFIG.world.rows; row += 1) world.grid[row * GAME_CONFIG.world.columns + 101] = 1;
+    for (let row = 0; row < world.rows; row += 1) world.grid[row * world.columns + 101] = 1;
     const ship = frigate("launcher", 1950, 4500);
     const state = createGameState(world);
     state.frigates.launcher = ship;
@@ -865,6 +865,14 @@ describe("fuel, ammunition, and resupply", () => {
     return { state, base, owner };
   }
 
+  it.each([
+    [0, 8000],
+    [1, 16000],
+    [2, 32000],
+  ])("uses width-scaled fuel capacity on map size %i", (mapSize, capacity) => {
+    expect(fuelCapacity({ ...DEFAULT_SETTINGS, mapSize, fuelCrossings: 2 })).toBe(capacity);
+  });
+
   it("burns fuel at absolute speed and leaves stopped frigates unchanged", () => {
     const world = openWorld();
     const stopped = frigate("stopped");
@@ -884,9 +892,9 @@ describe("fuel, ammunition, and resupply", () => {
     ship.fuel = 0;
     ship.shells = 0;
     ship.torpedoes = 0;
-    refillSupplies(ship, { ...DEFAULT_SETTINGS, fuelCrossings: 3, shells: 80, torpedoes: 40 });
+    refillSupplies(ship, { ...DEFAULT_SETTINGS, mapSize: 2, fuelCrossings: 3, shells: 80, torpedoes: 40 });
     expect(ship).toMatchObject({
-      fuel: 3 * GAME_CONFIG.world.width,
+      fuel: 3 * mapDimensions(2).width,
       shells: 80,
       torpedoes: 40,
       resupplying: false,
@@ -1043,7 +1051,7 @@ describe("spawning", () => {
     const halfLength = GAME_CONFIG.frigate.length / 2;
     const halfBeam = GAME_CONFIG.frigate.beam / 2;
     for (let seed = 1; seed <= 20; seed += 1) {
-      const world = generateWorld(seed);
+      const world = generateWorld(seed, 0.25, mapDimensions(2));
       const random = mulberry32(seed * 7919);
       for (let spawnIndex = 0; spawnIndex < 200; spawnIndex += 1) {
         const ship = spawnFrigate("spawn-test", "spawn-test", 1, world, [], random, 0);
@@ -1074,7 +1082,8 @@ describe("spawning", () => {
     const world = openWorld();
     const first = spawnFrigate("one", "one", 1, world, [], () => 0.25, 0, 1);
     const second = spawnFrigate("two", "two", 2, world, [first], () => 0.75, 0, 1);
-    expect(Math.hypot(first.x - second.x, first.y - second.y)).toBeGreaterThanOrEqual(GAME_CONFIG.player.spawnDistance);
+    expect(Math.hypot(first.x - second.x, first.y - second.y))
+      .toBeGreaterThanOrEqual(GAME_CONFIG.player.spawnDistanceRatio * world.width);
     expect(first.x).toBeGreaterThan(60);
     expect(first.y).toBeGreaterThan(60);
     expect(first.hp).toBe(maxHp);
@@ -1138,7 +1147,12 @@ describe("spawning", () => {
     for (const ship of ships) state.frigates[ship.playerId] = ship;
     state.scores = scores(...ships);
 
-    const generated = generateWorldWithBases(2468, 0.1, state.settings.neutralBases);
+    const generated = generateWorldWithBases(
+      2468,
+      0.1,
+      state.settings.neutralBases,
+      mapDimensions(state.settings.mapSize),
+    );
     regenerateGameWorld(state, generated.world, generated.sites, 1, createSeededRandom(17));
 
     expect(state.settings).toEqual({

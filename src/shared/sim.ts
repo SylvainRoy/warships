@@ -2,7 +2,7 @@ import { GAME_CONFIG } from "./config.js";
 import { mulberry32 } from "./rng.js";
 import { hullInsideHarbour, restoreHome, type Base, type BaseSite } from "./bases.js";
 import { DEFAULT_SETTINGS, type GameSettings } from "./settings.js";
-import { isLandAt, type World } from "./world.js";
+import { isLandAt, mapDimensions, type World } from "./world.js";
 
 export const INPUT_KEYS = {
   turnLeft: 1 << 0,
@@ -140,7 +140,8 @@ function hullTouchesLand(x: number, y: number, heading: number, world: World, cl
 
 function hasSpawnClearance(world: World, x: number, y: number): boolean {
   const radius = Math.hypot(GAME_CONFIG.frigate.length / 2, GAME_CONFIG.frigate.beam / 2) + GAME_CONFIG.land.clearance;
-  const { tileSize, columns, rows, width, height } = GAME_CONFIG.world;
+  const { tileSize } = GAME_CONFIG.world;
+  const { columns, rows, width, height } = world;
   if (x - radius < 0 || y - radius < 0 || x + radius > width || y + radius > height) return false;
   for (let row = Math.floor((y - radius) / tileSize); row <= Math.floor((y + radius) / tileSize); row += 1) {
     for (let column = Math.floor((x - radius) / tileSize); column <= Math.floor((x + radius) / tileSize); column += 1) {
@@ -278,7 +279,7 @@ export function createFrigate(
 }
 
 export function fuelCapacity(settings: GameSettings): number {
-  return settings.fuelCrossings * GAME_CONFIG.world.width;
+  return settings.fuelCrossings * mapDimensions(settings.mapSize).width;
 }
 
 export function refillSupplies(frigate: Frigate, settings: GameSettings): void {
@@ -302,22 +303,22 @@ export function spawnFrigate(
   let best: { x: number; y: number; nearest: number } | undefined;
   const validPoint = (x: number, y: number) => hasSpawnClearance(world, x, y);
   for (let attempt = 0; attempt < attempts; attempt += 1) {
-    const x = GAME_CONFIG.world.width * random();
-    const y = GAME_CONFIG.world.height * random();
+    const x = world.width * random();
+    const y = world.height * random();
     if (!validPoint(x, y)) continue;
     let nearest = Number.POSITIVE_INFINITY;
     for (const other of others) {
       if (other.status !== "alive") continue;
       nearest = Math.min(nearest, Math.hypot(other.x - x, other.y - y));
     }
-    if (nearest >= GAME_CONFIG.player.spawnDistance) {
+    if (nearest >= GAME_CONFIG.player.spawnDistanceRatio * world.width) {
       return createFrigate(playerId, name, slot, x, y, random() * Math.PI * 2, now, settings);
     }
     if (!best || nearest > best.nearest) best = { x, y, nearest };
   }
   if (!best) {
-    for (let y = 80; y < GAME_CONFIG.world.height - 80 && !best; y += 80) {
-      for (let x = 80; x < GAME_CONFIG.world.width - 80; x += 80) {
+    for (let y = 80; y < world.height - 80 && !best; y += 80) {
+      for (let x = 80; x < world.width - 80; x += 80) {
         if (validPoint(x, y)) {
           best = { x, y, nearest: -1 };
           break;
@@ -853,7 +854,7 @@ export function stepGame(state: GameState, inputs: Record<string, FrigateInput |
       }
       if (exploded) break;
     }
-    if (!exploded && torpedo.x >= 0 && torpedo.y >= 0 && torpedo.x < GAME_CONFIG.world.width && torpedo.y < GAME_CONFIG.world.height) {
+    if (!exploded && torpedo.x >= 0 && torpedo.y >= 0 && torpedo.x < state.world.width && torpedo.y < state.world.height) {
       remainingTorpedoes.push(torpedo);
     } else if (!exploded) {
       emitExplosion(state, torpedo.x, torpedo.y, "land");

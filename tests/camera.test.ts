@@ -1,8 +1,10 @@
 import { describe, expect, it } from "vitest";
 import { computeCamera, computeViewport } from "../src/client/camera.js";
 import { GAME_CONFIG } from "../src/shared/config.js";
+import { mapDimensions } from "../src/shared/world.js";
 
-const { screen, world } = GAME_CONFIG;
+const { screen } = GAME_CONFIG;
+const world = mapDimensions(2);
 
 describe("computeViewport", () => {
   it("fits the reference frame and centers it in non-16:9 windows", () => {
@@ -21,7 +23,7 @@ describe("computeCamera", () => {
       cannonBearing: -Math.PI / 2,
       cannonRange: 800,
     };
-    expect(computeCamera(frigate)).toEqual({
+    expect(computeCamera(frigate, world)).toEqual({
       x: frigate.x - screen.width / 2,
       y: frigate.y - 450,
     });
@@ -36,7 +38,7 @@ describe("computeCamera", () => {
     ];
 
     for (const { frigate, expected } of corners) {
-      const camera = computeCamera(frigate);
+      const camera = computeCamera(frigate, world);
       expect(camera).toEqual(expected);
       expect(camera.x).toBeGreaterThanOrEqual(0);
       expect(camera.x).toBeLessThanOrEqual(world.width - screen.width);
@@ -49,7 +51,7 @@ describe("computeCamera", () => {
     const frigate = { x: world.width / 2, y: world.height / 2, heading: 0, cannonBearing: 0, cannonRange: 100 };
     const otherAim = { ...frigate, cannonBearing: Math.PI / 2, cannonRange: 800 };
 
-    expect(computeCamera(frigate)).toEqual(computeCamera(otherAim));
+    expect(computeCamera(frigate, world)).toEqual(computeCamera(otherAim, world));
   });
 
 });

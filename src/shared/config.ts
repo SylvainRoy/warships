@@ -1,11 +1,12 @@
 export const GAME_CONFIG = {
   screen: { width: 1600, height: 900 },
   world: {
-    width: 16000,
-    height: 9000,
     tileSize: 20,
-    columns: 800,
-    rows: 450,
+    mapSizes: [
+      { label: "Small", columns: 200, rows: 112 },
+      { label: "Standard", columns: 400, rows: 225 },
+      { label: "Big", columns: 800, rows: 450 },
+    ],
     generation: {
       landCoverageTolerance: 0.025,
       targetLandCoverage: 0.25,
@@ -19,7 +20,7 @@ export const GAME_CONFIG = {
   bases: {
     citySize: 40,
     harbourSize: 60,
-    minSpacing: 1600,
+    minSpacingRatio: 0.1,
     homeSites: 4,
     harbourApproach: 40,
     turretRange: 600,
@@ -59,7 +60,7 @@ export const GAME_CONFIG = {
     damage: 25,
   },
   land: { damage: 10, damageInterval: 1, grazeSpeed: 20, clearance: 60 },
-  player: { maxHp: 100, spawnDistance: 2400, spawnProtection: 3, sinkAnimation: 2, respawnDelay: 3, spawnAttempts: 3000, maxPlayers: 4 },
+  player: { maxHp: 100, spawnDistanceRatio: 0.15, spawnProtection: 3, sinkAnimation: 2, respawnDelay: 3, spawnAttempts: 3000, maxPlayers: 4 },
   network: { tickRate: 30, snapshotRate: 20, interpolationDelay: 0.1, reconnectGrace: 10 },
   name: { minLength: 1, maxLength: 16 },
 } as const;

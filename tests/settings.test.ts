@@ -1,9 +1,13 @@
 import { describe, expect, it } from "vitest";
-import { DEFAULT_SETTINGS, describeSettingsChanges, sanitizeSettings } from "../src/shared/settings.js";
+import { DEFAULT_SETTINGS, describeSettingsChanges, MAP_SIZE_LABELS, SETTINGS_LIMITS, sanitizeSettings } from "../src/shared/settings.js";
 
 describe("game settings", () => {
   it("accepts defaults and valid edge values as fresh objects", () => {
     expect(DEFAULT_SETTINGS.landCoveragePct).toBe(25);
+    expect(DEFAULT_SETTINGS.mapSize).toBe(1);
+    expect(MAP_SIZE_LABELS).toEqual(["Small", "Standard", "Big"]);
+    expect(SETTINGS_LIMITS.mapSize).toEqual({ min: 0, max: 2, step: 1 });
+    expect(Object.keys(DEFAULT_SETTINGS).indexOf("mapSize")).toBe(Object.keys(DEFAULT_SETTINGS).indexOf("landCoveragePct") + 1);
     expect(DEFAULT_SETTINGS.neutralBases).toBe(4);
     expect(DEFAULT_SETTINGS.fuelCrossings).toBe(2);
     expect(DEFAULT_SETTINGS.shells).toBe(50);
@@ -25,6 +29,7 @@ describe("game settings", () => {
       cannonReload: 0.5,
       torpedoReload: 20,
       landCoveragePct: 5,
+      mapSize: 0,
       neutralBases: 0,
       fuelCrossings: 1,
       shells: 10,
@@ -42,6 +47,7 @@ describe("game settings", () => {
       cannonReload: 0.5,
       torpedoReload: 20,
       landCoveragePct: 5,
+      mapSize: 0,
       neutralBases: 0,
       fuelCrossings: 1,
       shells: 10,
@@ -74,6 +80,9 @@ describe("game settings", () => {
     expect(sanitizeSettings({ ...DEFAULT_SETTINGS, landCoveragePct: 2.5 })).toBeNull();
     expect(sanitizeSettings({ ...DEFAULT_SETTINGS, landCoveragePct: 45 })).toBeNull();
     expect(sanitizeSettings({ ...DEFAULT_SETTINGS, landCoveragePct: 12 })).toBeNull();
+    expect(sanitizeSettings({ ...DEFAULT_SETTINGS, mapSize: -1 })).toBeNull();
+    expect(sanitizeSettings({ ...DEFAULT_SETTINGS, mapSize: 3 })).toBeNull();
+    expect(sanitizeSettings({ ...DEFAULT_SETTINGS, mapSize: 1.5 })).toBeNull();
     expect(sanitizeSettings({ ...DEFAULT_SETTINGS, neutralBases: -1 })).toBeNull();
     expect(sanitizeSettings({ ...DEFAULT_SETTINGS, neutralBases: 9 })).toBeNull();
     expect(sanitizeSettings({ ...DEFAULT_SETTINGS, neutralBases: 2.5 })).toBeNull();
@@ -116,6 +125,7 @@ describe("game settings", () => {
       cannonReload: 2,
       torpedoReload: 2.5,
       landCoveragePct: 15,
+      mapSize: 0,
       neutralBases: 6,
       fuelCrossings: 4,
       shells: 100,
@@ -132,6 +142,7 @@ describe("game settings", () => {
       "cannon reload 2 s",
       "torpedo reload 2.5 s",
       "land coverage 15%",
+      "map size Small",
       "neutral bases 6",
       "fuel 4 crossings",
       "shells 100",

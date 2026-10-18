@@ -6,7 +6,7 @@ import type { ClientMessage, ServerMessage } from "../src/shared/protocol.js";
 import { DEFAULT_SETTINGS } from "../src/shared/settings.js";
 import type { BaseSite } from "../src/shared/bases.js";
 import { Room } from "../src/server/room.js";
-import type { World } from "../src/shared/world.js";
+import { createEmptyWorld, mapDimensions, type World } from "../src/shared/world.js";
 
 class FakeSocket extends EventEmitter {
   readyState = 1;
@@ -26,7 +26,8 @@ class FakeSocket extends EventEmitter {
   }
 }
 
-const openWorld: World = { seed: 11, grid: new Uint8Array(GAME_CONFIG.world.columns * GAME_CONFIG.world.rows) };
+const bigDimensions = mapDimensions(2);
+const openWorld: World = createEmptyWorld(bigDimensions, 11);
 const fixtureSites: BaseSite[] = [
   { id: "h0", kind: "home", homeSlot: 0, cityX: 1750, cityY: 4500, harbourX: 1800, harbourY: 4500, facing: 0 },
   { id: "h1", kind: "home", homeSlot: 1, cityX: 4450, cityY: 4500, harbourX: 4500, harbourY: 4500, facing: Math.PI / 2 },
@@ -70,9 +71,10 @@ describe("multiplayer room", () => {
       join(room, socket, ["Alice", "Bob", "Cara", "Drew"][index] ?? "Guest");
       expect(welcome(socket).slot).toBe(index + 1);
       expect(welcome(socket).playerId).toBe(`p${index + 1}`);
+      expect(welcome(socket)).toMatchObject({ columns: bigDimensions.columns, rows: bigDimensions.rows });
     });
     expect(room.sessions.get(welcome(sockets[0]!).playerId)?.host).toBe(true);
-    expect(welcome(sockets[0]!).settings).toEqual(DEFAULT_SETTINGS);
+    expect(welcome(sockets[0]!).settings).toEqual({ ...DEFAULT_SETTINGS, mapSize: 2 });
     expect(colours).toEqual(["#3b82f6", "#ef4444", "#facc15", "#a855f7"]);
     const fifth = connect(room);
     join(room, fifth, "Eve");
@@ -124,7 +126,7 @@ describe("multiplayer room", () => {
 
     send(room, hostSocket, { type: "host", action: "settings", settings: { ...DEFAULT_SETTINGS, boatSpeedPct: 105 } });
     expect(hostSocket.last("error")?.code).toBe("invalid_action");
-    expect(room.game.settings).toEqual(DEFAULT_SETTINGS);
+    expect(room.game.settings).toEqual({ ...DEFAULT_SETTINGS, mapSize: 2 });
 
     const initialSeed = room.game.world.seed;
     const initialWorldMessageCount = hostSocket.messages.filter((message) => message.type === "world").length;
@@ -136,6 +138,7 @@ describe("multiplayer room", () => {
       shells: 100,
       torpedoes: 60,
       resupplyTime: 6,
+      mapSize: 2,
     };
     send(room, hostSocket, { type: "host", action: "settings", settings });
     expect(room.game.settings).toEqual(settings);
@@ -166,7 +169,7 @@ describe("multiplayer room", () => {
     const hostId = welcome(hostSocket).playerId;
     room.game.scores[hostId]!.score = 3;
     const initialSeed = room.game.world.seed;
-    const settings = { ...DEFAULT_SETTINGS, landCoveragePct: 10 };
+    const settings = { ...DEFAULT_SETTINGS, landCoveragePct: 10, mapSize: 2 };
 
     send(room, hostSocket, { type: "host", action: "settings", settings });
 
@@ -186,6 +189,25 @@ describe("multiplayer room", () => {
     expect(room.game.scores[hostId]?.score).toBe(3);
   });
 
+  it("regenerates for map-size changes and announces neutral-base fallback", () => {
+    const { room } = setup();
+    const hostSocket = connect(room);
+    join(room, hostSocket, "Harbor");
+    const settings = { ...room.game.settings, landCoveragePct: 5, mapSize: 0, neutralBases: 8 };
+
+    send(room, hostSocket, { type: "host", action: "settings", settings });
+
+    const dimensions = mapDimensions(0);
+    expect(room.game.settings).toEqual(settings);
+    expect(room.game.world).toMatchObject(dimensions);
+    expect(hostSocket.last("world")).toMatchObject({ columns: dimensions.columns, rows: dimensions.rows });
+    const neutralPlaced = room.game.bases.filter((base) => base.kind === "neutral").length;
+    expect(neutralPlaced).toBeLessThan(8);
+    expect(hostSocket.messages.some((message) =>
+      message.type === "event" && message.event.message === `Only ${neutralPlaced} neutral bases fit on this map`,
+    )).toBe(true);
+  }, 120_000);
+
   it("preserves settings through regeneration, score reset, and host succession", () => {
     const { room, setNow } = setup();
     const hostSocket = connect(room);
@@ -193,7 +215,7 @@ describe("multiplayer room", () => {
     join(room, hostSocket, "Harbor");
     setNow(1);
     join(room, guestSocket, "Buoy");
-    const settings = { ...DEFAULT_SETTINGS, boatSpeedPct: 150, torpedoReload: 4 };
+    const settings = { ...DEFAULT_SETTINGS, boatSpeedPct: 150, torpedoReload: 4, mapSize: 2 };
     send(room, hostSocket, { type: "host", action: "settings", settings });
 
     send(room, hostSocket, { type: "host", action: "regenerate" });
@@ -296,8 +318,8 @@ describe("multiplayer room", () => {
   });
 
   it("announces a sent torpedo when it ends on land", () => {
-    const world: World = { seed: 11, grid: new Uint8Array(openWorld.grid.length) };
-    world.grid[225 * GAME_CONFIG.world.columns + 50] = 1;
+    const world: World = createEmptyWorld(bigDimensions, 11);
+    world.grid[225 * bigDimensions.columns + 50] = 1;
     const room = new Room(11, () => 0, world);
     const socket = connect(room);
     join(room, socket, "Harbor");
@@ -443,7 +465,7 @@ describe("multiplayer room", () => {
       heading: home.facing,
     });
     expect(frigate).toMatchObject({
-      fuel: DEFAULT_SETTINGS.fuelCrossings * GAME_CONFIG.world.width,
+      fuel: DEFAULT_SETTINGS.fuelCrossings * bigDimensions.width,
       shells: DEFAULT_SETTINGS.shells,
       torpedoes: DEFAULT_SETTINGS.torpedoes,
     });
@@ -575,7 +597,7 @@ describe("multiplayer room", () => {
     originalHome.returnAt = 30;
     originalHome.turret = "destroyed";
     originalHome.turretHp = 0;
-    const settings = { ...DEFAULT_SETTINGS, neutralBases: 2 };
+    const settings = { ...DEFAULT_SETTINGS, neutralBases: 2, mapSize: 2 };
 
     send(room, socket, { type: "host", action: "settings", settings });
 
@@ -617,11 +639,11 @@ describe("multiplayer room", () => {
     host.shells = 25;
     host.torpedoes = 6;
 
-    const lower = { ...DEFAULT_SETTINGS, fuelCrossings: 1, shells: 10, torpedoes: 5 };
+    const lower = { ...DEFAULT_SETTINGS, fuelCrossings: 1, shells: 10, torpedoes: 5, mapSize: 2 };
     send(room, hostSocket, { type: "host", action: "settings", settings: lower });
     expect(host).toMatchObject({ fuel: 16000, shells: 10, torpedoes: 5 });
 
-    const higher = { ...DEFAULT_SETTINGS, fuelCrossings: 4, shells: 100, torpedoes: 50 };
+    const higher = { ...DEFAULT_SETTINGS, fuelCrossings: 4, shells: 100, torpedoes: 50, mapSize: 2 };
     send(room, hostSocket, { type: "host", action: "settings", settings: higher });
     expect(host).toMatchObject({ fuel: 16000, shells: 10, torpedoes: 5 });
     host.fuel = 12345.678;
@@ -634,7 +656,7 @@ describe("multiplayer room", () => {
     setNow(1);
     room.advanceTick();
     expect(room.game.frigates[guestId]).toMatchObject({
-      fuel: higher.fuelCrossings * GAME_CONFIG.world.width,
+      fuel: higher.fuelCrossings * bigDimensions.width,
       shells: higher.shells,
       torpedoes: higher.torpedoes,
       status: "alive",

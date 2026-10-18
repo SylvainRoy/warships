@@ -1,4 +1,5 @@
 import { GAME_CONFIG } from "../shared/config.js";
+import type { World } from "../shared/world.js";
 
 function clamp(value: number, min: number, max: number): number {
   return Math.max(min, Math.min(max, value));
@@ -21,10 +22,11 @@ export function computeViewport(
 
 export function computeCamera(
   f: { x: number; y: number },
+  world: Pick<World, "width" | "height">,
   view: { width: number; height: number } = GAME_CONFIG.screen,
 ): { x: number; y: number } {
   return {
-    x: clamp(f.x - view.width / 2, 0, GAME_CONFIG.world.width - view.width),
-    y: clamp(f.y - view.height / 2, 0, GAME_CONFIG.world.height - view.height),
+    x: clamp(f.x - view.width / 2, 0, world.width - view.width),
+    y: clamp(f.y - view.height / 2, 0, world.height - view.height),
   };
 }

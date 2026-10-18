@@ -10,8 +10,13 @@ Physical sizes like "2 cm" depend on the player's monitor, so the game uses an a
 
 ## Dimensions
 
-- World size: **10 × 10 screens = 16 000 u × 9 000 u**, i.e. 10 reference screens horizontally and 10 vertically.
+- The host selects one of three map sizes, each retaining a 16:9 shape as closely as 20 u tile alignment allows (Q132, Q141):
+  - **Small**: 200 × 112 tiles = **4 000 u × 2 240 u**.
+  - **Standard**: 400 × 225 tiles = **8 000 u × 4 500 u**.
+  - **Big**: 800 × 450 tiles = **16 000 u × 9 000 u**.
+  - Standard MUST be the default. Small's height MUST be rounded to 2 240 u (112 tiles), rather than 2 250 u (Q140, Q141).
 - The world is bounded: its border is an impassable edge (rendered as a coastline/cliff). It does not wrap around.
+- Every map MUST retain the reference screen size of 1 600 u × 900 u and 20 u tiles.
 
 ## Terrain
 
@@ -29,8 +34,9 @@ The visual terrain style is natural: rounded turquoise shallows about **60 u** w
 - The world is generated procedurally from a **seed** (integer) on the server. Clients receive the seed + generation algorithm version, or the tile grid itself (implementation choice).
 - The host's **Land coverage** setting controls the target share of the map: **5–40 %** in 5-point steps, default **25 %**. Generation accepts a result within **±2.5 percentage points** of the target; targets above 40 % are unsupported because generation may fail.
 - Land is made of:
-  - a dozen large islands / land masses,
+  - large islands / land masses,
   - many small islands (some just a few tiles), giving cover against torpedoes.
+- Island size and shape MUST remain unchanged between map sizes; the number of painted islands MUST scale with map area. Land coverage, the minimum 8-tile (160 u) channel, and the border tiles MUST remain unchanged (Q134).
 - **Connectivity MUST be guaranteed**: after generation, a flood fill identifies water regions; every water region not connected to the largest one is turned into land (or connected by carving a channel). Result: all water is reachable by any frigate.
 - **Navigability**: channels between land MUST be at least 8 tiles (160 u) wide. Every water tile MUST belong to at least one all-water 8 × 8-tile square; narrower passages are filled. Prevents frigates getting stuck in slivers.
 - The host can regenerate the world at any time (new random seed), see [07-multiplayer.md](07-multiplayer.md).

@@ -10,6 +10,7 @@ export interface GameSettings {
   cannonReload: number;
   torpedoReload: number;
   landCoveragePct: number;
+  mapSize: number;
   neutralBases: number;
   fuelCrossings: number;
   shells: number;
@@ -29,6 +30,7 @@ export const DEFAULT_SETTINGS: GameSettings = {
   cannonReload: GAME_CONFIG.cannon.reload,
   torpedoReload: GAME_CONFIG.torpedo.reload,
   landCoveragePct: GAME_CONFIG.world.generation.targetLandCoverage * 100,
+  mapSize: 1,
   neutralBases: 4,
   fuelCrossings: 2,
   shells: 50,
@@ -48,6 +50,7 @@ export const SETTINGS_LIMITS: Record<keyof GameSettings, { min: number; max: num
   cannonReload: { min: 0.5, max: 10, step: 0.5 },
   torpedoReload: { min: 1, max: 20, step: 0.5 },
   landCoveragePct: { min: 5, max: 40, step: 5 },
+  mapSize: { min: 0, max: 2, step: 1 },
   neutralBases: { min: 0, max: 8, step: 1 },
   fuelCrossings: { min: 1, max: 10, step: 1 },
   shells: { min: 10, max: 200, step: 10 },
@@ -67,6 +70,7 @@ const SETTINGS_KEYS: readonly (keyof GameSettings)[] = [
   "cannonReload",
   "torpedoReload",
   "landCoveragePct",
+  "mapSize",
   "neutralBases",
   "fuelCrossings",
   "shells",
@@ -86,6 +90,7 @@ const SETTING_LABELS: Record<keyof GameSettings, string> = {
   cannonReload: "cannon reload",
   torpedoReload: "torpedo reload",
   landCoveragePct: "land coverage",
+  mapSize: "map size",
   neutralBases: "neutral bases",
   fuelCrossings: "fuel",
   shells: "shells",
@@ -94,6 +99,12 @@ const SETTING_LABELS: Record<keyof GameSettings, string> = {
   captureTime: "capture time",
   repairTime: "repair time",
 };
+
+export const MAP_SIZE_LABELS = GAME_CONFIG.world.mapSizes.map(({ label }) => label);
+
+export function formatMapSize(value: number): string {
+  return MAP_SIZE_LABELS[value] ?? `${value}`;
+}
 
 export function sanitizeSettings(value: unknown): GameSettings | null {
   if (value === null || typeof value !== "object" || Array.isArray(value)) return null;
@@ -120,7 +131,9 @@ export function sanitizeSettings(value: unknown): GameSettings | null {
 export function describeSettingsChanges(before: GameSettings, after: GameSettings): string[] {
   return SETTINGS_KEYS.flatMap((key) => {
     if (before[key] === after[key]) return [];
-    const value = key === "cannonReload" || key === "torpedoReload" || key === "resupplyTime" || key === "captureTime" || key === "repairTime"
+    const value = key === "mapSize"
+      ? formatMapSize(after[key])
+      : key === "cannonReload" || key === "torpedoReload" || key === "resupplyTime" || key === "captureTime" || key === "repairTime"
       ? `${after[key].toFixed(1).replace(/\.0$/, "")} s`
       : key === "neutralBases" || key === "shells" || key === "torpedoes"
         ? `${after[key]}`

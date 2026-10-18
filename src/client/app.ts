@@ -1,9 +1,9 @@
 import { GAME_CONFIG } from "../shared/config.js";
 import type { Base } from "../shared/bases.js";
 import { INPUT_KEYS, applyFrigateInput, type Frigate, type FrigateInput, type GameEvent, type Shell, type Torpedo } from "../shared/sim.js";
-import { DEFAULT_SETTINGS, describeSettingsChanges, SETTINGS_LIMITS, type GameSettings } from "../shared/settings.js";
+import { DEFAULT_SETTINGS, describeSettingsChanges, formatMapSize, SETTINGS_LIMITS, type GameSettings } from "../shared/settings.js";
 import { APP_VERSION } from "../shared/version.js";
-import { decodeWorld, isLandAt, type World } from "../shared/world.js";
+import { createEmptyWorld, decodeWorld, isLandAt, mapDimensions, type World } from "../shared/world.js";
 import type { LobbyMessage, ServerMessage, SnapshotFrigate } from "../shared/protocol.js";
 import { computeCamera, computeViewport } from "./camera.js";
 import { drawBases, drawCaptureProgress } from "./bases.js";
@@ -211,6 +211,18 @@ function connect(): void {
   connection.addEventListener("error", () => connection.close());
 }
 
+function worldFromMessage(encoded: number[], columns: number, rows: number, seed = 0): World {
+  const tileSize = GAME_CONFIG.world.tileSize;
+  return {
+    seed,
+    columns,
+    rows,
+    width: columns * tileSize,
+    height: rows * tileSize,
+    grid: decodeWorld(encoded, columns * rows),
+  };
+}
+
 function handleMessage(message: ServerMessage): void {
   if (message.type === "lobby") {
     lobbyState = message;
@@ -231,7 +243,7 @@ function handleMessage(message: ServerMessage): void {
     bases = message.bases;
     sessionStorage.setItem("warships.token", message.token);
     sessionStorage.setItem("warships.sessionName", nameInput.value.trim());
-    world = { seed: 0, grid: decodeWorld(message.world) };
+    world = worldFromMessage(message.world, message.columns, message.rows);
     resetWorldCaches();
     joined = true;
     shouldAutoJoin = false;
@@ -246,7 +258,7 @@ function handleMessage(message: ServerMessage): void {
   } else if (message.type === "world") {
     throttleLevel = 0;
     bases = message.bases;
-    if (world) world = { ...world, grid: decodeWorld(message.world) };
+    world = worldFromMessage(message.world, message.columns, message.rows, world?.seed ?? 0);
     resetWorldCaches();
     addFeed("World regenerated");
   } else if (message.type === "settings") {
@@ -376,6 +388,7 @@ const settingsRows: Array<{ key: keyof GameSettings; label: string }> = [
   { key: "cannonReload", label: "Cannon reload" },
   { key: "torpedoReload", label: "Torpedo reload" },
   { key: "landCoveragePct", label: "Land coverage" },
+  { key: "mapSize", label: "Map size" },
   { key: "neutralBases", label: "Neutral bases" },
   { key: "fuelCrossings", label: "Fuel" },
   { key: "shells", label: "Shells" },
@@ -573,7 +586,7 @@ function onSnapshot(snapshot: Snapshot): void {
         predictedOwn,
         pending.input,
         1 / GAME_CONFIG.network.tickRate,
-        world ?? { seed: 0, grid: new Uint8Array(800 * 450) },
+        world ?? createEmptyWorld(mapDimensions(gameSettings.mapSize)),
         localTime,
         gameSettings,
       );
@@ -695,8 +708,8 @@ function renderTerrain(
     worldCache.clear();
     worldCacheResolution = resolution;
   }
-  const lastWorldChunkX = Math.ceil(GAME_CONFIG.world.width / terrainChunkSize) - 1;
-  const lastWorldChunkY = Math.ceil(GAME_CONFIG.world.height / terrainChunkSize) - 1;
+  const lastWorldChunkX = Math.ceil(worldState.width / terrainChunkSize) - 1;
+  const lastWorldChunkY = Math.ceil(worldState.height / terrainChunkSize) - 1;
   const firstChunkX = Math.max(0, Math.floor(cameraX / terrainChunkSize));
   const lastChunkX = Math.min(lastWorldChunkX, Math.floor((cameraX + viewWidth) / terrainChunkSize));
   const firstChunkY = Math.max(0, Math.floor(cameraY / terrainChunkSize));
@@ -705,7 +718,7 @@ function renderTerrain(
   ctx.fillRect(cameraX, cameraY, viewWidth, viewHeight);
   ctx.save();
   ctx.beginPath();
-  ctx.rect(0, 0, GAME_CONFIG.world.width, GAME_CONFIG.world.height);
+  ctx.rect(0, 0, worldState.width, worldState.height);
   ctx.clip();
   for (let cy = firstChunkY; cy <= lastChunkY; cy += 1) {
     for (let cx = firstChunkX; cx <= lastChunkX; cx += 1) {
@@ -724,19 +737,19 @@ function renderTerrain(
   ctx.restore();
 }
 
-function sampleTerrainField(field: Float64Array, column: number, row: number): number {
-  const x = Math.max(0, Math.min(GAME_CONFIG.world.columns - 1, column));
-  const y = Math.max(0, Math.min(GAME_CONFIG.world.rows - 1, row));
+function sampleTerrainField(worldState: World, field: Float64Array, column: number, row: number): number {
+  const x = Math.max(0, Math.min(worldState.columns - 1, column));
+  const y = Math.max(0, Math.min(worldState.rows - 1, row));
   const left = Math.floor(x);
   const top = Math.floor(y);
-  const right = Math.min(GAME_CONFIG.world.columns - 1, left + 1);
-  const bottom = Math.min(GAME_CONFIG.world.rows - 1, top + 1);
+  const right = Math.min(worldState.columns - 1, left + 1);
+  const bottom = Math.min(worldState.rows - 1, top + 1);
   const tx = x - left;
   const ty = y - top;
-  const upper = (field[top * GAME_CONFIG.world.columns + left] ?? 0) * (1 - tx)
-    + (field[top * GAME_CONFIG.world.columns + right] ?? 0) * tx;
-  const lower = (field[bottom * GAME_CONFIG.world.columns + left] ?? 0) * (1 - tx)
-    + (field[bottom * GAME_CONFIG.world.columns + right] ?? 0) * tx;
+  const upper = (field[top * worldState.columns + left] ?? 0) * (1 - tx)
+    + (field[top * worldState.columns + right] ?? 0) * tx;
+  const lower = (field[bottom * worldState.columns + left] ?? 0) * (1 - tx)
+    + (field[bottom * worldState.columns + right] ?? 0) * tx;
   return upper * (1 - ty) + lower * ty;
 }
 
@@ -767,9 +780,9 @@ function buildTerrainImage(
       const column = firstColumn + (pixelColumn + 0.5) / pixelsPerTile - 0.5;
       let color: readonly [number, number, number];
       if (kind === "water") {
-        color = waterColorAtDistance(sampleTerrainField(fields.waterDistance, column, row));
+        color = waterColorAtDistance(sampleTerrainField(worldState, fields.waterDistance, column, row));
       } else {
-        const edge = sampleTerrainField(fields.landDistance, column, row);
+        const edge = sampleTerrainField(worldState, fields.landDistance, column, row);
         color = landColorAt(edge, noise(column, row), noise2(column, row));
       }
       const pixel = (pixelRow * imageCanvas.width + pixelColumn) * 4;
@@ -817,9 +830,9 @@ function buildTerrainChunk(worldState: World, chunkX: number, chunkY: number, re
   ];
   const polygonMarginTiles = 3;
   const startColumn = Math.max(0, chunkX * chunkTiles - polygonMarginTiles);
-  const endColumn = Math.min(GAME_CONFIG.world.columns - 2, chunkX * chunkTiles + chunkTiles + polygonMarginTiles - 1);
+  const endColumn = Math.min(worldState.columns - 2, chunkX * chunkTiles + chunkTiles + polygonMarginTiles - 1);
   const startRow = Math.max(0, chunkY * chunkTiles - polygonMarginTiles);
-  const endRow = Math.min(GAME_CONFIG.world.rows - 2, chunkY * chunkTiles + chunkTiles + polygonMarginTiles - 1);
+  const endRow = Math.min(worldState.rows - 2, chunkY * chunkTiles + chunkTiles + polygonMarginTiles - 1);
   const landPath = new Path2D();
   for (let row = startRow; row <= endRow; row += 1) {
     for (let column = startColumn; column <= endColumn; column += 1) {
@@ -1263,8 +1276,8 @@ function drawReticle(frigate: Frigate, now: number): void {
 function getRadarMap(worldState: World): HTMLCanvasElement {
   if (radarMapCanvas && radarMapWorld === worldState) return radarMapCanvas;
   const canvas = document.createElement("canvas");
-  canvas.width = GAME_CONFIG.world.columns;
-  canvas.height = GAME_CONFIG.world.rows;
+  canvas.width = worldState.columns;
+  canvas.height = worldState.rows;
   const mapContext = canvas.getContext("2d");
   if (mapContext) {
     const image = mapContext.createImageData(canvas.width, canvas.height);
@@ -1313,8 +1326,8 @@ function drawRadar(snapshot: Snapshot, frigate: Frigate, now: number, logicalWid
   const worldScale = RADAR.radius / RADAR.range;
   const worldLeft = centerX - frigate.x * worldScale;
   const worldTop = centerY - frigate.y * worldScale;
-  const worldRight = worldLeft + GAME_CONFIG.world.width * worldScale;
-  const worldBottom = worldTop + GAME_CONFIG.world.height * worldScale;
+  const worldRight = worldLeft + world.width * worldScale;
+  const worldBottom = worldTop + world.height * worldScale;
   const scopeLeft = centerX - RADAR.radius;
   const scopeTop = centerY - RADAR.radius;
   const scopeRight = centerX + RADAR.radius;
@@ -1332,8 +1345,8 @@ function drawRadar(snapshot: Snapshot, frigate: Frigate, now: number, logicalWid
     getRadarMap(world),
     worldLeft,
     worldTop,
-    GAME_CONFIG.world.width * worldScale,
-    GAME_CONFIG.world.height * worldScale,
+    world.width * worldScale,
+    world.height * worldScale,
   );
 
   ctx.fillStyle = "rgba(93, 255, 172, .45)";
@@ -1538,7 +1551,7 @@ function drawHud(snapshot: Snapshot, frigate: Frigate | undefined, now: number, 
     ctx.font = "600 11px DM Mono, monospace";
     ctx.fillText(throttleLabels[activeStep] ?? "STOP", hullPanelX + 14, hullPanelY + 94);
     ctx.textBaseline = "top";
-    const fuelCapacity = gameSettings.fuelCrossings * GAME_CONFIG.world.width;
+    const fuelCapacity = gameSettings.fuelCrossings * mapDimensions(gameSettings.mapSize).width;
     const fuelFraction = Math.max(0, Math.min(1, frigate.fuel / fuelCapacity));
     const fuelColor = frigate.fuel <= 0
       ? "#ff776c"
@@ -1653,7 +1666,7 @@ function drawMenu(snapshot: Snapshot, width: number, height: number): void {
   const centerY = height / 2;
   const panelWidth = controlsPending ? 520 : 440;
   const settingsView = menuPending?.action === "settings";
-  const panelHeight = controlsPending ? 560 : settingsView ? 480 : 350;
+  const panelHeight = controlsPending ? 560 : settingsView ? 560 : 350;
   ctx.fillStyle = "rgba(3, 13, 20, .88)";
   ctx.fillRect(width / 2 - panelWidth / 2, height / 2 - panelHeight / 2, panelWidth, panelHeight);
   ctx.fillStyle = "#eff8f6";
@@ -1698,6 +1711,7 @@ function drawMenu(snapshot: Snapshot, width: number, height: number): void {
   }
   const mapChanged = menuPending?.action === "settings"
     && (menuPending.draft.landCoveragePct !== gameSettings.landCoveragePct
+      || menuPending.draft.mapSize !== gameSettings.mapSize
       || menuPending.draft.neutralBases !== gameSettings.neutralBases);
   ctx.fillText(
     mapChanged
@@ -1713,7 +1727,7 @@ function drawMenu(snapshot: Snapshot, width: number, height: number): void {
   if (menuPending?.action === "settings") {
     const pending = menuPending;
     settingsRows.forEach((row, index) => {
-      const y = centerY - 72 + index * 23;
+      const y = centerY - 85 + index * 20;
       const selected = index === pending.index;
       const value = pending.draft[row.key];
       if (selected) {
@@ -1726,13 +1740,15 @@ function drawMenu(snapshot: Snapshot, width: number, height: number): void {
       ctx.textAlign = "right";
       ctx.fillStyle = value !== DEFAULT_SETTINGS[row.key] ? "#e4ad80" : "#d7e5e9";
       ctx.font = "500 12px DM Mono, monospace";
-      const displayedValue = row.key === "cannonReload" || row.key === "torpedoReload" || row.key === "resupplyTime" || row.key === "captureTime" || row.key === "repairTime"
-        ? `${value.toFixed(1).replace(/\.0$/, "")} s`
-        : row.key === "neutralBases" || row.key === "shells" || row.key === "torpedoes"
-          ? `${value}`
-          : row.key === "fuelCrossings"
-            ? `${value} crossings`
-          : `${value}%`;
+      const displayedValue = row.key === "mapSize"
+        ? formatMapSize(value)
+        : row.key === "cannonReload" || row.key === "torpedoReload" || row.key === "resupplyTime" || row.key === "captureTime" || row.key === "repairTime"
+          ? `${value.toFixed(1).replace(/\.0$/, "")} s`
+          : row.key === "neutralBases" || row.key === "shells" || row.key === "torpedoes"
+            ? `${value}`
+            : row.key === "fuelCrossings"
+              ? `${value} crossings`
+              : `${value}%`;
       ctx.fillText(
         displayedValue,
         left + 368,
@@ -1782,7 +1798,7 @@ function drawMenu(snapshot: Snapshot, width: number, height: number): void {
           ? "C CONTROLS · ESC TO CLOSE"
           : "C controls · Esc close";
   ctx.textAlign = "center";
-  ctx.fillText(footer, width / 2, centerY + (menuPending?.action === "settings" ? 218 : 140));
+  ctx.fillText(footer, width / 2, centerY + (menuPending?.action === "settings" ? 262 : 140));
   ctx.textAlign = "left";
 }
 
@@ -1916,7 +1932,10 @@ function renderFrame(now: number): void {
   const serverNow = now / 1000 + serverTimeOffset;
   if (hasServerTimeOffset) {
     projectileServerTime = performance.now() / 1000 + serverTimeOffset - GAME_CONFIG.network.interpolationDelay;
-    renderedProjectiles = projectileStore.at(projectileServerTime);
+    renderedProjectiles = projectileStore.at(
+      projectileServerTime,
+      world ?? createEmptyWorld(mapDimensions(gameSettings.mapSize)),
+    );
   } else {
     projectileServerTime = 0;
     renderedProjectiles = { shells: [], torpedoes: [] };
@@ -1935,7 +1954,7 @@ function renderFrame(now: number): void {
   const snapshot = getRenderSnapshot();
   const own = predictedOwn ?? snapshot?.frigates.find((frigate) => frigate.playerId === ownId) as Frigate | undefined;
   if (world && own) {
-    const camera = computeCamera({ x: own.x, y: own.y });
+    const camera = computeCamera({ x: own.x, y: own.y }, world);
     ctx.save();
     ctx.beginPath();
     ctx.rect(0, 0, GAME_CONFIG.screen.width, GAME_CONFIG.screen.height);

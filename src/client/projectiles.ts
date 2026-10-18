@@ -1,6 +1,6 @@
-import { GAME_CONFIG } from "../shared/config.js";
 import type { ServerMessage } from "../shared/protocol.js";
 import type { Shell, Torpedo } from "../shared/sim.js";
+import type { World } from "../shared/world.js";
 
 type ProjectileMessage = Extract<ServerMessage, { type: "projectiles" }>;
 
@@ -22,7 +22,7 @@ export class ProjectileStore {
     }
   }
 
-  at(serverTime: number): { shells: Shell[]; torpedoes: Torpedo[] } {
+  at(serverTime: number, world: Pick<World, "width" | "height">): { shells: Shell[]; torpedoes: Torpedo[] } {
     const shells: Shell[] = [];
     for (const [id, stored] of this.shells) {
       const elapsed = stored.projectile.elapsed + serverTime - stored.serverTime;
@@ -40,7 +40,7 @@ export class ProjectileStore {
       if (delta < 0) continue;
       const x = stored.projectile.x + Math.cos(stored.projectile.angle) * stored.projectile.speed * delta;
       const y = stored.projectile.y + Math.sin(stored.projectile.angle) * stored.projectile.speed * delta;
-      if (x < 0 || y < 0 || x >= GAME_CONFIG.world.width || y >= GAME_CONFIG.world.height) {
+      if (x < 0 || y < 0 || x >= world.width || y >= world.height) {
         this.torpedoes.delete(id);
         continue;
       }

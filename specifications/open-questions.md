@@ -148,3 +148,13 @@ All questions raised during the specification phase are resolved. Each line give
 - **Q129 — Ring priority:** Repairing turret, then Capturing, then Resupplying; the resupply ring shows the least-full resource and disappears once all are full. Decided 2026-10-18.
 - **Q130 — Ammunition colours:** the shell and torpedo counts use the same colours as fuel (orange below 20%, red when empty). Decided 2026-10-18.
 - **Q131 — Only the own boat's fuel and ammunition are sent; other players' amounts stay hidden.** Decided 2026-10-18.
+- **Q132 — Map sizes:** offer Small (4,000 × 2,240 u; 200 × 112 tiles), Standard (8,000 × 4,500 u; 400 × 225 tiles), and Big (16,000 × 9,000 u; 800 × 450 tiles), keeping 16:9 as closely as tile alignment allows. Decided 2026-10-18.
+- **Q133 — Map-size setting:** host Settings adds Map size immediately after Land coverage, default Standard; changing it regenerates the map and respawns everyone at home. Decided 2026-10-18.
+- **Q134 — Terrain by map size:** island size and shape, land-coverage meaning, 160 u minimum channel, and border tiles stay unchanged; the number of painted islands scales with map area. Decided 2026-10-18.
+- **Q135 — Base spacing by map size:** minimum separation between harbour centres is 10% of current map width: 1,600 u Big, 800 u Standard, 400 u Small. Decided 2026-10-18.
+- **Q136 — Neutral-base fallback:** keep the requested 0–8 setting; if fewer fit, place as many as possible and send `Only N neutral bases fit on this map` to every player. Decided 2026-10-18.
+- **Q137 — Fuel by map size:** capacity is Fuel crossings multiplied by current map width. Decided 2026-10-18.
+- **Q138 — Random spawn distance:** minimum separation is 15% of current map width: 2,400 u Big, 1,200 u Standard, 600 u Small. Decided 2026-10-18.
+- **Q139 — Unchanged values:** reference screen remains 1,600 × 900 u; boat, weapon, turret, harbour, city, and radar values do not change (turret range 600 u, harbour 60 u, city 40 u, radar 3,000 u). Decided 2026-10-18.
+- **Q140 — Default and compatibility:** Standard is the default; Big must reproduce today's same-seed world grid and base placement exactly. Decided 2026-10-18.
+- **Q141 — Small-map tile alignment:** round the nominal 2,250 u Small height to 2,240 u (112 tiles of 20 u). Decided 2026-10-18.

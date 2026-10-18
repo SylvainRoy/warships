@@ -28,9 +28,9 @@ export type SnapshotFrigate = Pick<
 
 export type ServerMessage =
   | LobbyMessage
-  | { type: "welcome"; playerId: string; token: string; slot: number; world: number[]; bases: Base[]; settings: GameSettings }
+  | { type: "welcome"; playerId: string; token: string; slot: number; world: number[]; columns: number; rows: number; bases: Base[]; settings: GameSettings }
   | { type: "settings"; settings: GameSettings }
-  | { type: "world"; world: number[]; bases: Base[] }
+  | { type: "world"; world: number[]; columns: number; rows: number; bases: Base[] }
   | { type: "projectiles"; serverTime: number; shells: Shell[]; torpedoes: Torpedo[]; removed: string[]; reset?: true }
   | {
       type: "snapshot";
