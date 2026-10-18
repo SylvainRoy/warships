@@ -1,5 +1,5 @@
 import { EventEmitter } from "node:events";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import type { WebSocket } from "ws";
 import { GAME_CONFIG } from "../src/shared/config.js";
 import type { ClientMessage, ServerMessage } from "../src/shared/protocol.js";
@@ -7,6 +7,23 @@ import { DEFAULT_SETTINGS } from "../src/shared/settings.js";
 import type { BaseSite } from "../src/shared/bases.js";
 import { Room } from "../src/server/room.js";
 import { createEmptyWorld, mapDimensions, type World } from "../src/shared/world.js";
+
+const regenerationSeed = vi.hoisted(() => ({ value: undefined as number | undefined }));
+
+vi.mock("node:crypto", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("node:crypto")>();
+  return {
+    ...actual,
+    randomBytes: ((size: number) => {
+      if (size === 4 && regenerationSeed.value !== undefined) {
+        const bytes = Buffer.alloc(4);
+        bytes.writeUInt32LE(regenerationSeed.value);
+        return bytes;
+      }
+      return actual.randomBytes(size);
+    }) as typeof actual.randomBytes,
+  };
+});
 
 class FakeSocket extends EventEmitter {
   readyState = 1;
@@ -275,7 +292,12 @@ describe("multiplayer room", () => {
     join(room, hostSocket, "Harbor");
     const settings = { ...room.game.settings, landCoveragePct: 5, mapSize: 0, neutralBases: 8 };
 
-    send(room, hostSocket, { type: "host", action: "settings", settings });
+    regenerationSeed.value = 11;
+    try {
+      send(room, hostSocket, { type: "host", action: "settings", settings });
+    } finally {
+      regenerationSeed.value = undefined;
+    }
 
     const dimensions = mapDimensions(0);
     expect(room.game.settings).toEqual(settings);
