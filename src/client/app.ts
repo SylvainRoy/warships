@@ -189,13 +189,28 @@ function connect(): void {
     }
   });
   connection.addEventListener("message", (message) => {
-    let payload: ServerMessage;
     try {
-      payload = JSON.parse(String(message.data)) as ServerMessage;
-    } catch {
-      return;
+      const payload = JSON.parse(String(message.data)) as ServerMessage;
+      handleMessage(payload);
+    } catch (error) {
+      console.error(error);
+      joined = false;
+      shouldAutoJoin = false;
+      sessionStorage.removeItem("warships.token");
+      ownId = null;
+      world = null;
+      bases = [];
+      latestSnapshot = null;
+      predictedOwn = null;
+      snapshots = [];
+      projectileStore.clear();
+      renderedProjectiles = { shells: [], torpedoes: [] };
+      pendingInputs = [];
+      pressed.clear();
+      lobby.hidden = false;
+      errorBox.textContent = "Unable to join: this page doesn't match the server version. Reload the page.";
+      connection.close();
     }
-    handleMessage(payload);
   });
   connection.addEventListener("close", (event) => {
     if (socket === connection) socket = null;
