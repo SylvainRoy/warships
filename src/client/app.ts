@@ -1486,15 +1486,106 @@ function drawRadar(snapshot: Snapshot, frigate: Frigate, now: number, logicalWid
   ctx.restore();
 }
 
+function drawConsoleDial(
+  centerX: number,
+  topY: number,
+  label: string,
+  value: string,
+  fraction: number,
+  arcColor: string,
+  numberColor: string,
+  fontSize: number,
+): void {
+  const centerY = topY + 32;
+  const startAngle = 135 * Math.PI / 180;
+  const endAngle = startAngle + 270 * Math.PI / 180;
+  ctx.save();
+  ctx.lineWidth = 6;
+  ctx.lineCap = "butt";
+  ctx.strokeStyle = "rgba(215, 237, 238, .17)";
+  ctx.beginPath();
+  ctx.arc(centerX, centerY, 27, startAngle, endAngle);
+  ctx.stroke();
+  ctx.strokeStyle = arcColor;
+  ctx.beginPath();
+  ctx.arc(centerX, centerY, 27, startAngle, startAngle + (endAngle - startAngle) * Math.max(0, Math.min(1, fraction)));
+  ctx.stroke();
+  ctx.textAlign = "center";
+  ctx.textBaseline = "alphabetic";
+  ctx.fillStyle = numberColor;
+  ctx.font = `600 ${fontSize}px DM Mono, monospace`;
+  ctx.fillText(value, centerX, centerY + 6);
+  ctx.textBaseline = "top";
+  ctx.fillStyle = "#90a8b0";
+  ctx.font = "500 10px DM Mono, monospace";
+  ctx.fillText(label, centerX, topY + 68);
+  ctx.restore();
+}
+
+function drawWeaponTile(
+  x: number,
+  y: number,
+  label: string,
+  count: number,
+  capacity: number,
+  readyAt: number,
+  reloadTime: number,
+  now: number,
+): void {
+  const tileWidth = 150;
+  const tileHeight = 54;
+  const empty = count < 1;
+  const remaining = Math.max(0, readyAt - now);
+  const reloading = !empty && remaining > 0;
+  const countColor = empty
+    ? "#ff776c"
+    : count / capacity < 0.2
+      ? "#ffb347"
+      : "#e8f4f4";
+  const status = empty ? "EMPTY" : reloading ? `${remaining.toFixed(1)} s` : "READY";
+  const statusColor = empty ? "#ff776c" : reloading ? "#d7e5e9" : "#62d3b2";
+  const reloadFraction = empty
+    ? 0
+    : reloading
+      ? Math.max(0, Math.min(1, 1 - remaining / reloadTime))
+      : 1;
+
+  ctx.save();
+  ctx.fillStyle = "rgba(215, 237, 238, .06)";
+  ctx.fillRect(x, y, tileWidth, tileHeight);
+  ctx.textBaseline = "top";
+  ctx.textAlign = "left";
+  ctx.fillStyle = "#90a8b0";
+  ctx.font = "500 10px DM Mono, monospace";
+  ctx.fillText(label, x + 9, y + 7);
+  ctx.textAlign = "right";
+  ctx.fillStyle = statusColor;
+  ctx.fillText(status, x + tileWidth - 9, y + 7);
+  ctx.textAlign = "left";
+  ctx.fillStyle = countColor;
+  ctx.font = "600 20px DM Mono, monospace";
+  const displayedCount = String(Math.floor(count));
+  ctx.fillText(displayedCount, x + 9, y + 20);
+  const countWidth = ctx.measureText(displayedCount).width;
+  ctx.fillStyle = "#90a8b0";
+  ctx.font = "500 11px DM Mono, monospace";
+  ctx.fillText(` /${capacity}`, x + 9 + countWidth, y + 28);
+  ctx.fillStyle = "rgba(215, 237, 238, .17)";
+  ctx.fillRect(x, y + tileHeight - 3, tileWidth, 3);
+  if (reloadFraction > 0) {
+    ctx.fillStyle = reloading ? "#d7e5e9" : "#62d3b2";
+    ctx.fillRect(x, y + tileHeight - 3, tileWidth * reloadFraction, 3);
+  }
+  ctx.restore();
+}
+
 function drawHud(snapshot: Snapshot, frigate: Frigate | undefined, now: number, logicalWidth: number, logicalHeight: number): void {
   const hudMargin = 8;
   const captainsPanelX = logicalWidth - hudMargin - 230;
   const captainsPanelY = hudMargin;
-  const hullPanelX = hudMargin;
-  const hullPanelHeight = 152;
-  const hullPanelY = logicalHeight - hudMargin - hullPanelHeight;
-  const hullPanelWidth = 380;
-  const hullBarWidth = hullPanelWidth - 28;
+  const consolePanelX = hudMargin;
+  const consolePanelHeight = 140;
+  const consolePanelY = logicalHeight - hudMargin - consolePanelHeight;
   ctx.save();
   ctx.textBaseline = "top";
   ctx.textAlign = "left";
@@ -1525,47 +1616,24 @@ function drawHud(snapshot: Snapshot, frigate: Frigate | undefined, now: number, 
   });
   if (frigate) {
     ctx.fillStyle = "rgba(5, 20, 29, .78)";
-    ctx.fillRect(hullPanelX, hullPanelY, hullPanelWidth, hullPanelHeight);
-    ctx.fillStyle = "#90a8b0";
-    ctx.font = "500 10px DM Mono, monospace";
-    ctx.fillText("HULL INTEGRITY", hullPanelX + 14, hullPanelY + 14);
-    ctx.fillStyle = "rgba(215, 237, 238, .17)";
-    ctx.fillRect(hullPanelX + 14, hullPanelY + 34, hullBarWidth, 7);
-    ctx.fillStyle = frigate.hp > 35 ? "#62d3b2" : "#ff776c";
-    ctx.fillRect(hullPanelX + 14, hullPanelY + 34, hullBarWidth * Math.max(0, frigate.hp / GAME_CONFIG.player.maxHp), 7);
-    ctx.fillStyle = "#e8f4f4";
-    ctx.font = "600 11px DM Mono, monospace";
-    ctx.fillText(`${frigate.hp} HP`, hullPanelX + 14, hullPanelY + 49);
-    ctx.fillStyle = "#91a8ae";
-    ctx.fillText(`CANNON ${Math.max(0, frigate.cannonReadyAt - now).toFixed(1)}s`, hullPanelX + 91, hullPanelY + 49);
-    ctx.fillText(`TORPEDO ${Math.max(0, frigate.torpedoReadyAt - now).toFixed(1)}s`, hullPanelX + 191, hullPanelY + 49);
-    ctx.fillStyle = "#90a8b0";
-    ctx.font = "500 10px DM Mono, monospace";
-    ctx.textBaseline = "middle";
-    ctx.fillText("THROTTLE", hullPanelX + 14, hullPanelY + 72);
-    const steps = ["ASTERN", "STOP", "1/3", "2/3", "FULL"];
-    const activeStep = throttleLevel + 1;
-    const stepX = hullPanelX + 88;
-    const stepY = hullPanelY + 61;
-    const stepWidth = 52;
-    const stepGap = 4;
-    const stepHeight = 22;
-    ctx.textAlign = "center";
-    steps.forEach((label, index) => {
-      const x = stepX + index * (stepWidth + stepGap);
-      ctx.fillStyle = index === activeStep ? "rgba(100, 223, 202, .3)" : "rgba(215, 237, 238, .08)";
-      ctx.fillRect(x, stepY, stepWidth, stepHeight);
-      ctx.fillStyle = index === activeStep ? "#bfffee" : "#91a8ae";
-      ctx.font = "600 10px DM Mono, monospace";
-      ctx.fillText(label, x + stepWidth / 2, stepY + stepHeight / 2);
-    });
-    const throttleLabels = ["FULL ASTERN", "STOP", "1/3 AHEAD", "2/3 AHEAD", "FULL AHEAD"];
-    ctx.textAlign = "left";
-    ctx.textBaseline = "alphabetic";
-    ctx.fillStyle = "#d7e5e9";
-    ctx.font = "600 11px DM Mono, monospace";
-    ctx.fillText(throttleLabels[activeStep] ?? "STOP", hullPanelX + 14, hullPanelY + 94);
-    ctx.textBaseline = "top";
+    ctx.fillRect(consolePanelX, consolePanelY, 440, consolePanelHeight);
+    const hullX = consolePanelX + 14;
+    const fuelX = hullX + 78 + 14;
+    const weaponsX = fuelX + 78 + 14;
+    const throttleX = weaponsX + 150 + 14;
+    const dialY = consolePanelY + 12;
+    const hullFraction = Math.max(0, Math.min(1, frigate.hp / GAME_CONFIG.player.maxHp));
+    const hullColor = frigate.hp <= 35 ? "#ff776c" : "#62d3b2";
+    drawConsoleDial(
+      hullX + 39,
+      dialY,
+      "HULL",
+      String(frigate.hp),
+      hullFraction,
+      hullColor,
+      frigate.hp <= 35 ? "#ff776c" : "#e8f4f4",
+      17,
+    );
     const fuelCapacity = gameSettings.fuelCrossings * mapDimensions(gameSettings.mapSize).width;
     const fuelFraction = Math.max(0, Math.min(1, frigate.fuel / fuelCapacity));
     const fuelColor = frigate.fuel <= 0
@@ -1573,30 +1641,55 @@ function drawHud(snapshot: Snapshot, frigate: Frigate | undefined, now: number, 
       : fuelFraction < 0.2
         ? "#ffb347"
         : "#62d3b2";
-    const shellsColor = frigate.shells < 1
+    const fuelNumberColor = frigate.fuel <= 0
       ? "#ff776c"
-      : frigate.shells / gameSettings.shells < 0.2
+      : fuelFraction < 0.2
         ? "#ffb347"
-        : "#62d3b2";
-    const torpedoesColor = frigate.torpedoes < 1
-      ? "#ff776c"
-      : frigate.torpedoes / gameSettings.torpedoes < 0.2
-        ? "#ffb347"
-        : "#62d3b2";
+        : "#e8f4f4";
+    drawConsoleDial(
+      fuelX + 39,
+      dialY,
+      "FUEL",
+      `${Math.floor(fuelFraction * 100)}%`,
+      fuelFraction,
+      fuelColor,
+      fuelNumberColor,
+      15,
+    );
+    drawWeaponTile(weaponsX, consolePanelY + 12, "CANNON", frigate.shells, gameSettings.shells, frigate.cannonReadyAt, gameSettings.cannonReload, now);
+    drawWeaponTile(
+      weaponsX,
+      consolePanelY + 12 + 54 + 8,
+      "TORPEDO",
+      frigate.torpedoes,
+      gameSettings.torpedoes,
+      frigate.torpedoReadyAt,
+      gameSettings.torpedoReload,
+      now,
+    );
+    ctx.save();
+    ctx.textAlign = "center";
+    ctx.textBaseline = "top";
     ctx.fillStyle = "#90a8b0";
     ctx.font = "500 10px DM Mono, monospace";
-    ctx.fillText("FUEL", hullPanelX + 14, hullPanelY + 109);
-    ctx.fillStyle = "rgba(215, 237, 238, .17)";
-    ctx.fillRect(hullPanelX + 52, hullPanelY + 111, 160, 7);
-    ctx.fillStyle = fuelColor;
-    ctx.fillRect(hullPanelX + 52, hullPanelY + 111, 160 * fuelFraction, 7);
-    ctx.fillStyle = fuelColor;
-    ctx.fillText(`${Math.floor(fuelFraction * 100)}%`, hullPanelX + 224, hullPanelY + 109);
-    ctx.font = "600 10px DM Mono, monospace";
-    ctx.fillStyle = shellsColor;
-    ctx.fillText(`SHELLS ${Math.floor(frigate.shells)}`, hullPanelX + 14, hullPanelY + 132);
-    ctx.fillStyle = torpedoesColor;
-    ctx.fillText(`TORPEDOES ${Math.floor(frigate.torpedoes)}`, hullPanelX + 150, hullPanelY + 132);
+    ctx.fillText("THROTTLE", throttleX + 32, consolePanelY + 12);
+    const steps = ["FULL", "2/3", "1/3", "STOP", "ASTERN"];
+    const activeStep = 3 - throttleLevel;
+    const stepY = consolePanelY + 26;
+    const stepHeight = 18;
+    const stepGap = 3;
+    steps.forEach((label, index) => {
+      const y = stepY + index * (stepHeight + stepGap);
+      const selected = index === activeStep;
+      ctx.fillStyle = selected ? "rgba(100, 223, 202, .3)" : "rgba(215, 237, 238, .08)";
+      ctx.fillRect(throttleX, y, 64, stepHeight);
+      ctx.fillStyle = selected ? "#bfffee" : "#91a8ae";
+      ctx.font = "600 10px DM Mono, monospace";
+      ctx.fillText(label, throttleX + 32, y + 4);
+    });
+    ctx.restore();
+    ctx.textAlign = "left";
+    ctx.textBaseline = "top";
   }
   const feedNow = performance.now();
   const visibleFeed = feed.filter((entry) => feedNow - entry.at < 5000).slice(-5);
