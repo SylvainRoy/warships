@@ -137,3 +137,4 @@ All questions raised during the specification phase are resolved. Each line give
 - **Q118 — New-map ownership:** every non-home base starts neutral on a new map. Decided 2026-10-18.
 - **Q119 — Time setting changed during an action:** the new time applies immediately, preserving progress as a fraction of the action. Decided 2026-10-18.
 - **Q120 — Minor v2 details:** neutral-bases setting step 1; minimum 1,600 u spacing measured between harbour centres; buildings stand on land so torpedoes stop there and rubble adds no collision; new settings rows follow Land coverage in order Neutral bases, Fuel, Shells, Torpedoes, Resupply time, Capture time, Repair time; inactive home sites do not appear on radar. Decided 2026-10-18.
+- **Q121 — Radar marker contrast:** base squares grow to 6 u, and base squares, boat triangles and own-base ticks get a 1 u near-black outline so blue (and every player colour) stays visible over the green radar land. Decided 2026-10-18.

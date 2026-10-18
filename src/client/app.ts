@@ -1249,6 +1249,8 @@ function getRadarMap(worldState: World): HTMLCanvasElement {
   return canvas;
 }
 
+const RADAR_OUTLINE = "#030d14";
+
 function drawRadarTriangle(x: number, y: number, angle: number, length: number, width: number, color: string): void {
   const axisX = Math.cos(angle);
   const axisY = Math.sin(angle);
@@ -1265,6 +1267,9 @@ function drawRadarTriangle(x: number, y: number, angle: number, length: number, 
   ctx.lineTo(baseX - perpendicularX * width / 2, baseY - perpendicularY * width / 2);
   ctx.closePath();
   ctx.fill();
+  ctx.lineWidth = 1;
+  ctx.strokeStyle = RADAR_OUTLINE;
+  ctx.stroke();
 }
 
 function drawRadar(snapshot: Snapshot, frigate: Frigate, now: number, logicalWidth: number, logicalHeight: number): void {
@@ -1360,6 +1365,9 @@ function drawRadar(snapshot: Snapshot, frigate: Frigate, now: number, logicalWid
       ctx.beginPath();
       ctx.arc(centerX + radarX, centerY + radarY, 3, 0, Math.PI * 2);
       ctx.fill();
+      ctx.lineWidth = 1;
+      ctx.strokeStyle = RADAR_OUTLINE;
+      ctx.stroke();
     } else {
       const bearing = radarBearing(frigate.x, frigate.y, contact.x, contact.y);
       const distance = RADAR.radius - 6;
@@ -1383,16 +1391,25 @@ function drawRadar(snapshot: Snapshot, frigate: Frigate, now: number, logicalWid
     ctx.fillStyle = base.ownerId === null ? "#fff" : colours[(ownerSlot ?? 0) - 1] ?? "#fff";
     if (distance <= RADAR.range) {
       const [radarX, radarY] = worldToRadar(dx, dy);
-      ctx.fillRect(centerX + radarX - 2, centerY + radarY - 2, 4, 4);
+      const markerX = Math.round(centerX + radarX) - 3;
+      const markerY = Math.round(centerY + radarY) - 3;
+      ctx.fillRect(markerX, markerY, 6, 6);
+      ctx.lineWidth = 1;
+      ctx.strokeStyle = RADAR_OUTLINE;
+      ctx.strokeRect(markerX - 0.5, markerY - 0.5, 7, 7);
     } else if (base.ownerId === ownId) {
       const bearing = radarBearing(frigate.x, frigate.y, base.harbourX, base.harbourY);
       const inner = RADAR.radius - 8;
       const outer = RADAR.radius - 2;
-      ctx.lineWidth = 2;
-      ctx.strokeStyle = ctx.fillStyle;
+      const tickColour = ctx.fillStyle;
       ctx.beginPath();
       ctx.moveTo(centerX + Math.cos(bearing) * inner, centerY + Math.sin(bearing) * inner);
       ctx.lineTo(centerX + Math.cos(bearing) * outer, centerY + Math.sin(bearing) * outer);
+      ctx.lineWidth = 4;
+      ctx.strokeStyle = RADAR_OUTLINE;
+      ctx.stroke();
+      ctx.lineWidth = 2;
+      ctx.strokeStyle = tickColour;
       ctx.stroke();
     }
   }
