@@ -1,6 +1,6 @@
 # Warships — Specifications
 
-**Status: APPROVED v2.1** (2026-10-18) — game release v1.0.0 implements spec v1.18; v2.0 is implemented; v2.1 adds the host map-size setting.
+**Status: APPROVED v2.5** (2026-10-18) — game release v2.0.0 implements spec v2.5; release v1.0.0 implemented spec v1.18.
 
 | # | Document | Content |
 |---|----------|---------|

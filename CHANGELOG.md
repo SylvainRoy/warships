@@ -2,6 +2,32 @@
 
 All notable changes to Warships are recorded here. Versions follow semantic versioning: patch for fixes, minor for new features, major for breaking changes.
 
+## [2.0.0] — 2026-10-18
+
+Second major release. It implements specification v2.5. Rules and defaults changed (bases, supplies, speeds, default map size), hence the major version.
+
+### Bases and turrets
+- Home and neutral bases on island coasts, each with a harbour and a flag in its owner's colour. You spawn in your home harbour.
+- Capture a base by keeping your whole hull inside its harbour (5 s by default).
+- Owned bases carry a turret that fires at enemy boats within 600 u. Destroy it with your cannon before capturing the base. Install or repair a turret by waiting in your own harbour.
+- Losing your home base costs you 5 points and gives the capturer 5. It returns to you after 30 s.
+
+### Fuel and ammunition
+- A fuel tank of two map widths, 50 shells and 30 torpedoes. Refill everything in one of your harbours with the throttle at STOP.
+
+### Map and pace
+- Host map size setting: Small, Standard (the new default) and Big (the 1.0.0 map).
+- Faster boats (72 u/s), shells (600 u/s) and torpedoes (180 u/s).
+- New host settings for neutral bases, fuel, shells, torpedoes, and resupply, capture and repair times.
+
+### Display
+- Ship's console HUD: hull and fuel dials, cannon and torpedo tiles, and a vertical throttle.
+- Sweep radar: other boats appear as fading dots when the beam passes over them, or as fading edge triangles beyond range. The range follows the map size: 750, 1,500 or 3,000 u.
+- Compact scoreboard with one score per player; hold Tab for points and sunk counts.
+
+### Fixes
+- A failed join no longer leaves ghost captains that fill the berths or make a name look taken.
+
 ## [1.0.0] — 2026-10-18
 
 First public release of Warships, a browser-based naval free-for-all for up to four captains. It implements specification v1.18.
