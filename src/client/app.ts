@@ -226,6 +226,7 @@ function handleMessage(message: ServerMessage): void {
     projectileServerTime = 0;
     hasServerTimeOffset = false;
     ownId = message.playerId;
+    latestSnapshot = null;
     gameSettings = { ...message.settings };
     bases = message.bases;
     sessionStorage.setItem("warships.token", message.token);
@@ -251,8 +252,10 @@ function handleMessage(message: ServerMessage): void {
   } else if (message.type === "settings") {
     gameSettings = { ...message.settings };
   } else if (message.type === "snapshot") {
-    const statuses = new Map(message.bases.map((base) => [base.id, base]));
-    bases = bases.map((base) => ({ ...base, ...statuses.get(base.id) }));
+    if (message.bases) {
+      const statuses = new Map(message.bases.map((base) => [base.id, base]));
+      bases = bases.map((base) => ({ ...base, ...statuses.get(base.id) }));
+    }
     onSnapshot(message);
   } else if (message.type === "projectiles") {
     projectileStore.apply(message);
@@ -517,17 +520,43 @@ document.addEventListener("visibilitychange", () => {
 });
 
 function onSnapshot(snapshot: Snapshot): void {
-  latestSnapshot = snapshot;
+  const snapshotWithBases: Snapshot = snapshot.bases
+    ? snapshot
+    : {
+        ...snapshot,
+        bases: latestSnapshot?.bases ?? bases.map(({
+          id,
+          active,
+          ownerId,
+          captureBy,
+          captureProgress,
+          turret,
+          turretHp,
+          repairBy,
+          repairProgress,
+        }) => ({
+          id,
+          active,
+          ownerId,
+          captureBy,
+          captureProgress,
+          turret,
+          turretHp,
+          repairBy,
+          repairProgress,
+        })),
+      };
+  latestSnapshot = snapshotWithBases;
   if (!isOwnHost() && menuPending && menuPending.action !== "controls") menuPending = null;
   const receivedAt = performance.now();
-  serverTimeOffset = snapshot.serverTime - receivedAt / 1000;
+  serverTimeOffset = snapshotWithBases.serverTime - receivedAt / 1000;
   hasServerTimeOffset = true;
-  snapshots.push({ receivedAt, value: snapshot });
+  snapshots.push({ receivedAt, value: snapshotWithBases });
   snapshots = snapshots.slice(-6);
-  const own = snapshot.frigates.find((frigate) => frigate.playerId === ownId) as Frigate | undefined;
+  const own = snapshotWithBases.frigates.find((frigate) => frigate.playerId === ownId) as Frigate | undefined;
   if (own) {
     if (own.status !== "alive") throttleLevel = 0;
-    const acknowledgedAt = pendingInputs.find((entry) => entry.input.seq === snapshot.ackSeq)?.sentAt;
+    const acknowledgedAt = pendingInputs.find((entry) => entry.input.seq === snapshotWithBases.ackSeq)?.sentAt;
     if (acknowledgedAt !== undefined) {
       ping = performance.now() - acknowledgedAt;
       lastPingAt = performance.now();

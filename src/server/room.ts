@@ -1,7 +1,7 @@
 import { randomBytes } from "node:crypto";
 import { performance } from "node:perf_hooks";
 import type { WebSocket } from "ws";
-import { generateWorldWithBases, placeBases, restoreHome, type BaseSite } from "../shared/bases.js";
+import { generateWorldWithBases, placeBases, restoreHome, type BaseSite, type BaseSnapshot } from "../shared/bases.js";
 import { GAME_CONFIG } from "../shared/config.js";
 import type { ClientMessage, ServerMessage, SnapshotFrigate } from "../shared/protocol.js";
 import { DEFAULT_SETTINGS, describeSettingsChanges, sanitizeSettings } from "../shared/settings.js";
@@ -35,6 +35,7 @@ interface PlayerSession {
   inputQueue: FrigateInput[];
   lastInput: FrigateInput;
   ackSeq: number;
+  lastBasesJson: string | null;
 }
 
 export class Room {
@@ -164,6 +165,7 @@ export class Room {
         inputQueue: [],
         lastInput: { ...EMPTY_INPUT },
         ackSeq: 0,
+        lastBasesJson: null,
       };
       this.sessions.set(session.id, session);
       const home = this.game.bases.find((base) => base.kind === "home" && base.homeSlot === slot - 1);
@@ -192,6 +194,7 @@ export class Room {
       this.game.scores[session.id] = this.scoreRecord(session);
     }
     this.sessionBySocket.set(socket, session);
+    session.lastBasesJson = null;
     this.send(socket, {
       type: "welcome",
       playerId: session.id,
@@ -289,6 +292,7 @@ export class Room {
       this.game.settings.neutralBases,
     );
     regenerateGameWorld(this.game, generated.world, generated.sites, now, this.random);
+    for (const player of this.sessions.values()) player.lastBasesJson = null;
     for (const player of this.sessions.values()) {
       const frigate = this.game.frigates[player.id];
       if (frigate) frigate.name = player.name;
@@ -359,6 +363,28 @@ export class Room {
 
   private broadcastSnapshots(now: number): void {
     const players = [...this.sessions.values()].map((session) => this.scoreRecord(session));
+    const baseSnapshots: BaseSnapshot[] = this.game.bases.map(({
+      id,
+      active,
+      ownerId,
+      captureBy,
+      captureProgress,
+      turret,
+      turretHp,
+      repairBy,
+      repairProgress,
+    }) => ({
+      id,
+      active,
+      ownerId,
+      captureBy,
+      captureProgress: Number(captureProgress.toFixed(2)),
+      turret,
+      turretHp,
+      repairBy,
+      repairProgress: Number(repairProgress.toFixed(2)),
+    }));
+    const basesJson = JSON.stringify(baseSnapshots);
     for (const session of this.sessions.values()) {
       if (!session.socket) continue;
       const frigates: SnapshotFrigate[] = Object.values(this.game.frigates).map((frigate) =>
@@ -377,35 +403,19 @@ export class Room {
               spawnProtectedUntil: frigate.spawnProtectedUntil,
             },
       );
-      this.send(session.socket, {
+      const snapshot: Extract<ServerMessage, { type: "snapshot" }> = {
         type: "snapshot",
         tick: this.game.tick,
         ackSeq: session.ackSeq,
         serverTime: now,
         frigates,
         players,
-        bases: this.game.bases.map(({
-          id,
-          active,
-          ownerId,
-          captureBy,
-          captureProgress,
-          turret,
-          turretHp,
-          repairBy,
-          repairProgress,
-        }) => ({
-          id,
-          active,
-          ownerId,
-          captureBy,
-          captureProgress,
-          turret,
-          turretHp,
-          repairBy,
-          repairProgress,
-        })),
-      });
+      };
+      if (session.lastBasesJson !== basesJson) {
+        snapshot.bases = baseSnapshots;
+        session.lastBasesJson = basesJson;
+      }
+      this.send(session.socket, snapshot);
     }
   }
 

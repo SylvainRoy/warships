@@ -218,10 +218,10 @@ describe("multiplayer room", () => {
     expect(snapshot).toBeDefined();
     expect(snapshot).not.toHaveProperty("shells");
     expect(snapshot).not.toHaveProperty("torpedoes");
-    expect(snapshot?.bases[0]).toHaveProperty("turret", "active");
-    expect(snapshot?.bases[0]).not.toHaveProperty("cityX");
-    expect(snapshot?.bases[0]).not.toHaveProperty("lostFrom");
-    expect(snapshot?.bases[0]).not.toHaveProperty("turretReadyAt");
+    expect(snapshot?.bases?.[0]).toHaveProperty("turret", "active");
+    expect(snapshot?.bases?.[0]).not.toHaveProperty("cityX");
+    expect(snapshot?.bases?.[0]).not.toHaveProperty("lostFrom");
+    expect(snapshot?.bases?.[0]).not.toHaveProperty("turretReadyAt");
 
     for (const socket of [host, guest]) {
       const spawned = socket.messages.filter(
@@ -238,6 +238,50 @@ describe("multiplayer room", () => {
     for (const socket of [host, guest]) {
       expect(socket.messages.filter((message) => message.type === "projectiles" && !message.reset)).toHaveLength(1);
     }
+  });
+
+  it("sends base statuses only when changed and after world regeneration", () => {
+    const room = new Room(11, () => 0, openWorld, fixtureSites);
+    const socket = connect(room);
+    join(room, socket, "Harbor");
+    const playerId = welcome(socket).playerId;
+    const nextSnapshot = () => {
+      const lastTick = socket.last("snapshot")?.tick;
+      for (let tick = 0; tick < 4 && socket.last("snapshot")?.tick === lastTick; tick += 1) {
+        room.advanceTick();
+      }
+      return socket.last("snapshot");
+    };
+
+    const first = nextSnapshot();
+    expect(first?.bases).toBeDefined();
+    const unchanged = nextSnapshot();
+    expect(unchanged).not.toHaveProperty("bases");
+
+    const neutral = room.game.bases.find((base) => base.kind === "neutral")!;
+    const frigate = room.game.frigates[playerId]!;
+    frigate.x = neutral.harbourX;
+    frigate.y = neutral.harbourY;
+    const capturing = nextSnapshot();
+    const capturedStatus = capturing?.bases?.find((base) => base.id === neutral.id);
+    expect(capturedStatus?.captureBy).toBe(playerId);
+    expect(capturedStatus?.captureProgress).toBe(Number(neutral.captureProgress.toFixed(2)));
+
+    neutral.ownerId = playerId;
+    neutral.turret = "destroyed";
+    neutral.turretHp = 0;
+    neutral.captureBy = null;
+    neutral.captureProgress = 0;
+    neutral.repairBy = playerId;
+    neutral.repairProgress = 0.1234;
+    const repairing = nextSnapshot();
+    const repairingStatus = repairing?.bases?.find((base) => base.id === neutral.id);
+    expect(repairingStatus?.repairBy).toBe(playerId);
+    expect(repairingStatus?.repairProgress).toBe(Number(neutral.repairProgress.toFixed(2)));
+
+    send(room, socket, { type: "host", action: "regenerate" });
+    const regenerated = nextSnapshot();
+    expect(regenerated?.bases).toBeDefined();
   });
 
   it("announces a sent torpedo when it ends on land", () => {
@@ -414,6 +458,9 @@ describe("multiplayer room", () => {
       captureBy: joined.playerId,
       captureProgress: 0.4,
     });
+    room.advanceTick();
+    room.advanceTick();
+    expect(reconnect.last("snapshot")?.bases).toBeDefined();
 
     reconnect.close();
     now = 20;
@@ -529,7 +576,7 @@ describe("multiplayer room", () => {
     room.advanceTick();
     room.advanceTick();
     const snapshot = socket.last("snapshot");
-    expect(snapshot?.bases[0]).not.toHaveProperty("cityX");
-    expect(snapshot?.bases[0]).toHaveProperty("captureProgress");
+    expect(snapshot?.bases?.[0]).not.toHaveProperty("cityX");
+    expect(snapshot?.bases?.[0]).toHaveProperty("captureProgress");
   });
 });

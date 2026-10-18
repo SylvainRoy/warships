@@ -39,7 +39,7 @@ export type ServerMessage =
       serverTime: number;
       frigates: SnapshotFrigate[];
       players: PlayerScore[];
-      bases: BaseSnapshot[];
+      bases?: BaseSnapshot[];
     }
   | { type: "event"; event: GameEvent }
   | { type: "error"; code: "name_taken" | "full" | "invalid_name" | "not_host" | "invalid_action" | "kicked" };
