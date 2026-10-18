@@ -148,3 +148,4 @@ All questions raised during the specification phase are resolved. Each line give
 - **Q129 — Ring priority:** Repairing turret, then Capturing, then Resupplying; the resupply ring shows the least-full resource and disappears once all are full. Decided 2026-10-18.
 - **Q130 — Ammunition colours:** the shell and torpedo counts use the same colours as fuel (orange below 20%, red when empty). Decided 2026-10-18.
 - **Q131 — Only the own boat's fuel and ammunition are sent; other players' amounts stay hidden.** Decided 2026-10-18.
+- **Q142 — Bottom-left console HUD:** replace the bottom-left bars with hull/fuel dials, cannon/torpedo tiles (count, max, status, reload bar), and vertical throttle stops; numbers are white normally, orange below 20%, or red when empty, with the hull number red at ≤35 HP. Decided 2026-10-18.
