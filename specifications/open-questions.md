@@ -82,7 +82,7 @@ All questions raised during the specification phase are resolved. Each line give
 - **Q63 — Radar vessel visibility:** show only afloat boats; exclude sinking and waiting frigates. Decided 2026-10-17.
 - **Q64 — Radar position privacy:** snapshots continue to carry every boat's exact position; radar only limits what is drawn. Accepted for now. Decided 2026-10-17.
 - **Q65 — Radar object rules:** each object kind uses position, direction-only, or hidden radar visibility. Decided 2026-10-17.
-- **Q66 — Radar range:** use a fixed 3,000 u range; a host setting may be added later. Decided 2026-10-17.
+- **Q66 — Radar range:** the 3,000 u range scales proportionally to map width: 750 u on Small, 1,500 u on Standard, and 3,000 u on Big (Q152 supersedes the fixed range). Decided 2026-10-17; updated 2026-10-18.
 - **Q67 — Boat wakes:** use a V-shaped forward wake scaled by speed; astern motion leaves a churn band only. Decided 2026-10-17.
 - **Q68 — Torpedo wakes:** leave a 150 u bubble trail behind each torpedo to reveal roughly where it came from. Decided 2026-10-17.
 - **Q69 — Wake persistence and speed settings:** forward boat samples live 3 s, astern churn samples 1 s, and torpedo trails extend up to 1.25 s of travel (150 u at default speed); reach follows the host speed settings. Decided 2026-10-17.
@@ -125,7 +125,7 @@ All questions raised during the specification phase are resolved. Each line give
 - **Q106 — Spawn:** spawn in the home harbour facing open water with full fuel, ammunition, and hull; if the home is lost, use Q102; retain 3 s spawn protection. Decided 2026-10-18.
 - **Q107 — New host settings:** neutral bases 0–8, default 4, regenerate the map when changed; add fuel crossings, shell and torpedo capacity, and resupply/capture/repair times; fuel and ammunition changes apply immediately and clamp current amounts to the new maximum. Decided 2026-10-18.
 - **Q108 — Fuel and ammunition HUD:** show a fuel gauge and shell and torpedo counts bottom-left; fuel is orange below 20% and red when empty. Decided 2026-10-18.
-- **Q109 — Base radar:** within 3,000 u show bases as small owner-coloured squares (white for neutral); show own bases beyond range as a ring tick and hide enemy/neutral bases beyond range. Decided 2026-10-18.
+- **Q109 — Base radar:** within the current radar range show bases as small owner-coloured squares (white for neutral); show own bases beyond range as a ring tick and hide enemy/neutral bases beyond range. Decided 2026-10-18.
 - **Q110 — New map and score reset:** re-place all bases and give each player their home back on a new map; resetting scores does not change bases. Decided 2026-10-18.
 - **Q111 — Delivery:** write spec v2.0 first, then deliver three steps on separate branches from main with previews and approval before merge: (1) bases, flags, home spawn, capture; (2) turrets, repair, home-base rule; (3) fuel, ammunition, resupply. Tag v2.0.0 after step 3. Decided 2026-10-18.
 - **Q112 — Leaving during resupply:** resupply stops, but fuel and ammunition already refilled stay on board. Decided 2026-10-18.
@@ -155,9 +155,17 @@ All questions raised during the specification phase are resolved. Each line give
 - **Q136 — Neutral-base fallback:** keep the requested 0–8 setting; if fewer fit, place as many as possible and send `Only N neutral bases fit on this map` to every player. Decided 2026-10-18.
 - **Q137 — Fuel by map size:** capacity is Fuel crossings multiplied by current map width. Decided 2026-10-18.
 - **Q138 — Random spawn distance:** minimum separation is 15% of current map width: 2,400 u Big, 1,200 u Standard, 600 u Small. Decided 2026-10-18.
-- **Q139 — Unchanged values:** reference screen remains 1,600 × 900 u; boat, weapon, turret, harbour, city, and radar values do not change (turret range 600 u, harbour 60 u, city 40 u, radar 3,000 u). Decided 2026-10-18.
+- **Q139 — Unchanged values:** reference screen remains 1,600 × 900 u; boat, weapon, turret, harbour, and city values do not change (turret range 600 u, harbour 60 u, city 40 u). Decided 2026-10-18.
 - **Q140 — Default and compatibility:** Standard is the default; Big must reproduce today's same-seed world grid and base placement exactly. Decided 2026-10-18.
 - **Q141 — Small-map tile alignment:** round the nominal 2,250 u Small height to 2,240 u (112 tiles of 20 u). Decided 2026-10-18.
 - **Q142 — Bottom-left console HUD:** replace the bottom-left bars with hull/fuel dials, cannon/torpedo tiles (count, max, status, reload bar), and vertical throttle stops; numbers are white normally, orange below 20%, or red when empty, with the hull number red at ≤35 HP. Decided 2026-10-18.
 - **Q143 — Join on an already-joined connection:** a same-name repeat (case-insensitive) resends the current welcome; a different-name repeat removes the previous session without closing the socket before creating the new session. Decided 2026-10-18.
 - **Q144 — Install label:** the ring reads `Installing turret` when the base has never had a turret (or none since capture), `Repairing turret` when rebuilding a destroyed one. Decided 2026-10-18.
+- **Q145 — Sweep-detected contacts:** crossing an alive boat within radar range paints a 7 u dot at its world position; each pass replaces that player's previous blip. Decided 2026-10-18.
+- **Q146 — Contact fade:** blips stay fully visible for 0.3 s, then fade linearly to zero over 2 s. Decided 2026-10-18.
+- **Q147 — Radar sweep period:** keep one sweep turn every 4 s, with no setting. Decided 2026-10-18.
+- **Q148 — Out-of-range contacts:** beyond radar range, paint the existing edge direction triangle only on bearing crossing and freeze its bearing. Decided 2026-10-18.
+- **Q149 — In-range marker:** use a round 7 u diameter player-coloured dot with the existing 1 u `RADAR_OUTLINE`, without a heading. Decided 2026-10-18.
+- **Q150 — Contact eligibility and scope:** only alive boats are newly painted; existing blips fade after sinking, waiting, or leaving, while own boat, bases, and land stay unchanged. Decided 2026-10-18.
+- **Q151 — Radar implementation:** keep detection and blip state client-only; snapshots continue to carry all boat positions. Decided 2026-10-18.
+- **Q152 — Radar range per map size:** 3,000 u on Big, 1,500 u on Standard, 750 u on Small (in proportion to the map width); replaces the fixed radar range in Q139. Decided 2026-10-18.

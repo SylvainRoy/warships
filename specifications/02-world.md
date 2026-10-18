@@ -49,7 +49,7 @@ After terrain generation, the generator MUST place the four home sites and the c
 
 - The camera is centred on the player's own frigate, does not rotate (north is always up), and clamps at the world edges so it never shows beyond the world.
 - The cannon reticle stays at its true world position and may be off screen; it does not affect camera framing.
-- A north-up radar scope sits bottom-right, centred on the own frigate with a fixed 3,000 u range. It shows land as a faint mint mask and other afloat frigates as direction pips, including enemies already on screen; see [05-controls-and-hud.md](05-controls-and-hud.md#radar). The radar limits only what is drawn, not the positions carried in snapshots.
+- A north-up radar scope sits bottom-right, centred on the own frigate, with a range proportional to map width: 750 u on Small, 1,500 u on Standard, and 3,000 u on Big. Its land mask scales with the same range; see [05-controls-and-hud.md](05-controls-and-hud.md#radar). The radar limits only what is drawn, not the positions carried in snapshots.
 
 ## Visibility
 
