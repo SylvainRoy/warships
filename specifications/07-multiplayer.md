@@ -15,6 +15,7 @@ A spawn point is valid only when no land tile lies within 60 u of the frigate hu
 
 - Closing the tab or losing the connection for more than **10 s** frees the slot: the frigate disappears and its score is dropped.
 - A reconnection within those 10 s with the same name resumes the same frigate and score.
+- If an already-joined connection sends Join again, the server MUST resend the current welcome without creating a session when the name matches case-insensitively; if the name differs, it MUST fully remove the old session without closing the connection before processing the new join (Q143).
 - A player's bases remain theirs during the **10 s** reconnect grace. When the grace expires and the slot is freed, their home site becomes inactive and every other base they held becomes neutral (Q91, Q117).
 
 ## Host
