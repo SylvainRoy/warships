@@ -18,7 +18,9 @@ describe("control bindings", () => {
     expect(CONTROL_ACTIONS).toHaveLength(12);
     expect(new Set(codes).size).toBe(codes.length);
     expect(codes.some((code) => RESERVED_CODES.has(code))).toBe(false);
-    expect(DEFAULT_BINDINGS.fireTorpedo).toEqual(["Backslash", "IntlBackslash"]);
+    expect(DEFAULT_BINDINGS.fireCannon).toEqual(["Space"]);
+    expect(DEFAULT_BINDINGS.torpedoRight).toEqual(["Backslash", "IntlBackslash"]);
+    expect(DEFAULT_BINDINGS.fireTorpedo).toEqual(["BracketRight"]);
     expect(BINDINGS_STORAGE_KEY).toBe("warships.controls");
   });
 
@@ -31,9 +33,9 @@ describe("control bindings", () => {
   });
 
   it("reduces an action assigned one of its own codes to that code", () => {
-    const next = assignBinding(DEFAULT_BINDINGS, "fireTorpedo", "IntlBackslash");
-    expect(next.fireTorpedo).toEqual(["IntlBackslash"]);
-    expect(next.fireCannon).toEqual(["ShiftRight"]);
+    const next = assignBinding(DEFAULT_BINDINGS, "torpedoRight", "IntlBackslash");
+    expect(next.torpedoRight).toEqual(["IntlBackslash"]);
+    expect(next.fireCannon).toEqual(["Space"]);
   });
 
   it("returns the original bindings unchanged for a reserved code", () => {
@@ -42,15 +44,18 @@ describe("control bindings", () => {
     expect(assignBinding(DEFAULT_BINDINGS, "hullLeft", "F3")).toBe(DEFAULT_BINDINGS);
   });
 
-  it("swaps the fire-torpedo defaults to fire cannons when ShiftRight is assigned", () => {
-    const next = assignBinding(DEFAULT_BINDINGS, "fireTorpedo", "ShiftRight");
-    expect(next.fireTorpedo).toEqual(["ShiftRight"]);
+  it("swaps the torpedo-right defaults to fire cannons when Space is assigned", () => {
+    const next = assignBinding(DEFAULT_BINDINGS, "torpedoRight", "Space");
+    expect(next.torpedoRight).toEqual(["Space"]);
     expect(next.fireCannon).toEqual(["Backslash", "IntlBackslash"]);
+    expect(next.fireTorpedo).toEqual(["BracketRight"]);
   });
 
   it("looks up the action for a code", () => {
     expect(actionForCode(DEFAULT_BINDINGS, "KeyW")).toBe("throttleUp");
-    expect(actionForCode(DEFAULT_BINDINGS, "IntlBackslash")).toBe("fireTorpedo");
+    expect(actionForCode(DEFAULT_BINDINGS, "IntlBackslash")).toBe("torpedoRight");
+    expect(actionForCode(DEFAULT_BINDINGS, "Space")).toBe("fireCannon");
+    expect(actionForCode(DEFAULT_BINDINGS, "BracketRight")).toBe("fireTorpedo");
     expect(actionForCode(DEFAULT_BINDINGS, "Escape")).toBeUndefined();
   });
 

@@ -22,9 +22,9 @@ Share `http://<server-computer-LAN-IP>:8080` with players on the same network. T
 | Turn hull | `KeyA` / `KeyD` |
 | Aim cannon | `ArrowLeft` / `ArrowRight` |
 | Cannon range | `ArrowUp` / `ArrowDown` |
-| Fire cannon salvo | `ShiftRight` |
-| Aim torpedoes | `BracketLeft` / `BracketRight` |
-| Fire torpedoes | `Backslash` or `IntlBackslash` |
+| Fire cannon salvo | `Space` |
+| Aim torpedoes | `BracketLeft` / `Backslash` or `IntlBackslash` |
+| Fire torpedoes | `BracketRight` |
 | Full scoreboard (hold) | `Tab` |
 | Host menu | `Escape` |
 | Debug overlay | `F3` |

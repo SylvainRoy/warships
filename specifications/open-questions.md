@@ -101,3 +101,4 @@ All questions raised during the specification phase are resolved. Each line give
 - **Q82 — Binding assignment:** keep one code per action after a change; assigning another action's code swaps the edited action's previous codes to that action, and reserved codes are rejected with a hint. Decided 2026-10-17.
 - **Q83 — Binding labels:** bind by `KeyboardEvent.code`; use the asynchronous keyboard layout map when available and friendly QWERTY names otherwise, keeping arrows and Shift friendly. Decided 2026-10-17.
 - **Q84 — Menu input:** while the menu is open, retain the boat's throttle and ignore every bound game action. Decided 2026-10-17.
+- **Q85 — Revised default keys:** after playtesting, fire cannons defaults to `Space`, torpedo right to `Backslash` and `IntlBackslash`, and fire torpedoes to `BracketRight`; supersedes the fire defaults in Q79. Decided 2026-10-17.

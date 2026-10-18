@@ -5,8 +5,8 @@
 Keys are bound by **physical position** (`KeyboardEvent.code`), not by printed character, so the layout works on QWERTY and AZERTY keyboards alike (e.g. on a French AZERTY keyboard, "W A S D" are the keys printed Z Q S D; on a French PC keyboard `[ ] \` are the keys printed `^ $ *`).
 
 The game MUST work on both **Mac and PC** keyboards (Windows/Linux). Implementation notes:
-- On Mac and PC ISO keyboards the key left of Enter reports `Backslash`; on some layouts the key left of Z reports `IntlBackslash`. Both MUST be accepted as "fire torpedoes".
-- Right Shift MUST be distinguished from Left Shift (`ShiftRight`), which browsers support on both platforms.
+- On Mac and PC ISO keyboards the key left of Enter reports `Backslash`; on some layouts the key left of Z reports `IntlBackslash`. Both MUST be accepted as "torpedo right".
+- `ShiftLeft` and `ShiftRight` remain distinct assignable codes; the Controls menu displays them as Left Shift and Right Shift when bound.
 - The bindings MUST be verified on at least: Mac French AZERTY, PC French AZERTY, PC US QWERTY.
 
 | Action | Code | QWERTY key |
@@ -19,10 +19,10 @@ The game MUST work on both **Mac and PC** keyboards (Windows/Linux). Implementat
 | Cannon right | `ArrowRight` | → |
 | Range + | `ArrowUp` | ↑ |
 | Range − | `ArrowDown` | ↓ |
-| Fire cannons | `ShiftRight` | Right Shift |
+| Fire cannons | `Space` | Space |
 | Torpedo left | `BracketLeft` | [ |
-| Torpedo right | `BracketRight` | ] |
-| Fire torpedoes | `Backslash` and `IntlBackslash` | \ and ISO \ |
+| Torpedo right | `Backslash` and `IntlBackslash` | \ and ISO \ |
+| Fire torpedoes | `BracketRight` | ] |
 | Show full scoreboard (hold) | `Tab` | Tab |
 | Menu (all players) | `Escape` | Esc |
 | Toggle debug | `F3` | F3 |
@@ -39,7 +39,7 @@ In Settings, the rows are Boat speed, Rotation speed, Cannon rotation, Torpedo r
 
 ## Player controls
 
-Each browser stores its own bindings in `localStorage` under `warships.controls`; bindings are client-only and are not sent to the server. Controls lists the 12 actions in the table above. The physical Up/Down arrows select a row regardless of bindings; Enter starts capture, the next non-repeating key is assigned and saved immediately, and Esc cancels capture. Esc outside capture returns to the shared menu. D restores and saves all defaults when not capturing. Escape, Tab, and F3 are reserved and cannot be assigned. Each action has one code after it is changed; assigning a code owned by another action swaps the edited action's previous codes to that action. Fire torpedoes defaults to both `Backslash` and `IntlBackslash` until changed.
+Each browser stores its own bindings in `localStorage` under `warships.controls`; bindings are client-only and are not sent to the server. Controls lists the 12 actions in the table above. The physical Up/Down arrows select a row regardless of bindings; Enter starts capture, the next non-repeating key is assigned and saved immediately, and Esc cancels capture. Esc outside capture returns to the shared menu. D restores and saves all defaults when not capturing. Escape, Tab, and F3 are reserved and cannot be assigned. Each action has one code after it is changed; assigning a code owned by another action swaps the edited action's previous codes to that action. Torpedo right defaults to both `Backslash` and `IntlBackslash` until changed.
 
 Bindings use `KeyboardEvent.code` so they follow physical key positions. When supported, the client reads `navigator.keyboard.getLayoutMap()` at startup and refreshes it when Controls opens, displaying uppercase printed characters; otherwise it uses friendly QWERTY names. Arrows and Shift retain friendly names. While the shared menu is open, the boat keeps its throttle and ignores all bound game actions.
 

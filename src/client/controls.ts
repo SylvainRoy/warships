@@ -38,10 +38,10 @@ export const DEFAULT_BINDINGS: Bindings = {
   cannonRight: ["ArrowRight"],
   rangeUp: ["ArrowUp"],
   rangeDown: ["ArrowDown"],
-  fireCannon: ["ShiftRight"],
+  fireCannon: ["Space"],
   torpedoLeft: ["BracketLeft"],
-  torpedoRight: ["BracketRight"],
-  fireTorpedo: ["Backslash", "IntlBackslash"],
+  torpedoRight: ["Backslash", "IntlBackslash"],
+  fireTorpedo: ["BracketRight"],
 };
 
 export const RESERVED_CODES: ReadonlySet<string> = new Set(["Escape", "Tab", "F3"]);
