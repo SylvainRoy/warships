@@ -138,3 +138,8 @@ All questions raised during the specification phase are resolved. Each line give
 - **Q119 — Time setting changed during an action:** the new time applies immediately, preserving progress as a fraction of the action. Decided 2026-10-18.
 - **Q120 — Minor v2 details:** neutral-bases setting step 1; minimum 1,600 u spacing measured between harbour centres; buildings stand on land so torpedoes stop there and rubble adds no collision; new settings rows follow Land coverage in order Neutral bases, Fuel, Shells, Torpedoes, Resupply time, Capture time, Repair time; inactive home sites do not appear on radar. Decided 2026-10-18.
 - **Q121 — Radar marker contrast:** base squares grow to 6 u, and base squares, boat triangles and own-base ticks get a 1 u near-black outline so blue (and every player colour) stays visible over the green radar land. Decided 2026-10-18.
+- **Q122 — Turret position:** the turret stands on the base building; range is measured from the building centre. Decided 2026-10-18.
+- **Q123 — Turret shell ownership:** turret shells belong to the base owner (kill credit +1, feed `<owner>'s turret sank <name>`) and never damage the owner's boats or turrets. Decided 2026-10-18.
+- **Q124 — Turret hit test:** a shell landing within 60 u of the building square deals 10 damage to its turret. Decided 2026-10-18.
+- **Q125 — Owner recaptures lost home:** restored as on automatic return, with a full turret. Decided 2026-10-18.
+- **Q126 — Holder of a lost home leaves:** the home returns to its original owner immediately, with a full turret. Decided 2026-10-18.

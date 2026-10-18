@@ -38,6 +38,10 @@ The three action times are host settings; their ranges, steps, and defaults are 
 - Turret shells use the cannon shell's **60 u** blast radius and **10 damage**.
 - A turret has **60 HP** and is destroyed by six direct shell hits. Only shells damage turrets; a player's own shells MUST NOT damage that player's turrets.
 - A destroyed turret MUST be shown as rubble.
+- The turret stands on the base building; its range is measured from the building centre to the boat centre (Q122).
+- Turret shells belong to the base owner: a sinking by a turret scores +1 for the owner and the feed reads `<owner>'s turret sank <name>`. Turret shells MUST NOT damage the owner's boats or turrets (Q123).
+- A shell hits a turret when it lands within the **60 u** blast radius of the building square, mirroring the frigate hit test; each hit deals **10 damage** (Q124).
+- A captured base keeps its turret state (none for a neutral base, rubble for an enemy base); its new owner must install or repair a turret.
 
 ## Home-base loss
 
@@ -47,3 +51,5 @@ The three action times are host settings; their ranges, steps, and defaults are 
 - While its home is lost, the original owner may take it back by a normal capture, without points; this cancels the return countdown and restores the base to its owner (Q114).
 - If a third player captures the lost home during the countdown, they gain **5 points**; the original owner loses no additional points, and the countdown continues (Q114).
 - If the original owner leaves while their home is lost, the countdown stops and the home site becomes inactive (Q116).
+- When the original owner takes their home back by capture, it is restored as on automatic return, with a full turret (Q125).
+- If the player holding another player's lost home leaves (after the reconnect grace), that home returns to its original owner immediately, with a full turret (Q126).
