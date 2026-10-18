@@ -15,6 +15,7 @@ A spawn point is valid only when no land tile lies within 60 u of the frigate hu
 
 - Closing the tab or losing the connection for more than **10 s** frees the slot: the frigate disappears and its score is dropped.
 - A reconnection within those 10 s with the same name resumes the same frigate and score.
+- When a player leaves and their slot is freed, their home site becomes inactive and every other base they held becomes neutral (Q91). Whether this happens immediately or only after the existing 10 s reconnect grace is **TBD (open point)**.
 
 ## Host
 
@@ -24,10 +25,15 @@ A spawn point is valid only when no land tile lies within 60 u of the frigate hu
   - **Regenerate world**: new random seed; all projectiles are removed; all frigates respawn per the spawning rules. Scores are kept.
   - **Reset scores**: all scores and sunk counts set to 0.
   - **Kick a player**: choose a numbered target (ordered by slot) with 1–3.
-  - **Settings**: edit boat speed (`boatSpeedPct`), rotation (`rotationPct`), cannon rotation (`cannonRotationPct`), torpedo rotation (`torpedoRotationPct`), shell speed (`shellSpeedPct`), torpedo speed (`torpedoSpeedPct`), cannon reload (`cannonReload`), torpedo reload (`torpedoReload`), and Land coverage (`landCoveragePct`). Values must contain exactly the nine supported keys and satisfy their limits and steps (Q43, Q50, Q53); invalid settings are rejected.
+  - **Settings**: edit boat speed (`boatSpeedPct`), rotation (`rotationPct`), cannon rotation (`cannonRotationPct`), torpedo rotation (`torpedoRotationPct`), shell speed (`shellSpeedPct`), torpedo speed (`torpedoSpeedPct`), cannon reload (`cannonReload`), torpedo reload (`torpedoReload`), Land coverage (`landCoveragePct`), and the v2 settings below. Updates MUST contain exactly the supported settings and satisfy their limits and steps; invalid settings are rejected.
+    - **Neutral bases**: 0–8, default 4; setting step is **TBD (open point)**. Changing the value regenerates the map (Q107).
+    - **Fuel crossings**: 1–10, step 1, default 2. Each crossing is one map width (Q103).
+    - **Shells**: 10–200, step 10, default 50; **Torpedoes**: 5–100, step 5, default 30 (Q105).
+    - **Resupply time**, **Capture time**, and **Repair time**: each 1–30 s, step 1 s, default 5 s (Q95–Q97).
+    - Fuel and ammunition setting changes apply immediately; current amounts MUST be clamped to the new maximum (Q107). Whether a time-setting change affects an action already in progress is **TBD (open point)**.
 - Enter confirms a pending action; Esc cancels it or returns from kick selection.
 - All players see a notification in the event feed when the host performs an action.
-- Applying settings broadcasts the new values to every joined player. When at least one value changes, the feed says `Host <name>: <changed settings>` in field order; applying unchanged values does not add an event. Changing Land coverage immediately regenerates the map and respawns all frigates, while keeping scores (Q54).
+- Applying settings broadcasts the new values to every joined player. When at least one value changes, the feed says `Host <name>: <changed settings>` in field order; applying unchanged values does not add an event. Changing Land coverage immediately regenerates the map and respawns all frigates, while keeping scores (Q54). Changing Neutral bases also regenerates the map like Land coverage; see [06-game-rules.md](06-game-rules.md#new-maps-and-score-resets).
 - Settings are kept in server memory across world regeneration, score resets, and host succession. They reset to defaults when the server restarts. In-flight projectiles and reloads already in progress retain their values (Q44, Q46).
 - Host privileges are tied to the session (connection), not to a password.
 

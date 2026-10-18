@@ -35,6 +35,10 @@ The visual terrain style is natural: rounded turquoise shallows about **60 u** w
 - **Navigability**: channels between land MUST be at least 8 tiles (160 u) wide. Every water tile MUST belong to at least one all-water 8 × 8-tile square; narrower passages are filled. Prevents frigates getting stuck in slivers.
 - The host can regenerate the world at any time (new random seed), see [07-multiplayer.md](07-multiplayer.md).
 
+## Bases
+
+After terrain generation, the generator MUST place the four home sites and the configured neutral bases on existing coasts, without changing terrain (see [09-bases.md](09-bases.md)). A map is valid only if all bases can be placed with the required separation. If placement fails, the generator MUST silently try the next seed.
+
 ## Camera
 
 - The camera is centred on the player's own frigate, does not rotate (north is always up), and clamps at the world edges so it never shows beyond the world.

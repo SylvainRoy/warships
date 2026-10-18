@@ -25,6 +25,12 @@ The frigate has inertia: the throttle sets a target speed, and acceleration move
 - A and D together cancel.
 - Host settings can scale forward/reverse top speed, acceleration, and rotation by percentage; land damage remains relative to the scaled top speed while the 20 u/s graze threshold stays fixed (Q47).
 
+## Fuel
+
+- Fuel consumption MUST be proportional to distance sailed, both forward and astern. A stopped frigate MUST NOT consume fuel.
+- Full-tank capacity MUST equal the host's **Fuel crossings** setting multiplied by the map width. The setting range and default are specified in [07-multiplayer.md](07-multiplayer.md).
+- With an empty tank, maximum forward and astern speed MUST be limited to **10%** of normal (about **5 u/s**); turning and firing remain available (Q103, Q104).
+
 ## Collisions
 
 - **Frigate vs land / world edge**: the frigate stops at the shore (velocity component into the land is cancelled, it can slide along the coast).

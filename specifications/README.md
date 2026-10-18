@@ -1,6 +1,6 @@
 # Warships — Specifications
 
-**Status: APPROVED v1.18** (2026-10-18). Changes after approval must be recorded in the changelog.
+**Status: DRAFT v2.0** (2026-10-18) — v1.18 is the released version (game v1.0.0).
 
 | # | Document | Content |
 |---|----------|---------|
@@ -12,6 +12,7 @@
 | 06 | [Game rules](06-game-rules.md) | Spawning, sinking, scoring |
 | 07 | [Multiplayer & host](07-multiplayer.md) | Joining, player slots, host privileges |
 | 08 | [Technical architecture](08-architecture.md) | Stack, networking, deployment, performance |
+| 09 | [Bases](09-bases.md) | Home and neutral bases, harbours, capture, and turrets |
 | — | [Decisions](open-questions.md) | Q&A log of design decisions |
 
 ## Conventions
@@ -22,6 +23,7 @@
 
 ## Changelog
 
+- v2.0 (draft) — bases (home and neutral), harbours, capture, turrets, fuel and ammunition (Q91–Q111).
 - v1.18 — show the game version in the lobby and the server log; release versioning and changelog (Q86–Q90); approved 2026-10-18.
 - v1.17 — player-configurable key bindings stored per browser, Controls menu for every player, and revised fire/torpedo defaults after playtesting (Q78–Q85); approved 2026-10-17.
 - v1.16 — the cannon sight starts at minimum range (100 u) on every spawn so it is visible (Q77); approved 2026-10-17.

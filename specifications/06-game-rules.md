@@ -4,10 +4,13 @@
 
 A frigate spawns when its player joins, after being sunk, and when the world is regenerated.
 
-- Position: a random water point such that
+- Normally, a frigate spawns in its home harbour facing open water. It spawns with full fuel, shells, torpedoes, and hull; the cannon range is at minimum (100 u), and bearings point forward (Q106).
+- If its home base has been lost, the player respawns at another base they own. If they own no other base, use the v1 random-point rules below (Q102).
+- Every spawn starts at speed 0.
+- Random-point fallback: choose a water point such that
   - the whole frigate is on water with at least 60 u clearance from land,
   - it is at least **2 400 u** (1.5 screen widths) from every other living frigate. If no such point is found after N attempts, the point maximising the distance to the nearest frigate is used.
-- Heading: random. Speed: 0. HP: full. Weapons: loaded; cannon range set to minimum (100 u), bearings pointing forward.
+- For a random-point fallback, heading is random.
 - **Spawn protection**: 3 s of invulnerability, ended early if the player fires. Shown by a blinking hull.
 
 ## Sinking
@@ -18,9 +21,16 @@ A frigate spawns when its player joins, after being sunk, and when the world is 
 
 ## Scoring
 
+- Capturing another player's home base costs its original owner **5 points** and awards the capturer **5 points**. Scores may be negative (Q101).
 - **+1 point** to the player whose shell or torpedo dealt the final damage.
 - Sinking yourself (own shell / torpedo, or running into land): no point gained, **−1 point**.
 - No points for damage that does not sink.
 - Scores are kept for as long as the player stays connected; a player leaving loses their score.
 - The scoreboard also shows the number of times each player was sunk.
 - There is no win condition: the game is infinite. The host may reset scores (see [07-multiplayer.md](07-multiplayer.md)).
+
+## New maps and score resets
+
+- When a new map is generated, all bases MUST be re-placed and each player MUST get their home base back (Q110).
+- Resetting scores MUST NOT change bases.
+- Ownership of captured non-home bases after map generation is **TBD (open point)**.

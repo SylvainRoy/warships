@@ -35,7 +35,7 @@ The game MUST work on both **Mac and PC** keyboards (Windows/Linux). Implementat
 
 Every player opens the shared menu with Esc. It is titled HOST CONTROL for the host and MENU for other players. C opens Controls for everyone. The host additionally has R for world regeneration, X for a score reset, K for a numbered list of captains to kick, and S for Settings; these actions remain host-only. Select a kick target with `Digit1`–`Digit3` or `Numpad1`–`Numpad3`. Enter or NumpadEnter confirms a pending action; Esc cancels it or returns from kick selection. Confirmations are shown in-game, not in browser dialogs. If host status is lost while the menu is open, host-only pending actions are dropped while the shared menu and Controls remain usable.
 
-In Settings, the rows are Boat speed, Rotation speed, Cannon rotation, Torpedo rotation, Shell speed, Torpedo speed, Cannon reload, Torpedo reload, and Land coverage. Up/Down selects a row, Left/Right changes its value, D restores defaults, Enter applies the draft, and Esc returns to the host menu. When Land coverage differs from the applied value, the hint says `Enter: apply + new map`; applying it immediately generates a new map while keeping scores.
+In Settings, the rows include Boat speed, Rotation speed, Cannon rotation, Torpedo rotation, Shell speed, Torpedo speed, Cannon reload, Torpedo reload, Land coverage, and the v2 settings in [07-multiplayer.md](07-multiplayer.md). The display order of the v2 rows is **TBD (open point)**. Up/Down selects a row, Left/Right changes its value, D restores defaults, Enter applies the draft, and Esc returns to the host menu. When Land coverage differs from the applied value, the hint says `Enter: apply + new map`; applying it immediately generates a new map while keeping scores.
 
 ## Player controls
 
@@ -55,13 +55,14 @@ Bindings use `KeyboardEvent.code` so they follow physical key positions. When su
 
 The bottom-right radar scope has a 90 u HUD radius and 8 u margin. It is north-up, centred on the own frigate, and shows a fixed 3,000 u range. Its clipped disc uses the panel background `rgba(5, 20, 29, .72)`. A cached 800 × 450 land mask uses 1 px per tile: land and the area beyond the world boundary are `rgba(93, 255, 172, .45)`, while water is transparent. It is smoothed at `tileSize × radius / range` (0.6 HUD px per tile). Faint mint rings at one-third and two-thirds range and N–S/E–W crosshair lines use about 0.15 alpha. The cosmetic sweep rotates once every four seconds, with a 0.5-alpha line and a 30° trailing wedge at 0.10 alpha.
 
-The own boat is a white 6 u triangle pointing along its heading. Every other alive frigate appears as a 7 u player-coloured direction triangle, pointing outward from radius 84 u, including enemies already on screen; sinking and waiting frigates are excluded. Other object kinds may use position dots (3 u radius, only within range), direction-only pips, or remain hidden. The mint scope border uses 0.6 alpha and a 1.5 u line. Snapshots still carry every boat's exact position; the radar limits only what is drawn.
+The own boat is a white 6 u triangle pointing along its heading. Every other alive frigate appears as a 7 u player-coloured direction triangle, pointing outward from radius 84 u, including enemies already on screen; sinking and waiting frigates are excluded. Bases within 3,000 u appear as small squares in their owner's colour, or white when neutral. The player's own bases beyond range appear as a tick on the ring; enemy and neutral bases beyond range are hidden (Q109). Radar treatment of inactive home sites is **TBD (open point)**. The mint scope border uses 0.6 alpha and a 1.5 u line. Snapshots still carry every boat's exact position; the radar limits only what is drawn.
 
 ## HUD (screen space)
 
 - HUD panels and overlays use the reference screen's fit (contain) scale and are anchored to the browser window edges (Q41, Q56); positions and sizing remain in reference units.
 - Top-right: compact scoreboard (name, colour, score) for all connected players, own line highlighted.
 - Holding Tab shows the full scoreboard; when settings differ from defaults, it adds a `CUSTOM RULES · …` line listing each changed setting.
-- Bottom-left: own HP bar, cannon and torpedo reload status, plus a throttle telegraph with the selected level highlighted and its full label.
+- Bottom-left: own HP bar, cannon and torpedo reload status, throttle telegraph with the selected level highlighted and its full label, fuel gauge, and shell and torpedo counts. Fuel is orange below 20% and red when empty (Q108).
+- A progress ring around the own boat shows the current harbour action: `Resupplying`, `Capturing <time>` (for example, `Capturing 3 s`), or `Repairing turret` (Q98).
 - Event feed (top-left): short messages "Alice sank Bob", "Carol joined", "World regenerated", fading after 5 s.
 - Death screen: "Sunk by *X*" + respawn countdown.

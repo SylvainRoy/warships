@@ -16,7 +16,8 @@ Ballistic weapon: shells fly in the air, over water and land, and land on the ai
 
 ### Firing
 
-- Right Shift fires a **salvo of 2 shells**. Their trajectories are parallel to the bearing, offset by ±15 u perpendicular to it, so they land 30 u apart, centred on the reticle.
+- The **Fire cannons** action fires a **salvo of 2 shells**. By default it is bound to Space (Q85). Their trajectories are parallel to the bearing, offset by ±15 u perpendicular to it, so they land 30 u apart, centred on the reticle.
+- Each fired salvo consumes **1 shell**. If the shell count is empty, Fire cannons does nothing. Shell capacity is host-configurable; see [07-multiplayer.md](07-multiplayer.md).
 - Shells travel at **400 u/s** horizontal speed: ≤ 2.0 s flight at max range. The landing point is fixed at the time of firing (shells are not guided). Shells are drawn as pointed black shells with a thin pale outline, nose oriented along the flight path, with the parabolic size effect (grows then shrinks) and shadow on the water.
 - **Reload: 1.5 s** after a salvo. Pressing fire while reloading does nothing.
 - The host can adjust shell speed and cannon reload; shell range remains unchanged (Q47).
@@ -34,12 +35,13 @@ Underwater weapon: straight-line, fast, blocked by land.
 
 ### Aiming
 
-- `[` / `]` rotate the torpedo bearing left / right at 54 °/s at the default setting, scaled by the host's torpedo rotation setting. Full 360° allowed.
+- By default, `[` rotates the torpedo bearing left; `\` and the ISO key left of Z rotate it right (Q85). Rotation is 54 °/s at the default setting, scaled by the host's torpedo rotation setting. Full 360° allowed.
 - The bearing is shown by a **green arrow around the frigate** (see [05-controls-and-hud.md](05-controls-and-hud.md)).
 
 ### Firing
 
-- `\` fires a **spread of 3 torpedoes** simultaneously at bearing −2°, 0°, +2°. They start from the frigate's centre.
+- The **Fire torpedoes** action fires a **spread of 3 torpedoes** simultaneously at bearing −2°, 0°, +2°. They start from the frigate's centre. By default the action is bound to `]` (Q85).
+- Each fired spread consumes **1 torpedo**. If the torpedo count is empty, Fire torpedoes does nothing. Torpedo capacity is host-configurable; see [07-multiplayer.md](07-multiplayer.md).
 - Torpedo speed **120 u/s** (2.5 × max frigate speed).
 - **Reload: 4 s**.
 - The host can adjust torpedo speed and reload; the 0.5 s arming delay remains unchanged (Q47).

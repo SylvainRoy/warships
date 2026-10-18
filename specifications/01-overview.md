@@ -2,7 +2,7 @@
 
 ## Pitch
 
-*Warships* is an online multiplayer naval combat game seen from above in 2D. Each player commands a frigate armed with **cannons** (ballistic, fire over islands) and **torpedoes** (underwater, blocked by land). Players roam an archipelago, sink each other to score points, and respawn instantly somewhere else. The game never ends: it is a persistent free-for-all.
+*Warships* is an online multiplayer naval combat game seen from above in 2D. Each player commands a frigate armed with **cannons** (ballistic, fire over islands) and **torpedoes** (underwater, blocked by land). Players roam an archipelago, manage fuel and ammunition, capture bases, and sink each other to score points. The game never ends: it is a persistent free-for-all.
 
 ## Key characteristics
 
@@ -14,6 +14,7 @@
 | View | 2D top-down, camera follows own frigate |
 | Platform | Desktop web browser, keyboard only. No installation for players |
 | Session control | First connected player is the **host**: can regenerate the world and reset scores |
+| v2 bases | Four home sites, configurable neutral bases, harbours, and turrets |
 
 ## In scope (v1)
 
@@ -21,6 +22,12 @@
 - Procedurally generated world with islands; all water connected.
 - Frigate movement with inertia; cannons; torpedoes; damage; sinking; respawn; scoreboard.
 - Host controls: regenerate world, reset scores.
+
+## In scope (v2 draft)
+
+- Home and neutral bases, harbour resupply and capture, turrets, and home-base loss and return.
+- Distance-based fuel consumption and finite cannon and torpedo ammunition.
+- Host settings for neutral bases, fuel capacity, ammunition capacity, and harbour-action times.
 
 ## Out of scope (v1) — candidates for later
 
