@@ -1,6 +1,6 @@
 import { GAME_CONFIG } from "./config.js";
 import { mulberry32 } from "./rng.js";
-import { hullInsideHarbour, type Base, type BaseSite } from "./bases.js";
+import { hullInsideHarbour, restoreHome, type Base, type BaseSite } from "./bases.js";
 import { DEFAULT_SETTINGS, type GameSettings } from "./settings.js";
 import { isLandAt, type World } from "./world.js";
 
@@ -54,6 +54,7 @@ export interface Frigate {
 export interface Shell {
   id: string;
   ownerId: string;
+  turretBaseId?: string;
   startX: number;
   startY: number;
   impactX: number;
@@ -83,7 +84,7 @@ export interface PlayerScore {
 }
 
 export interface GameEvent {
-  type: "explosion" | "sank" | "join" | "leave" | "host" | "capture";
+  type: "explosion" | "sank" | "join" | "leave" | "host" | "capture" | "turret";
   x?: number;
   y?: number;
   kind?: ExplosionKind;
@@ -339,6 +340,13 @@ export function createGameState(world: World, sites: readonly BaseSite[] = []): 
       ownerId: null,
       captureBy: null,
       captureProgress: 0,
+      turret: "none",
+      turretHp: 0,
+      turretReadyAt: 0,
+      repairBy: null,
+      repairProgress: 0,
+      lostFrom: null,
+      returnAt: null,
     })),
     frigates: {},
     shells: [],
@@ -349,8 +357,73 @@ export function createGameState(world: World, sites: readonly BaseSite[] = []): 
   };
 }
 
-export function stepBases(state: GameState, dt: number, _now: number): void {
+function playerName(state: GameState, playerId: string): string {
+  return state.scores[playerId]?.name ?? state.frigates[playerId]?.name ?? "Unknown";
+}
+
+export function stepTurrets(state: GameState, now: number): void {
   for (const base of state.bases) {
+    if (!base.active || !base.ownerId || base.turret !== "active" || now < base.turretReadyAt) continue;
+    let target: Frigate | undefined;
+    let nearestDistance: number = GAME_CONFIG.bases.turretRange;
+    for (const frigate of Object.values(state.frigates)) {
+      if (
+        frigate.status !== "alive"
+        || frigate.playerId === base.ownerId
+        || now < frigate.spawnProtectedUntil
+      ) continue;
+      const distance = Math.hypot(frigate.x - base.cityX, frigate.y - base.cityY);
+      if (distance <= nearestDistance) {
+        if (distance < nearestDistance || !target) {
+          target = frigate;
+          nearestDistance = distance;
+        }
+      }
+    }
+    if (!target) continue;
+    const distance = Math.hypot(target.x - base.cityX, target.y - base.cityY);
+    const shellSpeed = GAME_CONFIG.cannon.shellSpeed * state.settings.shellSpeedPct / 100;
+    state.shells.push({
+      id: `s${state.nextProjectileId++}`,
+      ownerId: base.ownerId,
+      turretBaseId: base.id,
+      startX: base.cityX,
+      startY: base.cityY,
+      impactX: target.x,
+      impactY: target.y,
+      elapsed: 0,
+      duration: distance / shellSpeed,
+    });
+    base.turretReadyAt = now + GAME_CONFIG.bases.turretReload;
+  }
+}
+
+function distanceToCity(base: Base, x: number, y: number): number {
+  const dx = Math.max(Math.abs(x - base.cityX) - GAME_CONFIG.bases.citySize / 2, 0);
+  const dy = Math.max(Math.abs(y - base.cityY) - GAME_CONFIG.bases.citySize / 2, 0);
+  return Math.hypot(dx, dy);
+}
+
+export function stepBases(
+  state: GameState,
+  dt: number,
+  now: number,
+  firedPlayers: ReadonlySet<string> = new Set(),
+): void {
+  for (const base of state.bases) {
+    if (base.kind === "home" && base.returnAt !== null && now >= base.returnAt) {
+      const ownerId = base.lostFrom;
+      const ownerName = ownerId ? playerName(state, ownerId) : null;
+      restoreHome(base, now);
+      if (ownerId && ownerName) {
+        state.events.push({
+          type: "capture",
+          playerId: ownerId,
+          name: ownerName,
+          message: `${ownerName}'s home base is back`,
+        });
+      }
+    }
     const occupants = Object.values(state.frigates).filter((frigate) =>
       frigate.status === "alive" && hullInsideHarbour(frigate, base),
     );
@@ -360,27 +433,101 @@ export function stepBases(state: GameState, dt: number, _now: number): void {
       || occupants.length !== 1
       || !occupant
       || occupant.playerId === base.ownerId
-      || base.kind === "home" // Step 1 homes stay uncapturable until turret rules are implemented.
+      || base.turret === "active"
     ) {
       base.captureBy = null;
       base.captureProgress = 0;
+    } else {
+      if (base.captureBy !== occupant.playerId) {
+        base.captureBy = occupant.playerId;
+        base.captureProgress = 0;
+      }
+      base.captureProgress += dt / state.settings.captureTime;
+      if (base.captureProgress >= 1) {
+        const previousOwnerId = base.ownerId;
+        const capturerId = occupant.playerId;
+        const capturerName = playerName(state, capturerId);
+        base.ownerId = capturerId;
+        base.captureBy = null;
+        base.captureProgress = 0;
+        if (base.kind === "home" && base.lostFrom !== null && capturerId === base.lostFrom) {
+          restoreHome(base, now);
+          state.events.push({
+            type: "capture",
+            playerId: capturerId,
+            name: capturerName,
+            message: `${capturerName} took back their home base`,
+          });
+        } else if (base.kind === "home" && base.lostFrom === null && previousOwnerId !== null) {
+          const ownerName = playerName(state, previousOwnerId);
+          base.lostFrom = previousOwnerId;
+          base.returnAt = now + GAME_CONFIG.bases.homeReturnDelay;
+          const ownerScore = state.scores[previousOwnerId];
+          const capturerScore = state.scores[capturerId];
+          if (ownerScore) ownerScore.score -= GAME_CONFIG.bases.homeCapturePoints;
+          if (capturerScore) capturerScore.score += GAME_CONFIG.bases.homeCapturePoints;
+          state.events.push({
+            type: "capture",
+            playerId: capturerId,
+            name: capturerName,
+            message: `${capturerName} captured ${ownerName}'s home base`,
+          });
+        } else if (base.kind === "home" && base.lostFrom !== null) {
+          const ownerName = playerName(state, base.lostFrom);
+          const capturerScore = state.scores[capturerId];
+          if (capturerScore) capturerScore.score += GAME_CONFIG.bases.homeCapturePoints;
+          state.events.push({
+            type: "capture",
+            playerId: capturerId,
+            name: capturerName,
+            message: `${capturerName} captured ${ownerName}'s home base`,
+          });
+        } else {
+          state.events.push({
+            type: "capture",
+            playerId: capturerId,
+            name: capturerName,
+            message: `${capturerName} captured a base`,
+          });
+        }
+      }
+    }
+
+    const ownerId = base.ownerId;
+    if (!base.active || !ownerId || base.turret === "active") {
+      base.repairBy = null;
+      base.repairProgress = 0;
       continue;
     }
-    if (base.captureBy !== occupant.playerId) {
-      base.captureBy = occupant.playerId;
-      base.captureProgress = 0;
+    const repairer = state.frigates[ownerId];
+    if (
+      !repairer
+      || repairer.status !== "alive"
+      || !hullInsideHarbour(repairer, base)
+      || firedPlayers.has(ownerId)
+    ) {
+      base.repairBy = null;
+      base.repairProgress = 0;
+      continue;
     }
-    base.captureProgress += dt / state.settings.captureTime;
-    if (base.captureProgress < 1) continue;
-    base.ownerId = occupant.playerId;
-    base.captureBy = null;
-    base.captureProgress = 0;
-    const name = state.scores[occupant.playerId]?.name ?? occupant.name;
+    if (base.repairBy !== ownerId) {
+      base.repairBy = ownerId;
+      base.repairProgress = 0;
+    }
+    base.repairProgress += dt / state.settings.repairTime;
+    if (base.repairProgress < 1) continue;
+    const action = base.turret === "none" ? "installed" : "repaired";
+    const name = playerName(state, ownerId);
+    base.turret = "active";
+    base.turretHp = GAME_CONFIG.bases.turretHp;
+    base.turretReadyAt = now;
+    base.repairBy = null;
+    base.repairProgress = 0;
     state.events.push({
-      type: "capture",
-      playerId: occupant.playerId,
+      type: "turret",
+      playerId: ownerId,
       name,
-      message: `${name} captured a base`,
+      message: `${name} ${action} a turret`,
     });
   }
 }
@@ -389,7 +536,13 @@ function emitExplosion(state: GameState, x: number, y: number, kind: ExplosionKi
   state.events.push({ type: "explosion", x, y, kind });
 }
 
-function sinkFrigate(state: GameState, frigate: Frigate, sourceId: string | null, now: number): void {
+function sinkFrigate(
+  state: GameState,
+  frigate: Frigate,
+  sourceId: string | null,
+  now: number,
+  sourceLabel?: string,
+): void {
   if (frigate.status !== "alive") return;
   frigate.status = "sinking";
   frigate.sinkingStartedAt = now;
@@ -402,21 +555,29 @@ function sinkFrigate(state: GameState, frigate: Frigate, sourceId: string | null
     if (victimScore) victimScore.score -= 1;
   } else if (killer) killer.score += 1;
   const killerName = sourceId ? state.scores[sourceId]?.name ?? (state.frigates[sourceId]?.name ?? "Unknown") : "the sea";
+  const displayName = sourceLabel ?? killerName;
   state.events.push({
     type: "sank",
     ...(sourceId !== null ? { playerId: sourceId } : {}),
-    name: killerName,
+    name: displayName,
     targetId: frigate.playerId,
     targetName: frigate.name,
-    message: `${killerName} sank ${frigate.name}`,
+    message: `${displayName} sank ${frigate.name}`,
   });
 }
 
-function damageFrigate(state: GameState, target: Frigate, amount: number, sourceId: string | null, now: number): void {
+function damageFrigate(
+  state: GameState,
+  target: Frigate,
+  amount: number,
+  sourceId: string | null,
+  now: number,
+  sourceLabel?: string,
+): void {
   if (target.status !== "alive" || now < target.spawnProtectedUntil) return;
   target.hp = Math.max(0, target.hp - amount);
   target.lastDamageSource = sourceId;
-  if (target.hp === 0) sinkFrigate(state, target, sourceId, now);
+  if (target.hp === 0) sinkFrigate(state, target, sourceId, now, sourceLabel);
 }
 
 function fireCannon(state: GameState, frigate: Frigate, now: number, settings: GameSettings): void {
@@ -517,6 +678,7 @@ function segmentHitsHull(x1: number, y1: number, x2: number, y2: number, target:
 export function stepGame(state: GameState, inputs: Record<string, FrigateInput | undefined>, dt: number, now: number): void {
   state.tick += 1;
   state.events = [];
+  const firedPlayers = new Set<string>();
   for (const frigate of Object.values(state.frigates)) {
     if (frigate.status === "sinking" && now >= frigate.sinkingStartedAt + GAME_CONFIG.player.sinkAnimation) {
       frigate.status = "waiting";
@@ -531,10 +693,12 @@ export function stepGame(state: GameState, inputs: Record<string, FrigateInput |
       if (cannonEdge && now >= frigate.cannonReadyAt) {
         fireCannon(state, frigate, now, state.settings);
         frigate.spawnProtectedUntil = now;
+        firedPlayers.add(frigate.playerId);
       }
       if (torpedoEdge && now >= frigate.torpedoReadyAt) {
         fireTorpedoes(state, frigate, now, state.settings);
         frigate.spawnProtectedUntil = now;
+        firedPlayers.add(frigate.playerId);
       }
       frigate.lastFireCannon = input.fireCannon;
       frigate.lastFireTorpedo = input.fireTorpedo;
@@ -545,6 +709,7 @@ export function stepGame(state: GameState, inputs: Record<string, FrigateInput |
   }
 
   resolveFrigateCollisions(Object.values(state.frigates));
+  stepTurrets(state, now);
 
   const remainingShells: Shell[] = [];
   for (const shell of state.shells) {
@@ -555,11 +720,36 @@ export function stepGame(state: GameState, inputs: Record<string, FrigateInput |
     }
     const kind: ExplosionKind = isLandAt(state.world, shell.impactX, shell.impactY) ? "land" : "splash";
     emitExplosion(state, shell.impactX, shell.impactY, kind);
+    const shooterName = playerName(state, shell.ownerId);
+    const sourceLabel = shell.turretBaseId ? `${shooterName}'s turret` : undefined;
     for (const target of Object.values(state.frigates)) {
-      if (target.status === "alive" && pointToHullDistance(shell.impactX, shell.impactY, target) <= GAME_CONFIG.cannon.damageRadius) {
-        damageFrigate(state, target, GAME_CONFIG.cannon.damage, shell.ownerId, now);
+      if (
+        target.status === "alive"
+        && !(shell.turretBaseId && target.playerId === shell.ownerId)
+        && pointToHullDistance(shell.impactX, shell.impactY, target) <= GAME_CONFIG.cannon.damageRadius
+      ) {
+        damageFrigate(state, target, GAME_CONFIG.cannon.damage, shell.ownerId, now, sourceLabel);
         if (target.hp > 0) emitExplosion(state, shell.impactX, shell.impactY, "hit");
       }
+    }
+    for (const base of state.bases) {
+      if (
+        base.turret !== "active"
+        || !base.ownerId
+        || base.ownerId === shell.ownerId
+        || distanceToCity(base, shell.impactX, shell.impactY) > GAME_CONFIG.cannon.damageRadius
+      ) continue;
+      base.turretHp = Math.max(0, base.turretHp - GAME_CONFIG.cannon.damage);
+      if (base.turretHp > 0) continue;
+      base.turret = "destroyed";
+      emitExplosion(state, base.cityX, base.cityY, "hit");
+      const ownerName = base.ownerId ? playerName(state, base.ownerId) : "Unknown";
+      state.events.push({
+        type: "turret",
+        playerId: shell.ownerId,
+        name: shooterName,
+        message: `${shooterName} destroyed ${ownerName}'s turret`,
+      });
     }
   }
   state.shells = remainingShells;
@@ -603,7 +793,7 @@ export function stepGame(state: GameState, inputs: Record<string, FrigateInput |
     }
   }
   state.torpedoes = remainingTorpedoes;
-  stepBases(state, dt, now);
+  stepBases(state, dt, now, firedPlayers);
 }
 
 export function regenerateGameWorld(
@@ -624,6 +814,13 @@ export function regenerateGameWorld(
       ownerId: owner?.playerId ?? null,
       captureBy: null,
       captureProgress: 0,
+      turret: owner ? "active" : "none",
+      turretHp: owner ? GAME_CONFIG.bases.turretHp : 0,
+      turretReadyAt: owner ? now : 0,
+      repairBy: null,
+      repairProgress: 0,
+      lostFrom: null,
+      returnAt: null,
     };
   });
   state.shells = [];

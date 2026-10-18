@@ -40,6 +40,53 @@ export function drawBases(
     ctx.lineTo(base.cityX + citySize / 2 - 5, base.cityY + 4);
     ctx.stroke();
 
+    if (base.turret === "active") {
+      const barrelStart = 4;
+      const barrelEnd = 14;
+      ctx.strokeStyle = "#303434";
+      ctx.lineWidth = 5;
+      ctx.beginPath();
+      ctx.moveTo(base.cityX + facingX * barrelStart, base.cityY + facingY * barrelStart);
+      ctx.lineTo(base.cityX + facingX * barrelEnd, base.cityY + facingY * barrelEnd);
+      ctx.stroke();
+      ctx.fillStyle = "#555b59";
+      ctx.strokeStyle = "#282e2d";
+      ctx.lineWidth = 1.5;
+      ctx.beginPath();
+      ctx.arc(base.cityX, base.cityY, 9, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.stroke();
+      if (base.turretHp < GAME_CONFIG.bases.turretHp) {
+        const barWidth = 22;
+        const barY = base.cityY - citySize / 2 - 6;
+        ctx.fillStyle = "rgba(20, 24, 22, .85)";
+        ctx.fillRect(base.cityX - barWidth / 2, barY, barWidth, 3);
+        ctx.fillStyle = "#b65c50";
+        ctx.fillRect(
+          base.cityX - barWidth / 2,
+          barY,
+          barWidth * Math.max(0, base.turretHp) / GAME_CONFIG.bases.turretHp,
+          3,
+        );
+      }
+    } else if (base.turret === "destroyed") {
+      ctx.fillStyle = "#696862";
+      ctx.strokeStyle = "#514d46";
+      ctx.lineWidth = 1;
+      for (const [x, y, radius] of [[-6, -2, 4], [2, -4, 3], [5, 4, 4], [-2, 5, 3]] as const) {
+        ctx.beginPath();
+        ctx.moveTo(base.cityX + x - radius, base.cityY + y);
+        ctx.lineTo(base.cityX + x - 1, base.cityY + y - radius);
+        ctx.lineTo(base.cityX + x + radius, base.cityY + y - 1);
+        ctx.lineTo(base.cityX + x + 1, base.cityY + y + radius);
+        ctx.closePath();
+        ctx.fill();
+        ctx.stroke();
+      }
+      ctx.fillStyle = "#806e51";
+      ctx.fillRect(base.cityX - 1, base.cityY - 1, 4, 3);
+    }
+
     if (base.active) {
       const poleX = base.cityX - citySize / 2 + 9;
       const poleY = base.cityY - citySize / 2 + 8;
@@ -62,9 +109,13 @@ export function drawCaptureProgress(
   bases: readonly Base[],
   playerId: string,
   captureTime: number,
+  _repairTime: number,
 ): void {
-  const base = bases.find((candidate) => candidate.captureBy === playerId);
+  const base = bases.find((candidate) => candidate.captureBy === playerId || candidate.repairBy === playerId);
   if (!base) return;
+  const repairing = base.repairBy === playerId;
+  const progress = repairing ? base.repairProgress : base.captureProgress;
+  const label = repairing ? "Repairing turret" : `Capturing ${Math.ceil((1 - progress) * captureTime)} s`;
   const radius = GAME_CONFIG.frigate.length / 2 + 8;
   ctx.save();
   ctx.lineWidth = 2.5;
@@ -72,17 +123,17 @@ export function drawCaptureProgress(
   ctx.beginPath();
   ctx.arc(frigate.x, frigate.y, radius, 0, Math.PI * 2);
   ctx.stroke();
-  ctx.strokeStyle = "#f6d47b";
+  ctx.strokeStyle = repairing ? "#7ee0a1" : "#f6d47b";
   ctx.beginPath();
-  ctx.arc(frigate.x, frigate.y, radius, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * base.captureProgress);
+  ctx.arc(frigate.x, frigate.y, radius, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * progress);
   ctx.stroke();
   ctx.font = "600 12px Manrope, sans-serif";
   ctx.textAlign = "center";
   ctx.textBaseline = "top";
   ctx.lineWidth = 3;
   ctx.strokeStyle = "rgba(3, 13, 20, .9)";
-  ctx.strokeText(`Capturing ${Math.ceil((1 - base.captureProgress) * captureTime)} s`, frigate.x, frigate.y + radius + 4);
-  ctx.fillStyle = "#fff3c5";
-  ctx.fillText(`Capturing ${Math.ceil((1 - base.captureProgress) * captureTime)} s`, frigate.x, frigate.y + radius + 4);
+  ctx.strokeText(label, frigate.x, frigate.y + radius + 4);
+  ctx.fillStyle = repairing ? "#d8ffe5" : "#fff3c5";
+  ctx.fillText(label, frigate.x, frigate.y + radius + 4);
   ctx.restore();
 }

@@ -15,15 +15,42 @@ export interface BaseSite {
   facing: number;
 }
 
+export type TurretState = "none" | "active" | "destroyed";
+
 export interface BaseStatus {
   id: string;
   active: boolean;
   ownerId: string | null;
   captureBy: string | null;
   captureProgress: number;
+  turret: TurretState;
+  turretHp: number;
+  turretReadyAt: number;
+  repairBy: string | null;
+  repairProgress: number;
+  lostFrom: string | null;
+  returnAt: number | null;
 }
 
 export type Base = BaseSite & BaseStatus;
+export type BaseSnapshot = Pick<
+  BaseStatus,
+  "id" | "active" | "ownerId" | "captureBy" | "captureProgress" | "turret" | "turretHp" | "repairBy" | "repairProgress"
+>;
+
+export function restoreHome(base: Base, now: number): void {
+  base.active = true;
+  base.ownerId = base.lostFrom ?? base.ownerId;
+  base.lostFrom = null;
+  base.returnAt = null;
+  base.turret = "active";
+  base.turretHp = GAME_CONFIG.bases.turretHp;
+  base.turretReadyAt = now;
+  base.captureBy = null;
+  base.captureProgress = 0;
+  base.repairBy = null;
+  base.repairProgress = 0;
+}
 
 type Candidate = Omit<BaseSite, "id" | "kind" | "homeSlot">;
 type Rect = { left: number; top: number; right: number; bottom: number };

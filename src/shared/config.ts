@@ -22,6 +22,11 @@ export const GAME_CONFIG = {
     minSpacing: 1600,
     homeSites: 4,
     harbourApproach: 40,
+    turretRange: 600,
+    turretReload: 3,
+    turretHp: 60,
+    homeReturnDelay: 30,
+    homeCapturePoints: 5,
   },
   frigate: {
     length: 30,
@@ -54,6 +59,6 @@ export const GAME_CONFIG = {
   },
   land: { damage: 10, damageInterval: 1, grazeSpeed: 20, clearance: 60 },
   player: { maxHp: 100, spawnDistance: 2400, spawnProtection: 3, sinkAnimation: 2, respawnDelay: 3, spawnAttempts: 3000, maxPlayers: 4 },
-  network: { tickRate: 30, snapshotRate: 20, interpolationDelay: 0.1, reconnectGrace: 10 },
+  network: { tickRate: 30, snapshotRate: 18, interpolationDelay: 0.1, reconnectGrace: 10 },
   name: { minLength: 1, maxLength: 16 },
 } as const;

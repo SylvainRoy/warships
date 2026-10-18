@@ -6,6 +6,7 @@ describe("game settings", () => {
     expect(DEFAULT_SETTINGS.landCoveragePct).toBe(25);
     expect(DEFAULT_SETTINGS.neutralBases).toBe(4);
     expect(DEFAULT_SETTINGS.captureTime).toBe(5);
+    expect(DEFAULT_SETTINGS.repairTime).toBe(5);
     const defaults = sanitizeSettings(DEFAULT_SETTINGS);
     expect(defaults).toEqual(DEFAULT_SETTINGS);
     expect(defaults).not.toBe(DEFAULT_SETTINGS);
@@ -22,6 +23,7 @@ describe("game settings", () => {
       landCoveragePct: 5,
       neutralBases: 0,
       captureTime: 1,
+      repairTime: 1,
     })).toEqual({
       boatSpeedPct: 50,
       rotationPct: 200,
@@ -34,6 +36,7 @@ describe("game settings", () => {
       landCoveragePct: 5,
       neutralBases: 0,
       captureTime: 1,
+      repairTime: 1,
     });
     expect(sanitizeSettings({ ...DEFAULT_SETTINGS, cannonReload: 10, torpedoReload: 1 })).toEqual({
       ...DEFAULT_SETTINGS,
@@ -65,6 +68,9 @@ describe("game settings", () => {
     expect(sanitizeSettings({ ...DEFAULT_SETTINGS, captureTime: 0 })).toBeNull();
     expect(sanitizeSettings({ ...DEFAULT_SETTINGS, captureTime: 31 })).toBeNull();
     expect(sanitizeSettings({ ...DEFAULT_SETTINGS, captureTime: 5.5 })).toBeNull();
+    expect(sanitizeSettings({ ...DEFAULT_SETTINGS, repairTime: 0 })).toBeNull();
+    expect(sanitizeSettings({ ...DEFAULT_SETTINGS, repairTime: 31 })).toBeNull();
+    expect(sanitizeSettings({ ...DEFAULT_SETTINGS, repairTime: 5.5 })).toBeNull();
 
     const missing = { ...DEFAULT_SETTINGS } as Record<string, unknown>;
     delete missing.torpedoReload;
@@ -88,6 +94,7 @@ describe("game settings", () => {
       landCoveragePct: 15,
       neutralBases: 6,
       captureTime: 10,
+      repairTime: 10,
     })).toEqual([
       "boat speed 150%",
       "rotation 120%",
@@ -99,6 +106,7 @@ describe("game settings", () => {
       "land coverage 15%",
       "neutral bases 6",
       "capture time 10 s",
+      "repair time 10 s",
     ]);
   });
 });

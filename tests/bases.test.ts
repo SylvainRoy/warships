@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { hullInsideHarbour, placeBases } from "../src/shared/bases.js";
+import { hullInsideHarbour, placeBases, restoreHome } from "../src/shared/bases.js";
 import { GAME_CONFIG } from "../src/shared/config.js";
 import { createGameState, createFrigate, stepBases, stepGame, type Frigate } from "../src/shared/sim.js";
 import { DEFAULT_SETTINGS } from "../src/shared/settings.js";
@@ -87,6 +87,57 @@ describe("base placement", () => {
     expect(hullInsideHarbour(ship("inside"), base)).toBe(true);
     expect(hullInsideHarbour(ship("outside", base.harbourX + 20, base.harbourY), base)).toBe(false);
   });
+
+  it("starts homes inactive and neutral bases active without turrets", () => {
+    const home = { ...neutralSite(), id: "h0", kind: "home" as const, homeSlot: 0 };
+    const state = createGameState(openWorld(), [home, neutralSite()]);
+
+    expect(state.bases[0]).toMatchObject({
+      active: false,
+      ownerId: null,
+      turret: "none",
+      turretHp: 0,
+    });
+    expect(state.bases[1]).toMatchObject({
+      active: true,
+      ownerId: null,
+      turret: "none",
+      turretHp: 0,
+    });
+  });
+
+  it("restores a lost home with its original owner, full turret, and cleared actions", () => {
+    const site = { ...neutralSite(), id: "h0", kind: "home" as const, homeSlot: 0 };
+    const base = createGameState(openWorld(), [site]).bases[0]!;
+    Object.assign(base, {
+      active: true,
+      ownerId: "holder",
+      lostFrom: "original",
+      returnAt: 30,
+      turret: "destroyed",
+      turretHp: 0,
+      captureBy: "capturer",
+      captureProgress: 0.7,
+      repairBy: "holder",
+      repairProgress: 0.4,
+    });
+
+    restoreHome(base, 42);
+
+    expect(base).toMatchObject({
+      active: true,
+      ownerId: "original",
+      lostFrom: null,
+      returnAt: null,
+      turret: "active",
+      turretHp: GAME_CONFIG.bases.turretHp,
+      turretReadyAt: 42,
+      captureBy: null,
+      captureProgress: 0,
+      repairBy: null,
+      repairProgress: 0,
+    });
+  });
 });
 
 describe("base capture", () => {
@@ -145,9 +196,12 @@ describe("base capture", () => {
     const home = { ...site, id: "h0", kind: "home" as const, homeSlot: 0 };
     const homeState = createGameState(openWorld(), [home]);
     homeState.bases[0]!.active = true;
+    homeState.bases[0]!.ownerId = "homeowner";
+    homeState.bases[0]!.turret = "active";
+    homeState.bases[0]!.turretHp = GAME_CONFIG.bases.turretHp;
     homeState.frigates.captain = captain;
     stepBases(homeState, 1, 0);
-    expect(homeState.bases[0]).toMatchObject({ captureBy: null, captureProgress: 0, ownerId: null });
+    expect(homeState.bases[0]).toMatchObject({ captureBy: null, captureProgress: 0, ownerId: "homeowner" });
   });
 
   it("keeps capture progress as a fraction when capture time changes", () => {

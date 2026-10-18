@@ -12,6 +12,7 @@ export interface GameSettings {
   landCoveragePct: number;
   neutralBases: number;
   captureTime: number;
+  repairTime: number;
 }
 
 export const DEFAULT_SETTINGS: GameSettings = {
@@ -26,6 +27,7 @@ export const DEFAULT_SETTINGS: GameSettings = {
   landCoveragePct: GAME_CONFIG.world.generation.targetLandCoverage * 100,
   neutralBases: 4,
   captureTime: 5,
+  repairTime: 5,
 };
 
 export const SETTINGS_LIMITS: Record<keyof GameSettings, { min: number; max: number; step: number }> = {
@@ -40,6 +42,7 @@ export const SETTINGS_LIMITS: Record<keyof GameSettings, { min: number; max: num
   landCoveragePct: { min: 5, max: 40, step: 5 },
   neutralBases: { min: 0, max: 8, step: 1 },
   captureTime: { min: 1, max: 30, step: 1 },
+  repairTime: { min: 1, max: 30, step: 1 },
 };
 
 const SETTINGS_KEYS: readonly (keyof GameSettings)[] = [
@@ -54,6 +57,7 @@ const SETTINGS_KEYS: readonly (keyof GameSettings)[] = [
   "landCoveragePct",
   "neutralBases",
   "captureTime",
+  "repairTime",
 ];
 
 const SETTING_LABELS: Record<keyof GameSettings, string> = {
@@ -68,6 +72,7 @@ const SETTING_LABELS: Record<keyof GameSettings, string> = {
   landCoveragePct: "land coverage",
   neutralBases: "neutral bases",
   captureTime: "capture time",
+  repairTime: "repair time",
 };
 
 export function sanitizeSettings(value: unknown): GameSettings | null {
@@ -95,7 +100,7 @@ export function sanitizeSettings(value: unknown): GameSettings | null {
 export function describeSettingsChanges(before: GameSettings, after: GameSettings): string[] {
   return SETTINGS_KEYS.flatMap((key) => {
     if (before[key] === after[key]) return [];
-    const value = key === "cannonReload" || key === "torpedoReload" || key === "captureTime"
+    const value = key === "cannonReload" || key === "torpedoReload" || key === "captureTime" || key === "repairTime"
       ? `${after[key].toFixed(1).replace(/\.0$/, "")} s`
       : key === "neutralBases"
         ? `${after[key]}`

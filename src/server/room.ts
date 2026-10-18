@@ -1,7 +1,7 @@
 import { randomBytes } from "node:crypto";
 import { performance } from "node:perf_hooks";
 import type { WebSocket } from "ws";
-import { generateWorldWithBases, placeBases, type BaseSite } from "../shared/bases.js";
+import { generateWorldWithBases, placeBases, restoreHome, type BaseSite } from "../shared/bases.js";
 import { GAME_CONFIG } from "../shared/config.js";
 import type { ClientMessage, ServerMessage, SnapshotFrigate } from "../shared/protocol.js";
 import { DEFAULT_SETTINGS, describeSettingsChanges, sanitizeSettings } from "../shared/settings.js";
@@ -170,6 +170,15 @@ export class Room {
       if (home) {
         home.active = true;
         home.ownerId = session.id;
+        home.turret = "active";
+        home.turretHp = GAME_CONFIG.bases.turretHp;
+        home.turretReadyAt = now;
+        home.lostFrom = null;
+        home.returnAt = null;
+        home.captureBy = null;
+        home.captureProgress = 0;
+        home.repairBy = null;
+        home.repairProgress = 0;
       }
       const others = Object.values(this.game.frigates).filter((frigate) => frigate.status === "alive");
       const frigate = spawnPlayerFrigate(session.id, name, slot, this.game, others, this.random, now);
@@ -375,12 +384,26 @@ export class Room {
         serverTime: now,
         frigates,
         players,
-        bases: this.game.bases.map(({ id, active, ownerId, captureBy, captureProgress }) => ({
+        bases: this.game.bases.map(({
           id,
           active,
           ownerId,
           captureBy,
           captureProgress,
+          turret,
+          turretHp,
+          repairBy,
+          repairProgress,
+        }) => ({
+          id,
+          active,
+          ownerId,
+          captureBy,
+          captureProgress,
+          turret,
+          turretHp,
+          repairBy,
+          repairProgress,
         })),
       });
     }
@@ -494,16 +517,51 @@ export class Room {
     }
     for (const base of this.game.bases) {
       const home = base.kind === "home" && base.homeSlot === session.slot - 1;
-      const departingOwnedBase = !home && base.ownerId === session.id;
       if (home) {
         base.active = false;
         base.ownerId = null;
-      } else if (departingOwnedBase) {
-        base.ownerId = null;
-      }
-      if (home || departingOwnedBase || base.captureBy === session.id) {
+        base.turret = "none";
+        base.turretHp = 0;
+        base.turretReadyAt = 0;
+        base.lostFrom = null;
+        base.returnAt = null;
         base.captureBy = null;
         base.captureProgress = 0;
+        base.repairBy = null;
+        base.repairProgress = 0;
+      } else if (base.ownerId === session.id) {
+        const originalOwner = base.kind === "home" && base.lostFrom && base.lostFrom !== session.id
+          ? this.sessions.get(base.lostFrom)
+          : undefined;
+        if (originalOwner) {
+          restoreHome(base, this.clock());
+          this.broadcastEvent({
+            type: "capture",
+            playerId: originalOwner.id,
+            name: originalOwner.name,
+            message: `${originalOwner.name}'s home base is back`,
+          });
+        } else {
+          base.ownerId = null;
+          base.turret = "none";
+          base.turretHp = 0;
+          base.turretReadyAt = 0;
+          base.lostFrom = null;
+          base.returnAt = null;
+          base.repairBy = null;
+          base.repairProgress = 0;
+        }
+        base.captureBy = null;
+        base.captureProgress = 0;
+      } else {
+        if (base.captureBy === session.id) {
+          base.captureBy = null;
+          base.captureProgress = 0;
+        }
+        if (base.repairBy === session.id) {
+          base.repairBy = null;
+          base.repairProgress = 0;
+        }
       }
     }
     this.sessions.delete(session.id);

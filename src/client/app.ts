@@ -375,6 +375,7 @@ const settingsRows: Array<{ key: keyof GameSettings; label: string }> = [
   { key: "landCoveragePct", label: "Land coverage" },
   { key: "neutralBases", label: "Neutral bases" },
   { key: "captureTime", label: "Capture time" },
+  { key: "repairTime", label: "Repair time" },
 ];
 
 function isOwnHost(snapshot: Snapshot | null = latestSnapshot): boolean {
@@ -1660,7 +1661,7 @@ function drawMenu(snapshot: Snapshot, width: number, height: number): void {
       ctx.textAlign = "right";
       ctx.fillStyle = value !== DEFAULT_SETTINGS[row.key] ? "#e4ad80" : "#d7e5e9";
       ctx.font = "500 12px DM Mono, monospace";
-      const displayedValue = row.key === "cannonReload" || row.key === "torpedoReload" || row.key === "captureTime"
+      const displayedValue = row.key === "cannonReload" || row.key === "torpedoReload" || row.key === "captureTime" || row.key === "repairTime"
         ? `${value.toFixed(1).replace(/\.0$/, "")} s`
         : row.key === "neutralBases"
           ? `${value}`
@@ -1898,7 +1899,7 @@ function renderFrame(now: number): void {
     if (own) drawFrigate(own, serverNow, debugVisible);
     for (const effect of effects) drawExplosion(effect, now);
     if (own) drawReticle(own, serverNow);
-    if (own) drawCaptureProgress(ctx, own, bases, own.playerId, gameSettings.captureTime);
+    if (own) drawCaptureProgress(ctx, own, bases, own.playerId, gameSettings.captureTime, gameSettings.repairTime);
     ctx.restore();
   } else {
     ctx.setTransform(viewport.dpr * viewport.scale, 0, 0, viewport.dpr * viewport.scale, 0, 0);
