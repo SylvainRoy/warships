@@ -23,6 +23,7 @@
 
 ## Changelog
 
+- v2.4 — compact scoreboard shows only each player's score (Q153).
 - v2.1 — host map size setting: Small / Standard / Big (Q132–Q141).
 - v2.2 — bottom-left HUD redesigned as a ship's console (Q142).
 - v2.0 — bases (home and neutral), harbours, capture, turrets, fuel and ammunition (Q91–Q131).

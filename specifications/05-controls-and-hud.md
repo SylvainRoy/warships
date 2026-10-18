@@ -60,7 +60,7 @@ The own boat is a white 6 u triangle pointing along its heading. Every other ali
 ## HUD (screen space)
 
 - HUD panels and overlays use the reference screen's fit (contain) scale and are anchored to the browser window edges (Q41, Q56); positions and sizing remain in reference units.
-- Top-right: compact scoreboard (name, colour, score) for all connected players, own line highlighted.
+- Top-right: the compact scoreboard shows the colour dot, name and score only, in berth order; the own row is highlighted and bold. The sunk count appears only in the full Tab scoreboard (Q153).
 - Holding Tab shows the full scoreboard; when settings differ from defaults, it adds a `CUSTOM RULES · …` line listing each changed setting, including Map size.
 - Bottom-left: a 440 × 140 u console MUST show hull and fuel dials, cannon and torpedo tiles with current/max counts, status and reload bars, and a vertical throttle telegraph with the selected stop highlighted. Normal arcs and ready bars MUST be green; numbers MUST be white when normal, orange below 20% of capacity, and red when empty; the hull arc and number MUST be red at ≤35 HP (Q108, Q130, Q142).
 - A progress ring around the own boat MUST prioritize `Repairing turret` (or `Installing turret` when the base has no turret yet), then `Capturing <time>`, then `Resupplying`. The resupply ring MUST show the least-full of fuel, shells, and torpedoes and disappear when all are full (Q98, Q129).

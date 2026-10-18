@@ -26,7 +26,7 @@ A frigate spawns when its player joins, after being sunk, and when the world is 
 - Sinking yourself (own shell / torpedo, or running into land): no point gained, **−1 point**.
 - No points for damage that does not sink.
 - Scores are kept for as long as the player stays connected; a player leaving loses their score.
-- The scoreboard also shows the number of times each player was sunk.
+- The full (Tab) scoreboard also shows the number of times each player was sunk.
 - There is no win condition: the game is infinite. The host may reset scores (see [07-multiplayer.md](07-multiplayer.md)).
 
 ## New maps and score resets
