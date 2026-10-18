@@ -63,7 +63,7 @@ The own boat is a white 6 u triangle pointing along its heading. Every other ali
 - Top-right: compact scoreboard (name, colour, score) for all connected players, own line highlighted.
 - Holding Tab shows the full scoreboard; when settings differ from defaults, it adds a `CUSTOM RULES · …` line listing each changed setting.
 - Bottom-left: the HUD MUST show the own HP bar, cannon and torpedo reload status, throttle telegraph with selected level highlighted and full label, fuel gauge, and shell and torpedo counts. Fuel and ammunition MUST be orange below 20% of capacity and red when empty (Q108, Q130).
-- A progress ring around the own boat MUST prioritize `Repairing turret`, then `Capturing <time>`, then `Resupplying`. The resupply ring MUST show the least-full of fuel, shells, and torpedoes and disappear when all are full (Q98, Q129).
+- A progress ring around the own boat MUST prioritize `Repairing turret` (or `Installing turret` when the base has no turret yet), then `Capturing <time>`, then `Resupplying`. The resupply ring MUST show the least-full of fuel, shells, and torpedoes and disappear when all are full (Q98, Q129).
 - The server MUST send fuel and ammunition only for the receiving player's own boat; other players' amounts MUST remain hidden (Q131).
 - Event feed (top-left): short messages "Alice sank Bob", "Carol joined", "World regenerated", fading after 5 s.
 - Death screen: "Sunk by *X*" + respawn countdown.
