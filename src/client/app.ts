@@ -1553,7 +1553,7 @@ function drawMenu(snapshot: Snapshot, width: number, height: number): void {
         || bindings[action].some((code, codeIndex) => code !== DEFAULT_BINDINGS[action][codeIndex]);
       if (selectedRow) {
         ctx.fillStyle = "rgba(107, 224, 207, .14)";
-        ctx.fillRect(width / 2 - 236, y - 17, 472, 22);
+        ctx.fillRect(width / 2 - 236, y - 5, 472, 22);
       }
       ctx.fillStyle = selectedRow ? "#6be0cf" : "#d7e5e9";
       ctx.font = "600 12px Manrope, sans-serif";
