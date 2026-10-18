@@ -258,7 +258,7 @@ export function createFrigate(
   return {
     playerId, name, slot, x, y, heading, speed: 0, hp: GAME_CONFIG.player.maxHp, status: "alive",
     sinkingStartedAt: 0, respawnAt: 0, spawnProtectedUntil: now + GAME_CONFIG.player.spawnProtection,
-    cannonBearing: 0, cannonRange: GAME_CONFIG.cannon.maxRange, cannonReadyAt: 0,
+    cannonBearing: 0, cannonRange: GAME_CONFIG.cannon.minRange, cannonReadyAt: 0,
     torpedoBearing: 0, torpedoReadyAt: 0, landContact: false, lastLandDamageAt: now,
     lastFireCannon: false, lastFireTorpedo: false, lastDamageSource: null,
   };

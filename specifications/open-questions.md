@@ -93,3 +93,4 @@ All questions raised during the specification phase are resolved. Each line give
 - **Q74 — Shallow-water width:** use about 60 u of turquoise shallows, halved after the mock-up; terrain colors are visual only. Decided 2026-10-17.
 - **Q75 — Terrain contrast:** keep boats, wakes, and the sight legible against the terrain; leave the radar unchanged. Decided 2026-10-17.
 - **Q76 — Mock-up process:** render terrain-style mock-ups before implementing the selected natural style as the real feature. Decided 2026-10-17.
+- **Q77 — Cannon sight on spawn:** start every frigate at the minimum cannon range (100 u), bearing straight ahead, so the player sees the sight immediately. Decided 2026-10-17 after playtest.

@@ -7,7 +7,7 @@ A frigate spawns when its player joins, after being sunk, and when the world is 
 - Position: a random water point such that
   - the whole frigate is on water with at least 60 u clearance from land,
   - it is at least **2 400 u** (1.5 screen widths) from every other living frigate. If no such point is found after N attempts, the point maximising the distance to the nearest frigate is used.
-- Heading: random. Speed: 0. HP: full. Weapons: loaded; cannon range set to maximum, bearings pointing forward.
+- Heading: random. Speed: 0. HP: full. Weapons: loaded; cannon range set to minimum (100 u), bearings pointing forward.
 - **Spawn protection**: 3 s of invulnerability, ended early if the player fires. Shown by a blinking hull.
 
 ## Sinking

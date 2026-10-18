@@ -264,6 +264,7 @@ describe("host settings in simulation", () => {
   it("scales shell flight speed and uses configured cannon and torpedo reloads", () => {
     const state = createGameState(openWorld());
     const ship = frigate("captain");
+    ship.cannonRange = GAME_CONFIG.cannon.maxRange;
     state.frigates.captain = ship;
     state.scores = scores(ship);
     state.settings = {
@@ -345,6 +346,7 @@ describe("cannons", () => {
     stepGame(state, { shooter: { ...quietInput, fireCannon: true } }, dt, GAME_CONFIG.cannon.reload);
     expect(state.shells).toHaveLength(2);
     let rangeShip = frigate("range");
+    rangeShip.cannonRange = GAME_CONFIG.cannon.maxRange;
     for (let tick = 0; tick < 30; tick += 1) rangeShip = awaitApply(rangeShip, { ...quietInput, keys: INPUT_KEYS.rangeUp }, dt, openWorld(), tick * dt);
     expect(rangeShip.cannonRange).toBe(800);
     for (let tick = 0; tick < 120; tick += 1) rangeShip = awaitApply(rangeShip, { ...quietInput, keys: INPUT_KEYS.rangeDown }, dt, openWorld(), tick * dt);
@@ -482,7 +484,7 @@ describe("spawning", () => {
     expect(first.x).toBeGreaterThan(60);
     expect(first.y).toBeGreaterThan(60);
     expect(first.hp).toBe(maxHp);
-    expect(first.cannonRange).toBe(800);
+    expect(first.cannonRange).toBe(GAME_CONFIG.cannon.minRange);
     expect(pointToHullDistance(first.x, first.y, first)).toBe(0);
   });
 

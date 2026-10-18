@@ -1,6 +1,6 @@
 # Warships — Specifications
 
-**Status: APPROVED v1.15** (2026-10-17). Changes after approval must be recorded in the changelog.
+**Status: APPROVED v1.16** (2026-10-17). Changes after approval must be recorded in the changelog.
 
 | # | Document | Content |
 |---|----------|---------|
@@ -22,6 +22,7 @@
 
 ## Changelog
 
+- v1.16 — the cannon sight starts at minimum range (100 u) on every spawn so it is visible (Q77); approved 2026-10-17.
 - v1.15 — natural terrain with rounded 60 u shallows, smooth biome transitions, beaches, grass, forest, and noise-gated rock (Q72–Q76); approved 2026-10-17.
 - v1.14 — add speed-scaled V wakes for frigates and bubble trails behind torpedoes (Q67–Q71); approved 2026-10-17.
 - v1.13 — add a north-up 3,000 u radar scope with vessel direction pips and a land mask (Q61–Q66); approved 2026-10-17.
