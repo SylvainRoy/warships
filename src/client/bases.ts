@@ -78,11 +78,11 @@ export function drawCaptureProgress(
   ctx.stroke();
   ctx.font = "600 12px Manrope, sans-serif";
   ctx.textAlign = "center";
-  ctx.textBaseline = "bottom";
+  ctx.textBaseline = "top";
   ctx.lineWidth = 3;
   ctx.strokeStyle = "rgba(3, 13, 20, .9)";
-  ctx.strokeText(`Capturing ${Math.ceil((1 - base.captureProgress) * captureTime)} s`, frigate.x, frigate.y - radius - 4);
+  ctx.strokeText(`Capturing ${Math.ceil((1 - base.captureProgress) * captureTime)} s`, frigate.x, frigate.y + radius + 4);
   ctx.fillStyle = "#fff3c5";
-  ctx.fillText(`Capturing ${Math.ceil((1 - base.captureProgress) * captureTime)} s`, frigate.x, frigate.y - radius - 4);
+  ctx.fillText(`Capturing ${Math.ceil((1 - base.captureProgress) * captureTime)} s`, frigate.x, frigate.y + radius + 4);
   ctx.restore();
 }

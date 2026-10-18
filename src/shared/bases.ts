@@ -115,6 +115,13 @@ function candidateAt(area: Int32Array, left: number, top: number, directionIndex
   const cityX = harbourX - direction.x * (harbourSize / 2 + citySize / 2);
   const cityY = harbourY - direction.y * (harbourSize / 2 + citySize / 2);
   const city = cityRect(cityX, cityY);
+  const borderClearance = (GAME_CONFIG.world.generation.borderTiles + 1) * tileSize;
+  if (
+    city.left < borderClearance
+    || city.top < borderClearance
+    || city.right > width - borderClearance
+    || city.bottom > height - borderClearance
+  ) return null;
   const count = landCount(area, city);
   if (count === null) return null;
   const tileColumns = Math.ceil(city.right / tileSize) - Math.floor(city.left / tileSize);

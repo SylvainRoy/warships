@@ -32,6 +32,11 @@ function expectValidPlacement(world: World, sites: ReturnType<typeof placeBases>
     const cityTop = base.cityY - GAME_CONFIG.bases.citySize / 2;
     const right = base.cityX + GAME_CONFIG.bases.citySize / 2;
     const bottom = base.cityY + GAME_CONFIG.bases.citySize / 2;
+    const borderClearance = (GAME_CONFIG.world.generation.borderTiles + 1) * tileSize;
+    expect(cityLeft).toBeGreaterThanOrEqual(borderClearance);
+    expect(cityTop).toBeGreaterThanOrEqual(borderClearance);
+    expect(GAME_CONFIG.world.width - right).toBeGreaterThanOrEqual(borderClearance);
+    expect(GAME_CONFIG.world.height - bottom).toBeGreaterThanOrEqual(borderClearance);
     for (let row = Math.floor(cityTop / tileSize); row < Math.ceil(bottom / tileSize); row += 1) {
       for (let column = Math.floor(cityLeft / tileSize); column < Math.ceil(right / tileSize); column += 1) {
         expect(world.grid[row * GAME_CONFIG.world.columns + column]).toBe(1);
