@@ -1666,9 +1666,10 @@ function drawMenu(snapshot: Snapshot, width: number, height: number): void {
   const centerY = height / 2;
   const panelWidth = controlsPending ? 520 : 440;
   const settingsView = menuPending?.action === "settings";
-  const panelHeight = controlsPending ? 560 : settingsView ? 560 : 350;
+  const panelHeight = controlsPending ? 560 : settingsView ? 461 : 350;
+  const panelTop = settingsView ? centerY - 175 : centerY - panelHeight / 2;
   ctx.fillStyle = "rgba(3, 13, 20, .88)";
-  ctx.fillRect(width / 2 - panelWidth / 2, height / 2 - panelHeight / 2, panelWidth, panelHeight);
+  ctx.fillRect(width / 2 - panelWidth / 2, panelTop, panelWidth, panelHeight);
   ctx.fillStyle = "#eff8f6";
   ctx.font = "800 20px Manrope, sans-serif";
   ctx.textAlign = "left";
