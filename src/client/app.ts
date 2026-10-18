@@ -22,7 +22,7 @@ import {
   type KeyboardLayout,
 } from "./controls.js";
 import { ProjectileStore } from "./projectiles.js";
-import { RADAR, RadarSweep, radarBearing, worldToRadar } from "./radar.js";
+import { RADAR, RadarSweep, radarBearing, radarRange, worldToRadar } from "./radar.js";
 import {
   landColorAt,
   noise,
@@ -94,6 +94,7 @@ const colours = ["#4b9bff", "#ff6266", "#f3c94e", "#c084fc"];
 const radarSweep = new RadarSweep((slot) => colours[slot - 1] ?? "#fff");
 let previousRadarSweepAngle: number | null = null;
 let radarSweepOwnerId: string | null = null;
+let radarSweepRange: number | null = null;
 let radarOwnStatus: SnapshotFrigate["status"] | null = null;
 const pressed = new Set<string>();
 const worldCache = new Map<string, HTMLCanvasElement>();
@@ -148,6 +149,7 @@ function resetRadarSweep(): void {
   radarSweep.clear();
   previousRadarSweepAngle = null;
   radarSweepOwnerId = ownId;
+  radarSweepRange = null;
   radarOwnStatus = null;
 }
 
@@ -1352,13 +1354,15 @@ function drawRadarTriangle(x: number, y: number, angle: number, length: number, 
 
 function drawRadar(snapshot: Snapshot, frigate: Frigate, now: number, logicalWidth: number, logicalHeight: number): void {
   if (!world) return;
-  if (radarSweepOwnerId !== frigate.playerId) {
+  const range = radarRange(gameSettings.mapSize);
+  if (radarSweepOwnerId !== frigate.playerId || radarSweepRange !== range) {
     resetRadarSweep();
     radarSweepOwnerId = frigate.playerId;
+    radarSweepRange = range;
   }
   const centerX = logicalWidth - RADAR.margin - RADAR.radius;
   const centerY = logicalHeight - RADAR.margin - RADAR.radius;
-  const worldScale = RADAR.radius / RADAR.range;
+  const worldScale = RADAR.radius / range;
   const worldLeft = centerX - frigate.x * worldScale;
   const worldTop = centerY - frigate.y * worldScale;
   const worldRight = worldLeft + world.width * worldScale;
@@ -1428,6 +1432,7 @@ function drawRadar(snapshot: Snapshot, frigate: Frigate, now: number, logicalWid
       snapshot.frigates,
       frigate.playerId,
       now,
+      range,
     );
     previousRadarSweepAngle = sweepAngle;
   }
@@ -1450,7 +1455,7 @@ function drawRadar(snapshot: Snapshot, frigate: Frigate, now: number, logicalWid
     if (blip.kind === "position") {
       const dx = blip.x - frigate.x;
       const dy = blip.y - frigate.y;
-      const [radarX, radarY] = worldToRadar(dx, dy);
+      const [radarX, radarY] = worldToRadar(dx, dy, range);
       ctx.fillStyle = blip.color;
       ctx.beginPath();
       ctx.arc(centerX + radarX, centerY + radarY, 3.5, 0, Math.PI * 2);
@@ -1479,8 +1484,8 @@ function drawRadar(snapshot: Snapshot, frigate: Frigate, now: number, logicalWid
     const distance = Math.hypot(dx, dy);
     const ownerSlot = snapshot.players.find((player) => player.playerId === base.ownerId)?.slot;
     ctx.fillStyle = base.ownerId === null ? "#fff" : colours[(ownerSlot ?? 0) - 1] ?? "#fff";
-    if (distance <= RADAR.range) {
-      const [radarX, radarY] = worldToRadar(dx, dy);
+    if (distance <= range) {
+      const [radarX, radarY] = worldToRadar(dx, dy, range);
       const markerX = Math.round(centerX + radarX) - 3;
       const markerY = Math.round(centerY + radarY) - 3;
       ctx.fillRect(markerX, markerY, 6, 6);

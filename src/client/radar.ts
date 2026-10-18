@@ -1,7 +1,8 @@
 import type { SnapshotFrigate } from "../shared/protocol.js";
+import { mapDimensions } from "../shared/world.js";
 
 export const RADAR = {
-  range: 3000,
+  bigRange: 3000,
   radius: 90,
   margin: 8,
   sweepPeriod: 4,
@@ -35,6 +36,7 @@ export class RadarSweep {
     frigates: readonly RadarFrigate[],
     ownId: string,
     now: number,
+    range: number,
   ): void {
     const fullSweep = angle - prevAngle >= Math.PI * 2;
     const sweepSpan = fullSweep ? Math.PI * 2 : positiveModulo(angle - prevAngle, Math.PI * 2);
@@ -49,7 +51,7 @@ export class RadarSweep {
 
       this.painted.set(frigate.playerId, {
         playerId: frigate.playerId,
-        kind: Math.hypot(frigate.x - own.x, frigate.y - own.y) <= RADAR.range ? "position" : "direction",
+        kind: Math.hypot(frigate.x - own.x, frigate.y - own.y) <= range ? "position" : "direction",
         x: frigate.x,
         y: frigate.y,
         bearing,
@@ -88,7 +90,11 @@ export function radarBearing(fromX: number, fromY: number, toX: number, toY: num
   return Math.atan2(toY - fromY, toX - fromX);
 }
 
-export function worldToRadar(dx: number, dy: number): [number, number] {
-  const scale = RADAR.radius / RADAR.range;
+export function radarRange(mapSize: number): number {
+  return RADAR.bigRange * mapDimensions(mapSize).width / mapDimensions(2).width;
+}
+
+export function worldToRadar(dx: number, dy: number, range: number): [number, number] {
+  const scale = RADAR.radius / range;
   return [dx * scale, dy * scale];
 }
