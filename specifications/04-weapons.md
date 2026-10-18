@@ -18,7 +18,7 @@ Ballistic weapon: shells fly in the air, over water and land, and land on the ai
 
 - The **Fire cannons** action fires a **salvo of 2 shells**. By default it is bound to Space (Q85). Their trajectories are parallel to the bearing, offset by ±15 u perpendicular to it, so they land 30 u apart, centred on the reticle.
 - Each fired salvo consumes **1 shell**. If the shell count is empty, Fire cannons does nothing. Shell capacity is host-configurable; see [07-multiplayer.md](07-multiplayer.md).
-- Shells travel at **400 u/s** horizontal speed: ≤ 2.0 s flight at max range. The landing point is fixed at the time of firing (shells are not guided). Shells are drawn as pointed black shells with a thin pale outline, nose oriented along the flight path, with the parabolic size effect (grows then shrinks) and shadow on the water.
+- Shells travel at **600 u/s** horizontal speed: ≤ 1.33 s flight at max range. The landing point is fixed at the time of firing (shells are not guided). Shells are drawn as pointed black shells with a thin pale outline, nose oriented along the flight path, with the parabolic size effect (grows then shrinks) and shadow on the water.
 - **Reload: 1.5 s** after a salvo. Pressing fire while reloading does nothing.
 - The host can adjust shell speed and cannon reload; shell range remains unchanged (Q47).
 - Shells only interact **at their impact point**: no collision while flying, whatever is underneath.
@@ -42,11 +42,11 @@ Underwater weapon: straight-line, fast, blocked by land.
 
 - The **Fire torpedoes** action fires a **spread of 3 torpedoes** simultaneously at bearing −2°, 0°, +2°. They start from the frigate's centre. By default the action is bound to `]` (Q85).
 - Each fired spread consumes **1 torpedo**. If the torpedo count is empty, Fire torpedoes does nothing. Torpedo capacity is host-configurable; see [07-multiplayer.md](07-multiplayer.md).
-- Torpedo speed **120 u/s** (2.5 × max frigate speed).
+- Torpedo speed **180 u/s** (2.5 × max frigate speed).
 - **Reload: 4 s**.
 - The host can adjust torpedo speed and reload; the 0.5 s arming delay remains unchanged (Q47).
 - Torpedoes do not collide with the firer's own frigate during the first 0.5 s (arming delay); after that they can hit it.
-- Each torpedo leaves a pale gradient line with bubbles behind it, up to 1.25 s of travel (150 u at the default 120 u/s). The 1 u bubbles are spaced 12 u apart with deterministic ±2 u lateral jitter. The trail grows only as far as the torpedo has travelled and disappears when it does; this is a client-only visual and is not shown on radar.
+- Each torpedo leaves a pale gradient line with bubbles behind it, up to 1.25 s of travel (225 u at the default 180 u/s). The 1 u bubbles are spaced 12 u apart with deterministic ±2 u lateral jitter. The trail grows only as far as the torpedo has travelled and disappears when it does; this is a client-only visual and is not shown on radar.
 
 ### Lifetime and impact
 

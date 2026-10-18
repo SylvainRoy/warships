@@ -23,10 +23,11 @@
 
 ## Changelog
 
+- v2.5 — faster boats, shells and torpedoes (Q154–Q159).
 - v2.4 — compact scoreboard shows only each player's score (Q153).
-- v2.1 — host map size setting: Small / Standard / Big (Q132–Q141).
-- v2.2 — bottom-left HUD redesigned as a ship's console (Q142).
 - v2.3 — sweep-detected radar contacts with map-size-scaled range (Q145–Q152).
+- v2.2 — bottom-left HUD redesigned as a ship's console (Q142).
+- v2.1 — host map size setting: Small / Standard / Big (Q132–Q141).
 - v2.0 — bases (home and neutral), harbours, capture, turrets, fuel and ammunition (Q91–Q131).
 - v1.18 — show the game version in the lobby and the server log; release versioning and changelog (Q86–Q90); approved 2026-10-18.
 - v1.17 — player-configurable key bindings stored per browser, Controls menu for every player, and revised fire/torpedo defaults after playtesting (Q78–Q85); approved 2026-10-17.

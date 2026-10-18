@@ -64,7 +64,7 @@ All questions raised during the specification phase are resolved. Each line give
 - **Q45 — Settings feedback:** announce changed values as `Host <name>: <changes>` in the event feed and list custom values on the Tab scoreboard as `CUSTOM RULES · …`. Decided 2026-10-17 after playtest.
 - **Q46 — Settings persistence:** settings survive world regeneration and host succession, but reset to defaults on server restart. Decided 2026-10-17 after playtest.
 - **Q47 — Settings effects:** boat speed scales forward/reverse top speeds and acceleration; land damage is relative to the scaled forward top speed while the graze threshold stays 20 u/s; rotation scales by percentage; shell range and torpedo arming delay are unchanged. Decided 2026-10-17 after playtest.
-- **Q48 — New base values:** at 100%, boat top speed is 48/15 u/s with 24 u/s² acceleration (60% of before), rotation is 36°/s (80%), shells are 400 u/s (50%), torpedoes are 120 u/s (50%), cannon reload is 1.5 s, and torpedo reload is 4 s; the graze threshold stays 20 u/s. Decided 2026-10-17 after playtest. Q48 replaces the previous base values in Q14, Q29, and Q39.
+- **Q48 — New base values:** the movement, acceleration, shell, and torpedo speeds are superseded by Q154–Q159; rotation remains 36°/s, cannon reload is 1.5 s, torpedo reload is 4 s, and the graze threshold stays 20 u/s. Decided 2026-10-17 after playtest. Q48 replaced the previous base values in Q14, Q29, and Q39.
 - **Q49 — Projectile sync:** each shell and torpedo is sent once when fired; clients advance it along its known path, and the server announces only torpedoes that end early (hit, land, out of bounds), keeping 4-player sustained fire under 50 kB/s per client. Decided 2026-10-17.
 - **Q50 — Aim rotation settings:** add host settings for cannon rotation and torpedo rotation (50–200%, 10% steps, default 100%); at 100% both bearings turn at 54 °/s, 60% of the previous 90 °/s. Decided 2026-10-17 after playtest.
 - **Q51 — Camera framing (revised):** the camera stays centred on the own frigate and clamps at the world edges; the cannon reticle no longer moves it and may be off screen. Replaces Q34. Decided 2026-10-17 after playtest.
@@ -84,8 +84,8 @@ All questions raised during the specification phase are resolved. Each line give
 - **Q65 — Radar object rules:** each object kind uses position, direction-only, or hidden radar visibility. Decided 2026-10-17.
 - **Q66 — Radar range:** the 3,000 u range scales proportionally to map width: 750 u on Small, 1,500 u on Standard, and 3,000 u on Big (Q152 supersedes the fixed range). Decided 2026-10-17; updated 2026-10-18.
 - **Q67 — Boat wakes:** use a V-shaped forward wake scaled by speed; astern motion leaves a churn band only. Decided 2026-10-17.
-- **Q68 — Torpedo wakes:** leave a 150 u bubble trail behind each torpedo to reveal roughly where it came from. Decided 2026-10-17.
-- **Q69 — Wake persistence and speed settings:** forward boat samples live 3 s, astern churn samples 1 s, and torpedo trails extend up to 1.25 s of travel (150 u at default speed); reach follows the host speed settings. Decided 2026-10-17.
+- **Q68 — Torpedo wakes:** leave a 225 u bubble trail behind each torpedo at the default speed to reveal roughly where it came from. Decided 2026-10-17.
+- **Q69 — Wake persistence and speed settings:** forward boat samples live 3 s, astern churn samples 1 s, and torpedo trails extend up to 1.25 s of travel (225 u at default speed); reach follows the host speed settings. Decided 2026-10-17.
 - **Q70 — Wake networking:** wakes are visual and client-only, add no network data, and do not appear on radar. Decided 2026-10-17.
 - **Q71 — Wake lifecycle:** a sinking boat's wake fades in place, and a respawn starts a fresh wake. Decided 2026-10-17.
 - **Q72 — Terrain style:** use the natural terrain style selected from the Q72–Q76 mock-ups. Decided 2026-10-17.
@@ -170,3 +170,9 @@ All questions raised during the specification phase are resolved. Each line give
 - **Q151 — Radar implementation:** keep detection and blip state client-only; snapshots continue to carry all boat positions. Decided 2026-10-18.
 - **Q152 — Radar range per map size:** 3,000 u on Big, 1,500 u on Standard, 750 u on Small (in proportion to the map width); replaces the fixed radar range in Q139. Decided 2026-10-18.
 - **Q153 — Compact scoreboard:** one number (the score) per player, berth order, sunk count only in the Tab scoreboard. Decided 2026-10-18.
+- **Q154 — Forward, reverse, and shell speeds:** at 100%, maximum forward/reverse speeds are 72/22.5 u/s and shell speed is 600 u/s; the 50–200% setting range is unchanged and applies to these new bases. Decided 2026-10-18.
+- **Q155 — Acceleration:** increase acceleration and braking to 36 u/s², keeping full forward speed reachable in 2 s from rest. Decided 2026-10-18.
+- **Q156 — Torpedo speed:** increase to 180 u/s, maintaining 2.5× maximum frigate speed. Decided 2026-10-18.
+- **Q157 — Fuel distance:** keep capacity at two map widths, so a tank lasts two thirds as long at full speed. Decided 2026-10-18.
+- **Q158 — Speed-dependent effects:** turret shells use the new shell speed; empty-tank forward crawl is 10% (7.2 u/s); land damage remains relative to scaled top speed (10 HP at full speed), with the 20 u/s graze threshold unchanged. Decided 2026-10-18.
+- **Q159 — Unchanged speeds and timing:** rotation stays 36°/s, cannon max range 800 u and range-adjust speed 400 u/s, reloads, torpedo arming time 0.5 s, and radar sweep remain unchanged. Decided 2026-10-18.

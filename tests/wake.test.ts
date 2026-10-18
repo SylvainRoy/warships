@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { GAME_CONFIG } from "../src/shared/config.js";
 import { shouldResetWake, torpedoWakeLength, wakeArmOffset, wakeLife } from "../src/client/wake.js";
 
 describe("wake helpers", () => {
@@ -7,8 +8,9 @@ describe("wake helpers", () => {
   });
 
   it("caps the torpedo trail by the distance travelled", () => {
-    expect(torpedoWakeLength(120, 30)).toBe(30);
-    expect(torpedoWakeLength(120, 200)).toBe(150);
+    const speed = GAME_CONFIG.torpedo.speed;
+    expect(torpedoWakeLength(speed, 30)).toBe(30);
+    expect(torpedoWakeLength(speed, speed * 2)).toBe(speed * 1.25);
   });
 
   it("resets only when a boat jumps more than 50 units", () => {

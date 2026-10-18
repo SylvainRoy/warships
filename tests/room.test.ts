@@ -428,7 +428,7 @@ describe("multiplayer room", () => {
     room.game.torpedoes.push({
       id: "tland",
       ownerId: welcome(socket).playerId,
-      x: 995,
+      x: 990,
       y: 4510,
       angle: 0,
       elapsed: 0,

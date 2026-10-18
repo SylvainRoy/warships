@@ -422,7 +422,7 @@ describe("torpedoes and scoring", () => {
     state.torpedoes = [{
       id: "arming",
       ownerId: shooter.playerId,
-      x: 950,
+      x: 910,
       y: 4500,
       angle: 0,
       elapsed: 0,
