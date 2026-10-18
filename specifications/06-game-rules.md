@@ -33,4 +33,4 @@ A frigate spawns when its player joins, after being sunk, and when the world is 
 
 - When a new map is generated, all bases MUST be re-placed and each player MUST get their home base back (Q110).
 - Resetting scores MUST NOT change bases.
-- Ownership of captured non-home bases after map generation is **TBD (open point)**.
+- On a new map, every non-home base starts neutral, and each player gets their home base back (Q110, Q118).

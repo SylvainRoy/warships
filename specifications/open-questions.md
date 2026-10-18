@@ -128,3 +128,12 @@ All questions raised during the specification phase are resolved. Each line give
 - **Q109 — Base radar:** within 3,000 u show bases as small owner-coloured squares (white for neutral); show own bases beyond range as a ring tick and hide enemy/neutral bases beyond range. Decided 2026-10-18.
 - **Q110 — New map and score reset:** re-place all bases and give each player their home back on a new map; resetting scores does not change bases. Decided 2026-10-18.
 - **Q111 — Delivery:** write spec v2.0 first, then deliver three steps on separate branches from main with previews and approval before merge: (1) bases, flags, home spawn, capture; (2) turrets, repair, home-base rule; (3) fuel, ammunition, resupply. Tag v2.0.0 after step 3. Decided 2026-10-18.
+- **Q112 — Leaving during resupply:** resupply stops, but fuel and ammunition already refilled stay on board. Decided 2026-10-18.
+- **Q113 — Interrupted turret repair:** leaving the harbour or sinking restarts the repair countdown from zero. Decided 2026-10-18.
+- **Q114 — Capturing a lost home base:** its owner may recapture it normally for no points, cancelling the return timer; a third player capturing it during the timer gains 5 points, the owner is not penalized again, and the 30 s countdown continues. Decided 2026-10-18.
+- **Q115 — Non-home base capture score:** capturing a neutral or non-home enemy base gives no points. Decided 2026-10-18.
+- **Q116 — Owner leaves while home is lost:** the return countdown stops and the home site becomes inactive. Decided 2026-10-18.
+- **Q117 — Disconnect grace:** bases remain owned during the 10 s reconnect grace; Q91 leave effects apply only when the grace expires. Decided 2026-10-18.
+- **Q118 — New-map ownership:** every non-home base starts neutral on a new map. Decided 2026-10-18.
+- **Q119 — Time setting changed during an action:** the new time applies immediately, preserving progress as a fraction of the action. Decided 2026-10-18.
+- **Q120 — Minor v2 details:** neutral-bases setting step 1; minimum 1,600 u spacing measured between harbour centres; buildings stand on land so torpedoes stop there and rubble adds no collision; new settings rows follow Land coverage in order Neutral bases, Fuel, Shells, Torpedoes, Resupply time, Capture time, Repair time; inactive home sites do not appear on radar. Decided 2026-10-18.
