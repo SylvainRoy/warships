@@ -450,7 +450,7 @@ export function drawHitFeedback(now: number): void {
     ctx.textAlign = "center";
     ctx.textBaseline = "middle";
     ctx.fillText(
-      `−${hit.amount}`,
+      `−${Math.max(1, Math.round(hit.amount))}`,
       hit.x,
       hit.y - style.offset,
     );

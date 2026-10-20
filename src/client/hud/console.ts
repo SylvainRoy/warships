@@ -150,7 +150,7 @@ export function drawHud(snapshot: Snapshot, frigate: Frigate | undefined, now: n
       hullX + 39,
       dialY,
       "HULL",
-      String(frigate.hp),
+      String(Math.ceil(frigate.hp)),
       hullFraction,
       hullColor,
       frigate.hp <= 35 ? "#ff776c" : "#e8f4f4",

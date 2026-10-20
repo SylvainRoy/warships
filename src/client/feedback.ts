@@ -120,5 +120,5 @@ export function floatingNumberStyle(
 }
 
 export function formatHitFeedLine(line: HitFeedLine): string {
-  return `${line.label} (−${line.amount})`;
+  return `${line.label} (−${Math.max(1, Math.round(line.amount))})`;
 }
