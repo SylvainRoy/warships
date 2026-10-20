@@ -55,8 +55,19 @@ const fixtureSites: BaseSite[] = [
 
 function setup() {
   let now = 0;
-  const room = new Room(11, () => now, openWorld);
+  const room = roomWithoutBots(11, () => now, openWorld);
   return { room, setNow: (value: number) => { now = value; } };
+}
+
+function roomWithoutBots(
+  seed = 11,
+  clock: () => number = () => 0,
+  world = openWorld,
+  sites?: readonly BaseSite[],
+): Room {
+  const room = new Room(seed, clock, world, sites);
+  room.game.settings.bots = 0;
+  return room;
 }
 
 function connect(room: Room): FakeSocket {
@@ -91,7 +102,7 @@ describe("multiplayer room", () => {
       expect(welcome(socket)).toMatchObject({ columns: bigDimensions.columns, rows: bigDimensions.rows });
     });
     expect(room.sessions.get(welcome(sockets[0]!).playerId)?.host).toBe(true);
-    expect(welcome(sockets[0]!).settings).toEqual({ ...DEFAULT_SETTINGS, mapSize: 2 });
+    expect(welcome(sockets[0]!).settings).toEqual({ ...DEFAULT_SETTINGS, bots: 0, mapSize: 2 });
     expect(colours).toEqual(["#3b82f6", "#ef4444", "#facc15", "#a855f7"]);
     const fifth = connect(room);
     join(room, fifth, "Eve");
@@ -122,7 +133,7 @@ describe("multiplayer room", () => {
   });
 
   it("replaces a session when the same connection joins with a different name", () => {
-    const room = new Room(11, () => 0, openWorld, fixtureSites);
+    const room = roomWithoutBots(11, () => 0, openWorld, fixtureSites);
     const socket = connect(room);
     join(room, socket, "A");
     const oldPlayerId = welcome(socket).playerId;
@@ -227,7 +238,7 @@ describe("multiplayer room", () => {
 
     send(room, hostSocket, { type: "host", action: "settings", settings: { ...DEFAULT_SETTINGS, boatSpeedPct: 105 } });
     expect(hostSocket.last("error")?.code).toBe("invalid_action");
-    expect(room.game.settings).toEqual({ ...DEFAULT_SETTINGS, mapSize: 2 });
+    expect(room.game.settings).toEqual({ ...DEFAULT_SETTINGS, bots: 0, mapSize: 2 });
 
     const initialSeed = room.game.world.seed;
     const initialWorldMessageCount = hostSocket.messages.filter((message) => message.type === "world").length;
@@ -240,6 +251,7 @@ describe("multiplayer room", () => {
       torpedoes: 60,
       resupplyTime: 6,
       mapSize: 2,
+      bots: 0,
     };
     send(room, hostSocket, { type: "host", action: "settings", settings });
     expect(room.game.settings).toEqual(settings);
@@ -264,7 +276,7 @@ describe("multiplayer room", () => {
   });
 
   it("preserves base income progress as a fraction and resets it when income is Off", () => {
-    const room = new Room(11, () => 0, openWorld, fixtureSites);
+    const room = roomWithoutBots(11, () => 0, openWorld, fixtureSites);
     const hostSocket = connect(room);
     join(room, hostSocket, "Harbor");
     const hostId = welcome(hostSocket).playerId;
@@ -290,7 +302,7 @@ describe("multiplayer room", () => {
 
   it("resets base income progress when its owner is neutralized", () => {
     let now = 0;
-    const room = new Room(11, () => now, openWorld, fixtureSites);
+    const room = roomWithoutBots(11, () => now, openWorld, fixtureSites);
     const hostSocket = connect(room);
     join(room, hostSocket, "Harbor");
     const hostId = welcome(hostSocket).playerId;
@@ -313,7 +325,7 @@ describe("multiplayer room", () => {
     const hostId = welcome(hostSocket).playerId;
     room.game.scores[hostId]!.score = 3;
     const initialSeed = room.game.world.seed;
-    const settings = { ...DEFAULT_SETTINGS, landCoveragePct: 10, mapSize: 2 };
+    const settings = { ...DEFAULT_SETTINGS, landCoveragePct: 10, mapSize: 2, bots: 0 };
 
     send(room, hostSocket, { type: "host", action: "settings", settings });
 
@@ -380,7 +392,7 @@ describe("multiplayer room", () => {
   });
 
   it("keeps snapshots free of projectiles and sends new projectiles only once to joined sockets", () => {
-    const room = new Room(11, () => 0, openWorld, fixtureSites);
+    const room = roomWithoutBots(11, () => 0, openWorld, fixtureSites);
     const host = connect(room);
     const guest = connect(room);
     join(room, host, "Harbor");
@@ -425,7 +437,7 @@ describe("multiplayer room", () => {
   });
 
   it("broadcasts damage events to every joined client without adding a message", () => {
-    const room = new Room(11, () => 0, openWorld, fixtureSites);
+    const room = roomWithoutBots(11, () => 0, openWorld, fixtureSites);
     const shooterSocket = connect(room);
     const targetSocket = connect(room);
     join(room, shooterSocket, "Harbor");
@@ -473,7 +485,7 @@ describe("multiplayer room", () => {
   });
 
   it("sends base statuses only when changed and after world regeneration", () => {
-    const room = new Room(11, () => 0, openWorld, fixtureSites);
+    const room = roomWithoutBots(11, () => 0, openWorld, fixtureSites);
     const socket = connect(room);
     join(room, socket, "Harbor");
     const playerId = welcome(socket).playerId;
@@ -519,7 +531,7 @@ describe("multiplayer room", () => {
   it("announces a sent torpedo when it ends on land", () => {
     const world: World = createEmptyWorld(bigDimensions, 11);
     world.grid[225 * bigDimensions.columns + 50] = 1;
-    const room = new Room(11, () => 0, world);
+    const room = roomWithoutBots(11, () => 0, world);
     const socket = connect(room);
     join(room, socket, "Harbor");
     room.game.torpedoes.push({
@@ -645,7 +657,7 @@ describe("multiplayer room", () => {
 
   it("activates home harbours before spawning and preserves base state during reconnect grace", () => {
     let now = 0;
-    const room = new Room(11, () => now, openWorld, fixtureSites);
+    const room = roomWithoutBots(11, () => now, openWorld, fixtureSites);
     const first = connect(room);
     join(room, first, "Harbor");
     const joined = welcome(first);
@@ -735,7 +747,7 @@ describe("multiplayer room", () => {
 
   it("returns a lost home to its original owner when the current holder leaves", () => {
     let now = 0;
-    const room = new Room(11, () => now, openWorld, fixtureSites);
+    const room = roomWithoutBots(11, () => now, openWorld, fixtureSites);
     const originalSocket = connect(room);
     const holderSocket = connect(room);
     join(room, originalSocket, "Original");
@@ -784,7 +796,7 @@ describe("multiplayer room", () => {
 
   it("regenerates configured neutral bases and keeps home ownership for connected players", () => {
     let now = 0;
-    const room = new Room(11, () => now, openWorld, fixtureSites);
+    const room = roomWithoutBots(11, () => now, openWorld, fixtureSites);
     const socket = connect(room);
     join(room, socket, "Harbor");
     const playerId = welcome(socket).playerId;
@@ -870,5 +882,114 @@ describe("multiplayer room", () => {
     expect(other).not.toHaveProperty("fuel");
     expect(other).not.toHaveProperty("shells");
     expect(other).not.toHaveProperty("torpedoes");
+  });
+});
+
+describe("room bots", () => {
+  it("fills the configured bot roster, reserves its names, exposes lobby flags, and keeps bots out of kicks", () => {
+    const room = new Room(11, () => 0, openWorld, fixtureSites);
+    const host = connect(room);
+    join(room, host, "Harbor");
+
+    const bots = [...room.sessions.values()].filter((session) => session.bot);
+    expect(bots.map((bot) => bot.name)).toEqual(["Bot Nelson", "Bot Suffren"]);
+    expect(bots.every((bot) => bot.socket === null && !bot.host && Boolean(bot.brain))).toBe(true);
+    expect(host.last("lobby")).toMatchObject({
+      freeSlots: 3,
+      full: false,
+      players: expect.arrayContaining([
+        expect.objectContaining({ name: "Bot Nelson", bot: true }),
+        expect.objectContaining({ name: "Bot Suffren", bot: true }),
+      ]),
+    });
+
+    const reserved = connect(room);
+    join(room, reserved, "bOt nElSoN");
+    expect(reserved.last("error")?.code).toBe("name_taken");
+
+    send(room, host, { type: "host", action: "kick", target: bots[0]!.id });
+    expect(host.last("error")?.code).toBe("invalid_action");
+    expect(room.sessions.has(bots[0]!.id)).toBe(true);
+
+    send(room, host, {
+      type: "host",
+      action: "settings",
+      settings: { ...room.game.settings, bots: 3, botSkill: 2 },
+    });
+    expect([...room.sessions.values()].filter((session) => session.bot)).toHaveLength(3);
+    expect([...room.sessions.values()].filter((session) => session.bot).every((bot) => bot.botSkill === 2)).toBe(true);
+  });
+
+  it("evicts the newest bot before welcoming a human when the room is full", () => {
+    const room = new Room(11, () => 0, openWorld, fixtureSites);
+    const host = connect(room);
+    join(room, host, "Harbor");
+    send(room, host, {
+      type: "host",
+      action: "settings",
+      settings: { ...room.game.settings, bots: 3 },
+    });
+    const newestBot = [...room.sessions.values()].filter((session) => session.bot).at(-1)!;
+    expect(newestBot.name).toBe("Bot Tromp");
+
+    const guest = connect(room);
+    join(room, guest, "Buoy");
+
+    const guestId = welcome(guest).playerId;
+    expect(room.sessions.get(guestId)?.slot).toBe(newestBot.slot);
+    expect(room.sessions.has(newestBot.id)).toBe(false);
+    expect(room.game.frigates[newestBot.id]).toBeUndefined();
+    expect(room.game.scores[newestBot.id]).toBeUndefined();
+    expect(room.game.bases.find((base) => base.homeSlot === newestBot.slot - 1)?.ownerId).toBe(guestId);
+    expect(host.messages.some((message) =>
+      message.type === "event" && message.event.type === "leave" && message.event.playerId === newestBot.id,
+    )).toBe(true);
+    expect([...room.sessions.values()].filter((session) => session.bot).map((bot) => bot.name)).toEqual([
+      "Bot Nelson",
+      "Bot Suffren",
+    ]);
+  });
+
+  it("counts human reconnect-grace sessions, transfers hosts only to humans, and removes bots after the last human expires", () => {
+    let now = 0;
+    const room = new Room(11, () => now, openWorld, fixtureSites);
+    const host = connect(room);
+    const guest = connect(room);
+    join(room, host, "Harbor");
+    join(room, guest, "Buoy");
+    const botIds = [...room.sessions.values()].filter((session) => session.bot).map((bot) => bot.id);
+    expect(botIds).toHaveLength(2);
+
+    host.close();
+    now = GAME_CONFIG.network.reconnectGrace + 1;
+    room.advanceTick();
+    expect(room.sessions.get(welcome(guest).playerId)?.host).toBe(true);
+    expect([...room.sessions.values()].filter((session) => session.bot)).toHaveLength(2);
+    expect([...room.sessions.values()].filter((session) => session.bot).every((bot) => !bot.host)).toBe(true);
+
+    guest.close();
+    now += GAME_CONFIG.network.reconnectGrace + 1;
+    room.advanceTick();
+    expect(room.sessions.size).toBe(0);
+    for (const id of botIds) {
+      expect(room.game.frigates[id]).toBeUndefined();
+      expect(room.game.scores[id]).toBeUndefined();
+    }
+    expect(room.game.bases.filter((base) => base.kind === "home" && base.active)).toHaveLength(0);
+  });
+
+  it("reports four human berths as full and rejects a fifth human despite bot occupancy changes", () => {
+    const room = new Room(11, () => 0, openWorld, fixtureSites);
+    const sockets = ["Harbor", "Buoy", "Sail", "Wake"].map(() => connect(room));
+    for (const [index, name] of ["Harbor", "Buoy", "Sail", "Wake"].entries()) {
+      join(room, sockets[index]!, name);
+    }
+    expect(sockets[3]!.last("lobby")).toMatchObject({ freeSlots: 0, full: true });
+    expect(sockets[3]!.last("lobby")?.players).toHaveLength(4);
+
+    const fifth = connect(room);
+    join(room, fifth, "Fifth");
+    expect(fifth.last("error")?.code).toBe("full");
+    expect(room.sessions.size).toBe(4);
   });
 });

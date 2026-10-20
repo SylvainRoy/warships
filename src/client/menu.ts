@@ -1,5 +1,5 @@
 import { GAME_CONFIG } from "../shared/config.js";
-import { DEFAULT_SETTINGS, formatMapSize, SETTINGS_LIMITS, type GameSettings } from "../shared/settings.js";
+import { BOT_SKILL_LABELS, DEFAULT_SETTINGS, formatMapSize, SETTINGS_LIMITS, type GameSettings } from "../shared/settings.js";
 import {
   CONTROL_ACTIONS,
   DEFAULT_BINDINGS,
@@ -33,7 +33,16 @@ export const settingsRows: Array<{ key: keyof GameSettings; label: string }> = [
   { key: "captureTime", label: "Capture time" },
   { key: "repairTime", label: "Repair time" },
   { key: "baseIncomeInterval", label: "Base income" },
+  { key: "bots", label: "Bots" },
+  { key: "botSkill", label: "Bot skill" },
 ];
+
+function kickablePlayers(snapshot: Snapshot) {
+  return snapshot.players
+    .filter((player) => player.playerId !== client.ownId
+      && !client.lobbyState?.players.some((lobbyPlayer) => lobbyPlayer.playerId === player.playerId && lobbyPlayer.bot))
+    .sort((a, b) => a.slot - b.slot);
+}
 
 export function isOwnHost(snapshot: Snapshot | null = client.latestSnapshot): boolean {
   return Boolean(snapshot?.players.find((player) => player.playerId === client.ownId)?.host);
@@ -48,8 +57,8 @@ export function drawMenu(snapshot: Snapshot, width: number, height: number): voi
   const centerY = height / 2;
   const panelWidth = controlsPending || effectsPending ? 520 : 440;
   const settingsView = client.menuPending?.action === "settings";
-  const panelHeight = controlsPending ? 560 : effectsPending ? 260 : settingsView ? 461 : 350;
-  const panelTop = settingsView ? centerY - 175 : centerY - panelHeight / 2;
+  const panelHeight = controlsPending ? 560 : effectsPending ? 260 : settingsView ? 540 : 350;
+  const panelTop = settingsView ? centerY - 230 : centerY - panelHeight / 2;
   ctx.fillStyle = "rgba(3, 13, 20, .88)";
   ctx.fillRect(width / 2 - panelWidth / 2, panelTop, panelWidth, panelHeight);
   ctx.fillStyle = "#eff8f6";
@@ -160,6 +169,10 @@ export function drawMenu(snapshot: Snapshot, width: number, height: number): voi
         ? formatMapSize(value)
         : row.key === "baseIncomeInterval"
           ? value === 0 ? "Off" : `every ${value} s`
+        : row.key === "bots"
+          ? `${value}`
+        : row.key === "botSkill"
+          ? BOT_SKILL_LABELS[value] ?? `${value}`
         : row.key === "cannonReload" || row.key === "torpedoReload" || row.key === "resupplyTime" || row.key === "captureTime" || row.key === "repairTime"
           ? `${value.toFixed(1).replace(/\.0$/, "")} s`
           : row.key === "neutralBases" || row.key === "shells" || row.key === "torpedoes"
@@ -177,12 +190,11 @@ export function drawMenu(snapshot: Snapshot, width: number, height: number): voi
   } else if (client.menuPending?.action === "kickSelect") {
     ctx.fillStyle = "#e4ad80";
     ctx.fillText("Select a player to kick:", left, centerY - 65);
-    snapshot.players
-      .filter((player) => player.playerId !== client.ownId)
-      .sort((a, b) => a.slot - b.slot)
-      .forEach((player, index) => {
+    const players = kickablePlayers(snapshot);
+    players.forEach((player, index) => {
         ctx.fillText(`${index + 1}  ${player.name}`, left, centerY - 35 + index * 24);
       });
+    if (players.length === 0) ctx.fillText("No human players available.", left, centerY - 35);
   } else if (client.menuPending) {
     ctx.fillStyle = client.menuPending.action === "kick" ? "#e4ad80" : "#6be0cf";
     const question = client.menuPending.action === "regenerate"
@@ -218,7 +230,7 @@ export function drawMenu(snapshot: Snapshot, width: number, height: number): voi
           ? "C CONTROLS · V SOUND & EFFECTS · ESC CLOSE"
           : "C CONTROLS · V SOUND & EFFECTS · ESC CLOSE";
   ctx.textAlign = "center";
-  ctx.fillText(footer, width / 2, centerY + (client.menuPending?.action === "settings" ? 262 : 140));
+  ctx.fillText(footer, width / 2, centerY + (client.menuPending?.action === "settings" ? 288 : 140));
   ctx.textAlign = "left";
 }
 
@@ -315,9 +327,7 @@ window.addEventListener("keydown", (event) => {
   }
   if (client.menuPending) {
     if (client.menuPending.action === "kickSelect" && digit && client.latestSnapshot) {
-      const targetPlayer = client.latestSnapshot.players
-        .filter((player) => player.playerId !== client.ownId)
-        .sort((a, b) => a.slot - b.slot)[Number(digit[1]) - 1];
+      const targetPlayer = kickablePlayers(client.latestSnapshot)[Number(digit[1]) - 1];
       if (targetPlayer) client.menuPending = { action: "kick", playerId: targetPlayer.playerId, name: targetPlayer.name };
       return;
     }
@@ -348,7 +358,7 @@ window.addEventListener("keydown", (event) => {
   } else if (event.code === "KeyR") client.menuPending = { action: "regenerate" };
   else if (event.code === "KeyX") client.menuPending = { action: "resetScores" };
   else if (event.code === "KeyK" && client.latestSnapshot) {
-    if (client.latestSnapshot.players.some((player) => player.playerId !== client.ownId)) {
+    if (kickablePlayers(client.latestSnapshot).length > 0) {
       client.menuPending = { action: "kickSelect" };
     }
   }

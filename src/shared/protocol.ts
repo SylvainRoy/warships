@@ -16,7 +16,7 @@ export type ClientMessage =
 
 export type LobbyMessage = {
   type: "lobby";
-  players: Array<{ playerId: string; name: string; slot: number; host: boolean; connected: boolean }>;
+  players: Array<{ playerId: string; name: string; slot: number; host: boolean; connected: boolean; bot?: true }>;
   freeSlots: number;
   full: boolean;
 };

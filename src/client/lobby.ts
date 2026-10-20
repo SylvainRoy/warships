@@ -17,9 +17,17 @@ export function renderLobby(state: LobbyMessage): void {
     dot.style.backgroundColor = colours[player.slot - 1] ?? "#fff";
     const name = document.createElement("span");
     name.textContent = player.name;
+    if (player.bot) {
+      const botLabel = document.createElement("span");
+      botLabel.className = "player-meta";
+      botLabel.textContent = " (bot)";
+      name.append(botLabel);
+    }
     const meta = document.createElement("span");
     meta.className = "player-meta";
-    meta.textContent = `${player.host ? "♛ HOST · " : ""}${player.connected ? "ONLINE" : "RECONNECTING"}`;
+    meta.textContent = player.bot
+      ? "BOT"
+      : `${player.host ? "♛ HOST · " : ""}${player.connected ? "ONLINE" : "RECONNECTING"}`;
     line.append(dot, name, meta);
     roster.append(line);
   }

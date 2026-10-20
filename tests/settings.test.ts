@@ -1,5 +1,13 @@
 import { describe, expect, it } from "vitest";
-import { DEFAULT_SETTINGS, describeSettingsChanges, MAP_SIZE_LABELS, SETTINGS_LIMITS, sanitizeSettings } from "../src/shared/settings.js";
+import {
+  BOT_SKILL_LABELS,
+  DEFAULT_SETTINGS,
+  describeSettingsChanges,
+  MAP_SIZE_LABELS,
+  SETTINGS_LIMITS,
+  SETTING_LABELS,
+  sanitizeSettings,
+} from "../src/shared/settings.js";
 
 describe("game settings", () => {
   it("accepts defaults and valid edge values as fresh objects", () => {
@@ -17,6 +25,15 @@ describe("game settings", () => {
     expect(DEFAULT_SETTINGS.repairTime).toBe(5);
     expect(DEFAULT_SETTINGS.baseIncomeInterval).toBe(60);
     expect(SETTINGS_LIMITS.baseIncomeInterval).toEqual({ min: 0, max: 180, step: 30 });
+    expect(DEFAULT_SETTINGS.bots).toBe(2);
+    expect(DEFAULT_SETTINGS.botSkill).toBe(1);
+    expect(SETTINGS_LIMITS.bots).toEqual({ min: 0, max: 3, step: 1 });
+    expect(SETTINGS_LIMITS.botSkill).toEqual({ min: 0, max: 2, step: 1 });
+    expect(BOT_SKILL_LABELS).toEqual(["Easy", "Normal", "Hard"]);
+    expect(SETTING_LABELS.bots).toBe("bots");
+    expect(SETTING_LABELS.botSkill).toBe("bot skill");
+    expect(Object.keys(DEFAULT_SETTINGS).indexOf("bots")).toBe(Object.keys(DEFAULT_SETTINGS).indexOf("baseIncomeInterval") + 1);
+    expect(Object.keys(DEFAULT_SETTINGS).indexOf("botSkill")).toBe(Object.keys(DEFAULT_SETTINGS).indexOf("bots") + 1);
     const defaults = sanitizeSettings(DEFAULT_SETTINGS);
     expect(defaults).toEqual(DEFAULT_SETTINGS);
     expect(defaults).not.toBe(DEFAULT_SETTINGS);
@@ -40,6 +57,8 @@ describe("game settings", () => {
       captureTime: 1,
       repairTime: 1,
       baseIncomeInterval: 0,
+      bots: 0,
+      botSkill: 0,
     })).toEqual({
       boatSpeedPct: 50,
       rotationPct: 200,
@@ -59,6 +78,8 @@ describe("game settings", () => {
       captureTime: 1,
       repairTime: 1,
       baseIncomeInterval: 0,
+      bots: 0,
+      botSkill: 0,
     });
     expect(sanitizeSettings({ ...DEFAULT_SETTINGS, cannonReload: 10, torpedoReload: 1 })).toEqual({
       ...DEFAULT_SETTINGS,
@@ -114,6 +135,12 @@ describe("game settings", () => {
     expect(sanitizeSettings({ ...DEFAULT_SETTINGS, baseIncomeInterval: -30 })).toBeNull();
     expect(sanitizeSettings({ ...DEFAULT_SETTINGS, baseIncomeInterval: 210 })).toBeNull();
     expect(sanitizeSettings({ ...DEFAULT_SETTINGS, baseIncomeInterval: 45 })).toBeNull();
+    expect(sanitizeSettings({ ...DEFAULT_SETTINGS, bots: -1 })).toBeNull();
+    expect(sanitizeSettings({ ...DEFAULT_SETTINGS, bots: 4 })).toBeNull();
+    expect(sanitizeSettings({ ...DEFAULT_SETTINGS, bots: 1.5 })).toBeNull();
+    expect(sanitizeSettings({ ...DEFAULT_SETTINGS, botSkill: -1 })).toBeNull();
+    expect(sanitizeSettings({ ...DEFAULT_SETTINGS, botSkill: 3 })).toBeNull();
+    expect(sanitizeSettings({ ...DEFAULT_SETTINGS, botSkill: 1.5 })).toBeNull();
 
     const missing = { ...DEFAULT_SETTINGS } as Record<string, unknown>;
     delete missing.torpedoReload;
@@ -144,6 +171,8 @@ describe("game settings", () => {
       captureTime: 10,
       repairTime: 10,
       baseIncomeInterval: 30,
+      bots: 3,
+      botSkill: 2,
     })).toEqual([
       "boat speed 150%",
       "rotation 120%",
@@ -162,6 +191,8 @@ describe("game settings", () => {
       "capture time 10 s",
       "repair time 10 s",
       "base income every 30 s",
+      "bots 3",
+      "bot skill Hard",
     ]);
     expect(describeSettingsChanges(DEFAULT_SETTINGS, {
       ...DEFAULT_SETTINGS,

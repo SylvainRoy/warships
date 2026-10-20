@@ -19,6 +19,8 @@ export interface GameSettings {
   captureTime: number;
   repairTime: number;
   baseIncomeInterval: number;
+  bots: number;
+  botSkill: number;
 }
 
 export const DEFAULT_SETTINGS: GameSettings = {
@@ -40,6 +42,8 @@ export const DEFAULT_SETTINGS: GameSettings = {
   captureTime: 5,
   repairTime: 5,
   baseIncomeInterval: GAME_CONFIG.baseIncome.defaultInterval,
+  bots: GAME_CONFIG.bots.defaultCount,
+  botSkill: GAME_CONFIG.bots.defaultSkill,
 };
 
 export const SETTINGS_LIMITS: Record<keyof GameSettings, { min: number; max: number; step: number }> = {
@@ -61,6 +65,8 @@ export const SETTINGS_LIMITS: Record<keyof GameSettings, { min: number; max: num
   captureTime: { min: 1, max: 30, step: 1 },
   repairTime: { min: 1, max: 30, step: 1 },
   baseIncomeInterval: { min: 0, max: 180, step: 30 },
+  bots: { min: 0, max: 3, step: 1 },
+  botSkill: { min: 0, max: 2, step: 1 },
 };
 
 const SETTINGS_KEYS: readonly (keyof GameSettings)[] = [
@@ -82,9 +88,11 @@ const SETTINGS_KEYS: readonly (keyof GameSettings)[] = [
   "captureTime",
   "repairTime",
   "baseIncomeInterval",
+  "bots",
+  "botSkill",
 ];
 
-const SETTING_LABELS: Record<keyof GameSettings, string> = {
+export const SETTING_LABELS: Record<keyof GameSettings, string> = {
   boatSpeedPct: "boat speed",
   rotationPct: "rotation",
   cannonRotationPct: "cannon rotation",
@@ -103,9 +111,12 @@ const SETTING_LABELS: Record<keyof GameSettings, string> = {
   captureTime: "capture time",
   repairTime: "repair time",
   baseIncomeInterval: "base income",
+  bots: "bots",
+  botSkill: "bot skill",
 };
 
 export const MAP_SIZE_LABELS = GAME_CONFIG.world.mapSizes.map(({ label }) => label);
+export const BOT_SKILL_LABELS = ["Easy", "Normal", "Hard"] as const;
 
 export function formatMapSize(value: number): string {
   return MAP_SIZE_LABELS[value] ?? `${value}`;
@@ -140,9 +151,11 @@ export function describeSettingsChanges(before: GameSettings, after: GameSetting
       ? formatMapSize(after[key])
       : key === "baseIncomeInterval"
         ? after[key] === 0 ? "Off" : `every ${after[key]} s`
+      : key === "botSkill"
+        ? BOT_SKILL_LABELS[after[key]] ?? `${after[key]}`
       : key === "cannonReload" || key === "torpedoReload" || key === "resupplyTime" || key === "captureTime" || key === "repairTime"
       ? `${after[key].toFixed(1).replace(/\.0$/, "")} s`
-      : key === "neutralBases" || key === "shells" || key === "torpedoes"
+      : key === "neutralBases" || key === "shells" || key === "torpedoes" || key === "bots"
         ? `${after[key]}`
         : key === "fuelCrossings"
           ? `${after[key]} crossings`

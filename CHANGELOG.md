@@ -4,6 +4,7 @@ All notable changes to Warships are recorded here. Versions follow semantic vers
 
 ## [Unreleased]
 
+- Server-side bots fill open berths, navigate, fight, capture bases and resupply; hosts can set their count and skill.
 - Internal: client split into modules (no gameplay change)
 - Hull repair now happens alongside harbour resupply; hosts can configure recurring income from held non-home bases.
 - Base income appears as a floating `+1` and quiet coin tick; the Tab scoreboard adds an active `Bases` count.

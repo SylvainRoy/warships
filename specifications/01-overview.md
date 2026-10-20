@@ -31,12 +31,12 @@
 - Synthesised sound effects (no music).
 - Sound and effects settings, hit feedback, and own-damage feedback.
 - Hull repair in owned harbours and income from holding non-home bases.
+- Configurable server-side bots that navigate, fight, capture bases, and resupply.
 
 ## Out of scope (v1) — candidates for later
 
 - Mobile / touch controls, gamepads.
 - Accounts, persistence of scores across server restarts, matchmaking, multiple rooms per server.
-- AI-controlled boats (bots).
 - Power-ups, ship upgrades, different ship classes.
 - Chat.
 

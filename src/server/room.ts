@@ -5,6 +5,7 @@ import { generateWorldWithBases, placeBases, restoreHome, type BasePublic, type 
 import { GAME_CONFIG } from "../shared/config.js";
 import type { ClientMessage, ServerMessage, SnapshotFrigate } from "../shared/protocol.js";
 import { DEFAULT_SETTINGS, describeSettingsChanges, sanitizeSettings } from "../shared/settings.js";
+import { createBotBrain } from "./bot.js";
 import {
   createGameState,
   createSeededRandom,
@@ -21,6 +22,8 @@ import { encodeWorld, mapDimensions, type World } from "../shared/world.js";
 
 const SLOT_COLOURS = ["#3b82f6", "#ef4444", "#facc15", "#a855f7"] as const;
 const EMPTY_INPUT: FrigateInput = { seq: 0, keys: 0, throttle: 0, fireCannon: false, fireTorpedo: false };
+const BOT_NAMES = ["Bot Nelson", "Bot Suffren", "Bot Tromp"] as const;
+const RESERVED_BOT_NAMES = new Set(BOT_NAMES.map((name) => name.toLocaleLowerCase()));
 
 interface PlayerSession {
   id: string;
@@ -37,6 +40,9 @@ interface PlayerSession {
   lastInput: FrigateInput;
   ackSeq: number;
   lastBasesJson: string | null;
+  bot?: true;
+  botSkill?: number;
+  brain?: ReturnType<typeof createBotBrain>;
 }
 
 export class Room {
@@ -46,10 +52,12 @@ export class Room {
   private readonly sessionBySocket = new Map<WebSocket, PlayerSession>();
   private readonly random: () => number;
   private nextPlayerId = 1;
+  private nextBotId = 1;
   private timer: ReturnType<typeof setInterval> | undefined;
   private lastLobbySent = "";
   private snapshotAccumulator = 0;
   private sentProjectileIds = new Set<string>();
+  private lastBotReconcileAt = Number.NEGATIVE_INFINITY;
 
   constructor(
     seed = randomBytes(4).readUInt32LE(),
@@ -143,6 +151,10 @@ export class Room {
     const now = this.clock();
     this.expireDisconnected(now);
     const normalized = name.toLocaleLowerCase();
+    if (RESERVED_BOT_NAMES.has(normalized)) {
+      this.send(socket, { type: "error", code: "name_taken" });
+      return;
+    }
     const currentSession = this.sessionBySocket.get(socket);
     if (currentSession) {
       if (currentSession.name.toLocaleLowerCase() === normalized) {
@@ -165,6 +177,14 @@ export class Room {
         this.send(socket, { type: "error", code: "name_taken" });
         return;
       }
+      if (this.humanCount() >= GAME_CONFIG.player.maxPlayers) {
+        this.send(socket, { type: "error", code: "full" });
+        return;
+      }
+      if (this.sessions.size >= GAME_CONFIG.player.maxPlayers) {
+        const newestBot = [...this.sessions.values()].reverse().find((candidate) => candidate.bot);
+        if (newestBot) this.removeSession(newestBot, {}, false);
+      }
       const usedSlots = new Set([...this.sessions.values()].map((candidate) => candidate.slot));
       const slot = [1, 2, 3, 4].find((candidate) => !usedSlots.has(candidate));
       if (!slot) {
@@ -178,7 +198,7 @@ export class Room {
         slot,
         score: 0,
         sunk: 0,
-        host: ![...this.sessions.values()].some((candidate) => candidate.host),
+        host: ![...this.sessions.values()].some((candidate) => !candidate.bot && candidate.host),
         joinedAt: now,
         socket,
         disconnectedAt: null,
@@ -209,10 +229,11 @@ export class Room {
       this.game.events.push({ type: "join", playerId: session.id, name, message: `${name} joined` });
       this.broadcastEvent({ type: "join", playerId: session.id, name, message: `${name} joined` });
     }
-    if (!session.host && ![...this.sessions.values()].some((candidate) => candidate.host)) {
+    if (!session.host && ![...this.sessions.values()].some((candidate) => !candidate.bot && candidate.host)) {
       session.host = true;
       this.game.scores[session.id] = this.scoreRecord(session);
     }
+    this.reconcileBots(now);
     this.sendWelcome(socket, session, now);
   }
 
@@ -249,7 +270,7 @@ export class Room {
       score: session.score,
       sunk: session.sunk,
       host: session.host,
-      connected: session.socket !== null,
+      connected: session.bot === true || session.socket !== null,
     };
   }
 
@@ -278,7 +299,9 @@ export class Room {
       return;
     }
     if (message.action === "kick") {
-      const target = [...this.sessions.values()].find((player) => player.id === message.target || player.name === message.target);
+      const target = [...this.sessions.values()].find((player) =>
+        !player.bot && (player.id === message.target || player.name === message.target),
+      );
       if (!target || target.id === session.id) {
         this.send(session.socket!, { type: "error", code: "invalid_action" });
         return;
@@ -300,6 +323,7 @@ export class Room {
       const mapSizeChanged = this.game.settings.mapSize !== settings.mapSize;
       const previousIncomeInterval = this.game.settings.baseIncomeInterval;
       this.game.settings = settings;
+      this.reconcileBots(now);
       if (previousIncomeInterval !== settings.baseIncomeInterval) {
         for (const base of this.game.bases) {
           base.heldFor = previousIncomeInterval === 0 || settings.baseIncomeInterval === 0
@@ -374,8 +398,19 @@ export class Room {
   private tick(): void {
     const now = this.clock();
     this.expireDisconnected(now);
+    if (now - this.lastBotReconcileAt >= 1) {
+      this.lastBotReconcileAt = now;
+      this.reconcileBots(now);
+    }
     const inputs: Record<string, FrigateInput | undefined> = {};
     for (const session of this.sessions.values()) {
+      if (session.bot) {
+        const input = session.brain?.think(this.game, now, 1 / GAME_CONFIG.network.tickRate) ?? { ...EMPTY_INPUT };
+        session.lastInput = input;
+        session.ackSeq = input.seq;
+        inputs[session.id] = input;
+        continue;
+      }
       const next = session.inputQueue.shift();
       if (next) {
         session.lastInput = next;
@@ -543,9 +578,10 @@ export class Room {
       name: session.name,
       slot: session.slot,
       host: session.host,
-      connected: session.socket !== null,
+      connected: session.bot === true || session.socket !== null,
+      ...(session.bot ? { bot: true as const } : {}),
     }));
-    const freeSlots = GAME_CONFIG.player.maxPlayers - this.sessions.size;
+    const freeSlots = Math.max(0, GAME_CONFIG.player.maxPlayers - this.humanCount());
     return { type: "lobby" as const, players, freeSlots, full: freeSlots === 0 };
   }
 
@@ -573,16 +609,26 @@ export class Room {
       frigate.lastFireTorpedo = false;
     }
     this.broadcastEvent({ type: "leave", playerId: session.id, name: session.name, message: `${session.name} disconnected` });
+    this.reconcileBots(this.clock());
     this.broadcastLobby();
   }
 
   private expireDisconnected(now: number): void {
     for (const session of [...this.sessions.values()]) {
-      if (session.disconnectedAt !== null && now - session.disconnectedAt >= GAME_CONFIG.network.reconnectGrace) this.removeSession(session);
+      if (!session.bot && session.disconnectedAt !== null && now - session.disconnectedAt >= GAME_CONFIG.network.reconnectGrace) {
+        this.removeSession(session);
+      }
     }
   }
 
-  private removeSession(session: PlayerSession, options: { closeSocket?: boolean } = {}): void {
+  private removeSession(
+    session: PlayerSession,
+    options: { closeSocket?: boolean } = {},
+    reconcile = true,
+  ): void {
+    if (session.bot) {
+      this.broadcastEvent({ type: "leave", playerId: session.id, name: session.name, message: `${session.name} left` });
+    }
     if (session.socket) {
       const socket = session.socket;
       this.sessionBySocket.delete(socket);
@@ -648,13 +694,88 @@ export class Room {
     delete this.game.scores[session.id];
     if (session.host) {
       const successor = [...this.sessions.values()]
-        .filter((candidate) => candidate.socket !== null)
+        .filter((candidate) => !candidate.bot && candidate.socket !== null)
         .sort((a, b) => a.joinedAt - b.joinedAt)[0];
       if (successor) {
         successor.host = true;
         this.game.scores[successor.id] = this.scoreRecord(successor);
         this.broadcastEvent({ type: "host", playerId: successor.id, name: successor.name, message: `${successor.name} is now host` });
       }
+    }
+    if (reconcile && !session.bot) this.reconcileBots(this.clock());
+    this.broadcastLobby();
+  }
+
+  private humanCount(): number {
+    return [...this.sessions.values()].filter((session) => !session.bot).length;
+  }
+
+  private reconcileBots(now: number): void {
+    const humans = this.humanCount();
+    const target = humans > 0
+      ? Math.min(this.game.settings.bots, GAME_CONFIG.player.maxPlayers - humans)
+      : 0;
+    let bots = [...this.sessions.values()].filter((session) => session.bot);
+    for (const bot of bots) {
+      if (bot.botSkill === this.game.settings.botSkill) continue;
+      bot.botSkill = this.game.settings.botSkill;
+      bot.brain = createBotBrain(bot.id, this.game.settings.botSkill, this.random);
+    }
+    while (bots.length > target) {
+      const newest = bots.pop();
+      if (!newest) break;
+      this.removeSession(newest, {}, false);
+    }
+    while (bots.length < target) {
+      const usedSlots = new Set([...this.sessions.values()].map((session) => session.slot));
+      const slot = [1, 2, 3, 4].find((candidate) => !usedSlots.has(candidate));
+      if (!slot) break;
+      const name = BOT_NAMES.find((candidate) =>
+        ![...this.sessions.values()].some((session) => session.name.toLocaleLowerCase() === candidate.toLocaleLowerCase()),
+      );
+      if (!name) break;
+      const id = `b${this.nextBotId++}`;
+      const bot: PlayerSession = {
+        id,
+        token: "",
+        name,
+        slot,
+        score: 0,
+        sunk: 0,
+        host: false,
+        joinedAt: now,
+        socket: null,
+        disconnectedAt: null,
+        inputQueue: [],
+        lastInput: { ...EMPTY_INPUT },
+        ackSeq: 0,
+        lastBasesJson: null,
+        bot: true,
+        botSkill: this.game.settings.botSkill,
+        brain: createBotBrain(id, this.game.settings.botSkill, this.random),
+      };
+      this.sessions.set(id, bot);
+      const home = this.game.bases.find((base) => base.kind === "home" && base.homeSlot === slot - 1);
+      if (home) {
+        home.active = true;
+        home.ownerId = id;
+        home.turret = "active";
+        home.turretHp = GAME_CONFIG.bases.turretHp;
+        home.turretReadyAt = now;
+        home.lostFrom = null;
+        home.returnAt = null;
+        home.captureBy = null;
+        home.captureProgress = 0;
+        home.repairBy = null;
+        home.repairProgress = 0;
+      }
+      const others = Object.values(this.game.frigates).filter((frigate) => frigate.status === "alive");
+      this.game.frigates[id] = spawnPlayerFrigate(id, name, slot, this.game, others, this.random, now);
+      this.game.scores[id] = this.scoreRecord(bot);
+      const joined = { type: "join" as const, playerId: id, name, message: `${name} joined` };
+      this.game.events.push(joined);
+      this.broadcastEvent(joined);
+      bots.push(bot);
     }
     this.broadcastLobby();
   }
