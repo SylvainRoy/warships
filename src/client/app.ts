@@ -7,6 +7,7 @@ import { createEmptyWorld, decodeWorld, isLandAt, mapDimensions, type World } fr
 import type { LobbyMessage, ServerMessage, SnapshotFrigate } from "../shared/protocol.js";
 import { computeCamera, computeViewport } from "./camera.js";
 import { drawBases, drawCaptureProgress } from "./bases.js";
+import { SynthAudio, type SoundPosition } from "./audio.js";
 import {
   actionForCode,
   assignBinding,
@@ -21,6 +22,18 @@ import {
   type ControlAction,
   type KeyboardLayout,
 } from "./controls.js";
+import {
+  damageTargetKey,
+  DEFAULT_EFFECTS_SETTINGS,
+  EFFECTS_STORAGE_KEY,
+  formatHitFeedLine,
+  mergeHitFeedLine,
+  mergeHitNumber,
+  parseEffectsSettings,
+  type EffectsSettings,
+  type HitFeedLine,
+  type HitNumber,
+} from "./feedback.js";
 import { ProjectileStore } from "./projectiles.js";
 import { RADAR, RadarSweep, radarBearing, radarRange, worldToRadar } from "./radar.js";
 import {
@@ -45,7 +58,11 @@ type HostMenuPending =
   | { action: "kick"; playerId: string; name: string }
   | { action: "settings"; draft: GameSettings; index: number };
 type ControlsMenuPending = { action: "controls"; index: number; capturing: boolean; hint: string };
-type MenuPending = HostMenuPending | ControlsMenuPending | null;
+type EffectsMenuPending = { action: "effects"; index: number };
+type MenuPending = HostMenuPending | ControlsMenuPending | EffectsMenuPending | null;
+type HitMarker = { x: number; y: number; at: number };
+type PendingHitFeed = { targetKey: string; targetId?: string; label: string; amount: number; at: number };
+type PendingSplashSound = { x: number; y: number; timer: number };
 
 function storedBindings(): string | null {
   try {
@@ -91,7 +108,11 @@ if (!context) throw new Error("Canvas 2D is unavailable");
 const ctx = context;
 
 const colours = ["#4b9bff", "#ff6266", "#f3c94e", "#c084fc"];
-const radarSweep = new RadarSweep((slot) => colours[slot - 1] ?? "#fff");
+const audio = new SynthAudio();
+const radarSweep = new RadarSweep(
+  (slot) => colours[slot - 1] ?? "#fff",
+  () => audio.play("radar-ping", { own: true, gain: GAME_CONFIG.audio.radarGain }),
+);
 let previousRadarSweepAngle: number | null = null;
 let radarSweepOwnerId: string | null = null;
 let radarSweepRange: number | null = null;
@@ -105,7 +126,19 @@ let worldCacheResolution = 0;
 const wakeTrails = new Map<string, WakeSample[]>();
 const wakeObservations = new Map<string, WakeObservation>();
 const effects: Array<{ event: GameEvent; at: number }> = [];
-const feed: Array<{ text: string; at: number }> = [];
+const feed: Array<{ text: string; at: number; hit?: HitFeedLine }> = [];
+const hitMarkers: HitMarker[] = [];
+const hitNumbers = new Map<string, HitNumber>();
+const pendingHitFeed: PendingHitFeed[] = [];
+const recentSinkTimes = new Map<string, { at: number; playerId?: string }>();
+const knownPositions = new Map<string, { x: number; y: number }>();
+const ownDamageTimes: Array<{ at: number; amount: number }> = [];
+const pendingSplashSounds: PendingSplashSound[] = [];
+let damageVignetteAt = -Infinity;
+let reticleFlashAt = -Infinity;
+let effectsSettings: EffectsSettings = DEFAULT_EFFECTS_SETTINGS;
+let previousResupplying: boolean | null = null;
+let ownSinking = false;
 let socket: WebSocket | null = null;
 let world: World | null = null;
 let bases: Base[] = [];
@@ -144,6 +177,43 @@ let serverTimeOffset = 0;
 let hasServerTimeOffset = false;
 let reconnectTimer: number | undefined;
 let reconnectForLobby = false;
+
+function storedEffects(): string | null {
+  try {
+    return localStorage.getItem(EFFECTS_STORAGE_KEY);
+  } catch {
+    return null;
+  }
+}
+
+effectsSettings = parseEffectsSettings(storedEffects());
+audio.setVolume(effectsSettings.volume);
+
+function listenerPosition(): { x: number; y: number } {
+  const own = predictedOwn ?? latestSnapshot?.frigates.find((frigate) => frigate.playerId === ownId);
+  if (!own) return { x: 0, y: 0 };
+  if ((own.status === "alive" && !ownSinking) || !world) return { x: own.x, y: own.y };
+  const camera = computeCamera({ x: own.x, y: own.y }, world);
+  return {
+    x: camera.x + GAME_CONFIG.screen.width / 2,
+    y: camera.y + GAME_CONFIG.screen.height / 2,
+  };
+}
+
+function worldSoundPosition(x: number, y: number): SoundPosition {
+  const listener = listenerPosition();
+  return { distance: Math.hypot(x - listener.x, y - listener.y), dx: x - listener.x };
+}
+
+function saveEffectsSettings(next: EffectsSettings): void {
+  effectsSettings = next;
+  audio.setVolume(next.volume);
+  try {
+    localStorage.setItem(EFFECTS_STORAGE_KEY, JSON.stringify(next));
+  } catch {
+    // Keep the current settings for this session if storage is unavailable.
+  }
+}
 
 function resetRadarSweep(): void {
   radarSweep.clear();
@@ -269,6 +339,16 @@ function handleMessage(message: ServerMessage): void {
     hasServerTimeOffset = false;
     ownId = message.playerId;
     latestSnapshot = null;
+    previousResupplying = null;
+    ownSinking = false;
+    for (const splash of pendingSplashSounds) window.clearTimeout(splash.timer);
+    pendingSplashSounds.length = 0;
+    knownPositions.clear();
+    hitMarkers.length = 0;
+    hitNumbers.clear();
+    pendingHitFeed.length = 0;
+    ownDamageTimes.length = 0;
+    recentSinkTimes.clear();
     gameSettings = { ...message.settings };
     bases = message.bases;
     sessionStorage.setItem("warships.token", message.token);
@@ -300,9 +380,12 @@ function handleMessage(message: ServerMessage): void {
     }
     onSnapshot(message);
   } else if (message.type === "projectiles") {
+    playProjectileSounds(message);
     projectileStore.apply(message);
   } else if (message.type === "event") {
-    effects.push({ event: message.event, at: performance.now() });
+    const at = performance.now();
+    effects.push({ event: message.event, at });
+    handleGameEvent(message.event, at);
     if (message.event.message) addFeed(message.event.message);
   } else if (message.type === "error") {
     if (message.code === "kicked") {
@@ -319,6 +402,156 @@ function handleMessage(message: ServerMessage): void {
     errorBox.textContent = errors[message.code] ?? "Unable to join.";
     if (message.code === "full") shouldAutoJoin = true;
     lobby.hidden = false;
+  }
+}
+
+function playProjectileSounds(message: Extract<ServerMessage, { type: "projectiles" }>): void {
+  if (message.reset) return;
+  const playerShells = new Map<string, Shell>();
+  const turretShells = new Map<string, Shell>();
+  const torpedoSpreads = new Map<string, Torpedo>();
+  for (const shell of message.shells) {
+    if (shell.turretBaseId) turretShells.set(shell.turretBaseId, shell);
+    else playerShells.set(shell.ownerId, shell);
+  }
+  for (const torpedo of message.torpedoes) torpedoSpreads.set(torpedo.ownerId, torpedo);
+  for (const shell of playerShells.values()) {
+    const position = shell.ownerId === ownId
+      ? { own: true }
+      : worldSoundPosition(shell.startX, shell.startY);
+    audio.play("cannon-fire", position);
+  }
+  for (const shell of turretShells.values()) {
+    audio.play("turret-fire", worldSoundPosition(shell.startX, shell.startY));
+  }
+  for (const torpedo of torpedoSpreads.values()) {
+    const position = torpedo.ownerId === ownId
+      ? { own: true }
+      : worldSoundPosition(torpedo.x, torpedo.y);
+    audio.play("torpedo-launch", position);
+  }
+}
+
+function cancelPendingSplashAt(x: number, y: number): void {
+  for (let index = pendingSplashSounds.length - 1; index >= 0; index -= 1) {
+    const splash = pendingSplashSounds[index];
+    if (!splash || Math.hypot(splash.x - x, splash.y - y) > GAME_CONFIG.cannon.damageRadius) continue;
+    window.clearTimeout(splash.timer);
+    pendingSplashSounds.splice(index, 1);
+  }
+}
+
+function handleGameEvent(event: GameEvent, at: number): void {
+  if (event.type === "explosion" && event.x !== undefined && event.y !== undefined) {
+    if (event.cause === "torpedo" && event.kind === "hit") {
+      audio.play("torpedo-hit", worldSoundPosition(event.x, event.y));
+    } else if (event.cause !== "torpedo" && event.kind === "splash") {
+      const splash: PendingSplashSound = { x: event.x, y: event.y, timer: 0 };
+      splash.timer = window.setTimeout(() => {
+        const index = pendingSplashSounds.indexOf(splash);
+        if (index < 0) return;
+        pendingSplashSounds.splice(index, 1);
+        audio.play("splash", worldSoundPosition(splash.x, splash.y));
+      }, GAME_CONFIG.audio.splashDelayMs);
+      pendingSplashSounds.push(splash);
+    } else if (event.cause !== "torpedo" && event.kind === "land") {
+      cancelPendingSplashAt(event.x, event.y);
+      audio.play("shell-explosion", worldSoundPosition(event.x, event.y));
+    } else if (event.cause !== "torpedo" && event.kind === "hit") {
+      cancelPendingSplashAt(event.x, event.y);
+      audio.play("shell-explosion", worldSoundPosition(event.x, event.y));
+    }
+  } else if (event.type === "sank" && event.targetId) {
+    if (event.targetId === ownId) ownSinking = true;
+    const position = knownPositions.get(event.targetId);
+    if (position) audio.play("sinking", worldSoundPosition(position.x, position.y));
+    recentSinkTimes.set(`frigate:${event.targetId}`, {
+      at,
+      ...(event.playerId ? { playerId: event.playerId } : {}),
+    });
+  } else if (event.type === "damage") {
+    if (event.x !== undefined && event.y !== undefined && (event.cause === "shell" || event.cause === "turret")) {
+      cancelPendingSplashAt(event.x, event.y);
+    }
+    handleDamageEvent(event, at);
+  } else if (event.playerId === ownId && event.type === "capture") {
+    audio.play("chime", { own: true });
+  } else if (event.playerId === ownId && event.type === "turret" && /installed|repaired/i.test(event.message ?? "")) {
+    audio.play("chime", { own: true });
+  }
+}
+
+function handleDamageEvent(event: GameEvent, at: number): void {
+  if (event.amount === undefined || event.x === undefined || event.y === undefined) return;
+  if (event.targetId === ownId) {
+    audio.play("own-damage", { own: true });
+    ownDamageTimes.push({ at, amount: event.amount });
+    damageVignetteAt = at;
+  }
+  const targetKey = damageTargetKey(event);
+  if (
+    !targetKey
+    || event.playerId !== ownId
+    || event.cause === "turret"
+    || (event.targetId === ownId)
+  ) return;
+
+  const hit = mergeHitNumber(
+    hitNumbers.get(targetKey),
+    { targetKey, x: event.x, y: event.y, amount: event.amount },
+    at,
+  );
+  hitNumbers.set(targetKey, hit);
+  hitMarkers.push({ x: event.x, y: event.y, at });
+  if (event.cause === "shell") reticleFlashAt = at;
+  pendingHitFeed.push({
+    targetKey,
+    ...(event.targetId ? { targetId: event.targetId } : {}),
+    label: hitFeedLabel(event),
+    amount: event.amount,
+    at,
+  });
+}
+
+function hitFeedLabel(event: GameEvent): string {
+  if (event.baseId) {
+    const ownerId = bases.find((base) => base.id === event.baseId)?.ownerId;
+    const ownerName = latestSnapshot?.players.find((player) => player.playerId === ownerId)?.name ?? "Unknown";
+    return `You hit ${ownerName}'s turret`;
+  }
+  const targetName = latestSnapshot?.frigates.find((frigate) => frigate.playerId === event.targetId)?.name
+    ?? latestSnapshot?.players.find((player) => player.playerId === event.targetId)?.name
+    ?? "Unknown";
+  return `You hit ${targetName}`;
+}
+
+function flushPendingHitFeed(now: number): void {
+  for (let index = pendingHitFeed.length - 1; index >= 0; index -= 1) {
+    const pending = pendingHitFeed[index];
+    if (!pending || now - pending.at < GAME_CONFIG.effects.damageFeedDelayMs) continue;
+    pendingHitFeed.splice(index, 1);
+    const sink = recentSinkTimes.get(pending.targetKey);
+    if (
+      sink?.playerId === ownId
+      && sink.at >= pending.at
+      && sink.at - pending.at <= GAME_CONFIG.effects.sinkSuppressionWindowMs
+    ) continue;
+    const existing = [...feed].reverse().find((entry) => entry.hit?.targetKey === pending.targetKey);
+    const previous = existing?.hit;
+    const updated = mergeHitFeedLine(
+      previous ? [previous] : [],
+      { targetKey: pending.targetKey, label: pending.label, amount: pending.amount },
+      now,
+    )[0];
+    if (!updated) continue;
+    if (existing && now - existing.at <= GAME_CONFIG.effects.feedMergeWindowMs) {
+      existing.text = formatHitFeedLine(updated);
+      existing.at = now;
+      existing.hit = updated;
+    } else {
+      feed.push({ text: formatHitFeedLine(updated), at: now, hit: updated });
+      feed.splice(0, Math.max(0, feed.length - 8));
+    }
   }
 }
 
@@ -394,9 +627,11 @@ function sendJoin(): void {
 
 form.addEventListener("submit", (event) => {
   event.preventDefault();
+  audio.resumeOnGesture();
   shouldAutoJoin = true;
   sendJoin();
 });
+joinButton.addEventListener("click", () => audio.resumeOnGesture());
 
 const inputBitsByAction: Partial<Record<ControlAction, number>> = {
   hullLeft: INPUT_KEYS.turnLeft,
@@ -480,6 +715,7 @@ renderLobbyControlsHelp();
 void refreshKeyboardLayout();
 
 window.addEventListener("keydown", (event) => {
+  audio.resumeOnGesture();
   const target = event.target;
   const isTyping = target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement;
   if (!joined || isTyping) return;
@@ -595,14 +831,22 @@ function onSnapshot(snapshot: Snapshot): void {
         })),
       };
   latestSnapshot = snapshotWithBases;
-  if (!isOwnHost() && menuPending && menuPending.action !== "controls") menuPending = null;
+  if (!isOwnHost() && menuPending && menuPending.action !== "controls" && menuPending.action !== "effects") menuPending = null;
   const receivedAt = performance.now();
   serverTimeOffset = snapshotWithBases.serverTime - receivedAt / 1000;
   hasServerTimeOffset = true;
   snapshots.push({ receivedAt, value: snapshotWithBases });
   snapshots = snapshots.slice(-6);
   const own = snapshotWithBases.frigates.find((frigate) => frigate.playerId === ownId) as Frigate | undefined;
+  for (const frigate of snapshotWithBases.frigates) {
+    knownPositions.set(frigate.playerId, { x: frigate.x, y: frigate.y });
+  }
   if (own) {
+    ownSinking = own.status !== "alive";
+    if (typeof own.resupplying === "boolean") {
+      if (previousResupplying === true && !own.resupplying) audio.play("chime", { own: true });
+      previousResupplying = own.resupplying;
+    }
     if (own.status === "alive" && radarOwnStatus !== null && radarOwnStatus !== "alive") resetRadarSweep();
     radarOwnStatus = own.status;
     if (own.status !== "alive") throttleLevel = 0;
@@ -1215,14 +1459,16 @@ function drawReticle(frigate: Frigate, now: number): void {
   const reticleRadius = 30;
   const reloading = Math.max(0, frigate.cannonReadyAt - now);
   const progress = 1 - reloading / gameSettings.cannonReload;
+  const reticleFlash = performance.now() - reticleFlashAt < GAME_CONFIG.effects.reticleFlashDuration * 1000;
   ctx.save();
-  ctx.globalAlpha = reloading > 0 ? .35 : .95;
-  ctx.strokeStyle = "#5dffac";
+  ctx.globalAlpha = reticleFlash ? 1 : reloading > 0 ? .35 : .95;
+  ctx.strokeStyle = reticleFlash ? "#fff" : "#5dffac";
   ctx.fillStyle = "#5dffac";
   ctx.lineWidth = 1.2;
   ctx.beginPath();
   ctx.arc(x, y, reticleRadius, 0, Math.PI * 2);
   ctx.stroke();
+  ctx.strokeStyle = "#5dffac";
   ctx.beginPath();
   ctx.arc(x, y, 1.25, 0, Math.PI * 2);
   ctx.fill();
@@ -1303,6 +1549,82 @@ function drawReticle(frigate: Frigate, now: number): void {
     frigate.y + axisY * 19 + perpendicularY * 3,
   );
   ctx.stroke();
+  ctx.restore();
+}
+
+function drawHitFeedback(now: number): void {
+  for (let index = hitMarkers.length - 1; index >= 0; index -= 1) {
+    const marker = hitMarkers[index];
+    if (!marker) continue;
+    const age = (now - marker.at) / 1000;
+    if (age >= GAME_CONFIG.effects.hitMarkerDuration) {
+      hitMarkers.splice(index, 1);
+      continue;
+    }
+    ctx.save();
+    ctx.globalAlpha = 1 - age / GAME_CONFIG.effects.hitMarkerDuration;
+    ctx.strokeStyle = "#fff";
+    ctx.lineWidth = GAME_CONFIG.effects.hitMarkerLineWidth;
+    for (let arm = 0; arm < 4; arm += 1) {
+      const angle = Math.PI / 4 + arm * Math.PI / 2;
+      ctx.beginPath();
+      ctx.moveTo(
+        marker.x + Math.cos(angle) * GAME_CONFIG.effects.hitMarkerInnerRadius,
+        marker.y + Math.sin(angle) * GAME_CONFIG.effects.hitMarkerInnerRadius,
+      );
+      ctx.lineTo(
+        marker.x + Math.cos(angle) * GAME_CONFIG.effects.hitMarkerOuterRadius,
+        marker.y + Math.sin(angle) * GAME_CONFIG.effects.hitMarkerOuterRadius,
+      );
+      ctx.stroke();
+    }
+    ctx.restore();
+  }
+  for (const [targetKey, hit] of hitNumbers) {
+    const age = (now - hit.startedAt) / 1000;
+    if (age >= GAME_CONFIG.effects.damageNumberDuration) {
+      hitNumbers.delete(targetKey);
+      continue;
+    }
+    const fadeStart = GAME_CONFIG.effects.damageNumberDuration - GAME_CONFIG.effects.damageNumberFade;
+    ctx.save();
+    ctx.globalAlpha = age <= fadeStart ? 1 : (GAME_CONFIG.effects.damageNumberDuration - age) / GAME_CONFIG.effects.damageNumberFade;
+    ctx.fillStyle = "#fff";
+    ctx.font = `700 ${GAME_CONFIG.effects.damageNumberFontSize}px Manrope, sans-serif`;
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.fillText(
+      `−${hit.amount}`,
+      hit.x,
+      hit.y - GAME_CONFIG.effects.damageNumberRise * age / GAME_CONFIG.effects.damageNumberDuration,
+    );
+    ctx.restore();
+  }
+}
+
+function drawDamageVignette(now: number): void {
+  const age = now - damageVignetteAt;
+  if (age < 0 || age >= GAME_CONFIG.effects.vignetteDuration * 1000) return;
+  const alpha = 1 - age / (GAME_CONFIG.effects.vignetteDuration * 1000);
+  ctx.save();
+  ctx.beginPath();
+  ctx.rect(0, 0, GAME_CONFIG.screen.width, GAME_CONFIG.screen.height);
+  ctx.clip();
+  const centerX = GAME_CONFIG.screen.width / 2;
+  const centerY = GAME_CONFIG.screen.height / 2;
+  const gradient = ctx.createRadialGradient(
+    centerX,
+    centerY,
+    GAME_CONFIG.effects.vignetteInnerRadius,
+    centerX,
+    centerY,
+    GAME_CONFIG.effects.vignetteOuterRadius,
+  );
+  gradient.addColorStop(0, "rgba(220, 40, 40, 0)");
+  gradient.addColorStop(1, "rgba(220, 40, 40, .35)");
+  ctx.globalAlpha = alpha;
+  ctx.fillStyle = gradient;
+  ctx.fillRect(0, 0, GAME_CONFIG.screen.width, GAME_CONFIG.screen.height);
   ctx.restore();
 }
 
@@ -1801,20 +2123,25 @@ function drawFullScoreboard(snapshot: Snapshot, width: number, height: number): 
 
 function drawMenu(snapshot: Snapshot, width: number, height: number): void {
   const host = snapshot.players.find((player) => player.playerId === ownId)?.host ?? false;
-  if (!host && menuPending && menuPending.action !== "controls") menuPending = null;
+  if (!host && menuPending && menuPending.action !== "controls" && menuPending.action !== "effects") menuPending = null;
   const controlsPending = menuPending?.action === "controls" ? menuPending : null;
+  const effectsPending = menuPending?.action === "effects" ? menuPending : null;
   const left = width / 2 - 184;
   const centerY = height / 2;
-  const panelWidth = controlsPending ? 520 : 440;
+  const panelWidth = controlsPending || effectsPending ? 520 : 440;
   const settingsView = menuPending?.action === "settings";
-  const panelHeight = controlsPending ? 560 : settingsView ? 461 : 350;
+  const panelHeight = controlsPending ? 560 : effectsPending ? 260 : settingsView ? 461 : 350;
   const panelTop = settingsView ? centerY - 175 : centerY - panelHeight / 2;
   ctx.fillStyle = "rgba(3, 13, 20, .88)";
   ctx.fillRect(width / 2 - panelWidth / 2, panelTop, panelWidth, panelHeight);
   ctx.fillStyle = "#eff8f6";
   ctx.font = "800 20px Manrope, sans-serif";
   ctx.textAlign = "left";
-  ctx.fillText(controlsPending ? "PLAYER CONTROLS" : host ? "HOST CONTROL" : "MENU", left, centerY - (controlsPending ? 242 : 142));
+  ctx.fillText(
+    controlsPending ? "PLAYER CONTROLS" : effectsPending ? "SOUND & EFFECTS" : host ? "HOST CONTROL" : "MENU",
+    left,
+    centerY - (controlsPending ? 242 : effectsPending ? 100 : 142),
+  );
   ctx.fillStyle = "#9bb4bb";
   ctx.font = "12px Manrope, sans-serif";
   if (controlsPending) {
@@ -1848,6 +2175,35 @@ function drawMenu(snapshot: Snapshot, width: number, height: number): void {
     ctx.font = "10px DM Mono, monospace";
     ctx.textAlign = "center";
     ctx.fillText("↑↓ select · Enter change · D defaults · Esc back", width / 2, centerY + 256);
+    ctx.textAlign = "left";
+    return;
+  }
+  if (effectsPending) {
+    ctx.fillText("Changes apply immediately and stay in this browser.", width / 2 - 236, centerY - 70);
+    const rows = [
+      { label: "Volume", value: `${effectsSettings.volume}%` },
+      { label: "Screen shake", value: effectsSettings.shake ? "On" : "Off" },
+    ];
+    rows.forEach((row, index) => {
+      const y = centerY - 25 + index * 42;
+      const selected = index === effectsPending.index;
+      if (selected) {
+        ctx.fillStyle = "rgba(107, 224, 207, .14)";
+        ctx.fillRect(width / 2 - 236, y - 7, 472, 28);
+      }
+      ctx.fillStyle = selected ? "#6be0cf" : "#d7e5e9";
+      ctx.font = "600 14px Manrope, sans-serif";
+      ctx.fillText(`${selected ? "▸" : " "}  ${row.label}`, width / 2 - 228, y);
+      ctx.textAlign = "right";
+      ctx.fillStyle = "#d7e5e9";
+      ctx.font = "500 13px DM Mono, monospace";
+      ctx.fillText(row.value, width / 2 + 228, y);
+      ctx.textAlign = "left";
+    });
+    ctx.fillStyle = "#8ea9b0";
+    ctx.font = "10px DM Mono, monospace";
+    ctx.textAlign = "center";
+    ctx.fillText("↑↓ SELECT · ←→ CHANGE · ESC BACK", width / 2, centerY + 104);
     ctx.textAlign = "left";
     return;
   }
@@ -1924,9 +2280,11 @@ function drawMenu(snapshot: Snapshot, width: number, height: number): void {
     ctx.fillStyle = "#6be0cf";
     ctx.fillText("S  Settings", left, centerY + 25);
     ctx.fillText("C  Controls", left, centerY + 55);
+    ctx.fillText("V  Sound & effects", left, centerY + 85);
   } else {
     ctx.fillStyle = "#6be0cf";
     ctx.fillText("C  Controls", left, centerY - 65);
+    ctx.fillText("V  Sound & effects", left, centerY - 35);
   }
   ctx.fillStyle = "#8ea9b0";
   ctx.font = "10px DM Mono, monospace";
@@ -1937,8 +2295,8 @@ function drawMenu(snapshot: Snapshot, width: number, height: number): void {
       : menuPending
         ? "ENTER CONFIRM · ESC CANCEL"
         : host
-          ? "C CONTROLS · ESC TO CLOSE"
-          : "C controls · Esc close";
+          ? "C CONTROLS · V SOUND & EFFECTS · ESC CLOSE"
+          : "C CONTROLS · V SOUND & EFFECTS · ESC CLOSE";
   ctx.textAlign = "center";
   ctx.fillText(footer, width / 2, centerY + (menuPending?.action === "settings" ? 262 : 140));
   ctx.textAlign = "left";
@@ -1964,7 +2322,29 @@ window.addEventListener("keydown", (event) => {
   const target = event.target;
   if (!joined || target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement || !menuOpen) return;
   if (event.code === "Escape") return;
-  if (!isOwnHost() && menuPending && menuPending.action !== "controls") menuPending = null;
+  if (!isOwnHost() && menuPending && menuPending.action !== "controls" && menuPending.action !== "effects") menuPending = null;
+
+  if (menuPending?.action === "effects") {
+    const effectsPending = menuPending;
+    const isArrow = event.code === "ArrowUp" || event.code === "ArrowDown"
+      || event.code === "ArrowLeft" || event.code === "ArrowRight";
+    if (isArrow) event.preventDefault();
+    if ((event.code === "ArrowUp" || event.code === "ArrowDown") && !event.repeat) {
+      const direction = event.code === "ArrowUp" ? -1 : 1;
+      menuPending = { ...effectsPending, index: Math.max(0, Math.min(1, effectsPending.index + direction)) };
+    } else if ((event.code === "ArrowLeft" || event.code === "ArrowRight") && !event.repeat) {
+      const direction = event.code === "ArrowLeft" ? -1 : 1;
+      if (effectsPending.index === 0) {
+        saveEffectsSettings({
+          ...effectsSettings,
+          volume: Math.max(0, Math.min(100, effectsSettings.volume + direction * GAME_CONFIG.effects.volumeStep)),
+        });
+      } else {
+        saveEffectsSettings({ ...effectsSettings, shake: !effectsSettings.shake });
+      }
+    }
+    return;
+  }
 
   if (menuPending?.action === "controls") {
     if (menuPending.capturing || event.repeat) return;
@@ -2051,6 +2431,11 @@ window.addEventListener("keydown", (event) => {
     menuPending = { action: "controls", index: 0, capturing: false, hint: "" };
     return;
   }
+  if (event.code === "KeyV") {
+    event.preventDefault();
+    menuPending = { action: "effects", index: 0 };
+    return;
+  }
   if (!isOwnHost()) return;
   if (event.code === "KeyS") {
     for (const code of ["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight"]) pressed.delete(code);
@@ -2072,6 +2457,26 @@ function addFeed(text: string): void {
 function renderFrame(now: number): void {
   const viewport = resizeCanvas();
   const serverNow = now / 1000 + serverTimeOffset;
+  ownDamageTimes.splice(
+    0,
+    ownDamageTimes.length,
+    ...ownDamageTimes.filter((damage) => now - damage.at < GAME_CONFIG.effects.shakeDuration * 1000),
+  );
+  let shakeAmplitude = 0;
+  if (effectsSettings.shake) {
+    for (const damage of ownDamageTimes) {
+      const elapsed = (now - damage.at) / 1000;
+      const remaining = 1 - elapsed / GAME_CONFIG.effects.shakeDuration;
+      const amplitude = Math.min(
+        GAME_CONFIG.effects.shakeMaxAmplitude,
+        GAME_CONFIG.effects.shakePerDamage * damage.amount,
+      ) * Math.max(0, remaining);
+      shakeAmplitude = Math.max(shakeAmplitude, amplitude);
+    }
+  }
+  const shakeX = (Math.random() * 2 - 1) * shakeAmplitude;
+  const shakeY = (Math.random() * 2 - 1) * shakeAmplitude;
+  flushPendingHitFeed(now);
   if (hasServerTimeOffset) {
     projectileServerTime = performance.now() / 1000 + serverTimeOffset - GAME_CONFIG.network.interpolationDelay;
     renderedProjectiles = projectileStore.at(
@@ -2101,7 +2506,7 @@ function renderFrame(now: number): void {
     ctx.beginPath();
     ctx.rect(0, 0, GAME_CONFIG.screen.width, GAME_CONFIG.screen.height);
     ctx.clip();
-    ctx.translate(-camera.x, -camera.y);
+    ctx.translate(-camera.x + shakeX, -camera.y + shakeY);
     renderTerrain(
       world,
       camera.x,
@@ -2126,6 +2531,7 @@ function renderFrame(now: number): void {
     for (const frigate of visible) if (frigate.playerId !== ownId) drawFrigate(frigate, serverNow, debugVisible);
     if (own) drawFrigate(own, serverNow, debugVisible);
     for (const effect of effects) drawExplosion(effect, now);
+    drawHitFeedback(now);
     if (own) drawReticle(own, serverNow);
     if (own) drawCaptureProgress(
       ctx,
@@ -2148,6 +2554,7 @@ function renderFrame(now: number): void {
     ctx.textAlign = "center";
     ctx.fillText("CONNECTING TO THE FLEET…", logicalWidth / 2, logicalHeight / 2);
   }
+  drawDamageVignette(now);
   if (snapshot) {
     ctx.setTransform(viewport.dpr * viewport.scale, 0, 0, viewport.dpr * viewport.scale, 0, 0);
     drawHud(snapshot, own, serverNow, viewport.width / viewport.scale, viewport.height / viewport.scale);

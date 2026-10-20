@@ -368,6 +368,173 @@ describe("cannons", () => {
   });
 });
 
+describe("damage events", () => {
+  it("emits shell damage with the frigate target position and actual amount", () => {
+    const shooter = frigate("shooter");
+    const target = frigate("target", 5400, 4500);
+    const state = createGameState(openWorld());
+    state.frigates = { shooter, target };
+    state.scores = scores(shooter, target);
+    state.shells.push({
+      id: "shell",
+      ownerId: shooter.playerId,
+      startX: shooter.x,
+      startY: shooter.y,
+      impactX: target.x,
+      impactY: target.y,
+      elapsed: 0,
+      duration: 0,
+    });
+
+    stepGame(state, {}, dt, 1);
+
+    expect(state.events).toContainEqual(expect.objectContaining({
+      type: "damage",
+      playerId: shooter.playerId,
+      targetId: target.playerId,
+      x: target.x,
+      y: target.y,
+      amount: GAME_CONFIG.cannon.damage,
+      cause: "shell",
+    }));
+    expect(state.events.find((event) => event.type === "damage")).not.toHaveProperty("message");
+  });
+
+  it("emits torpedo damage when a spread hits a frigate", () => {
+    const shooter = frigate("shooter");
+    const target = frigate("target", 5400, 4500);
+    const state = createGameState(openWorld());
+    state.frigates = { shooter, target };
+    state.scores = scores(shooter, target);
+    state.torpedoes.push({
+      id: "torpedo",
+      ownerId: shooter.playerId,
+      x: target.x - 30,
+      y: target.y,
+      angle: 0,
+      elapsed: 1,
+      speed: GAME_CONFIG.torpedo.speed * 3,
+    });
+
+    stepGame(state, {}, dt, 1);
+
+    expect(state.events).toContainEqual(expect.objectContaining({
+      type: "damage",
+      playerId: shooter.playerId,
+      targetId: target.playerId,
+      amount: GAME_CONFIG.torpedo.damage,
+      cause: "torpedo",
+    }));
+  });
+
+  it("emits land damage after hull collision and turret-on-frigate damage with the turret owner", () => {
+    const world = openWorld();
+    const wallColumn = 100;
+    for (let row = 0; row < world.rows; row += 1) world.grid[row * world.columns + wallColumn] = 1;
+    const ship = frigate(
+      "coast",
+      wallColumn * GAME_CONFIG.world.tileSize - GAME_CONFIG.frigate.length / 2,
+      4500,
+    );
+    ship.speed = GAME_CONFIG.frigate.maxForwardSpeed;
+    const landState = createGameState(world);
+    landState.frigates.coast = ship;
+    landState.scores = scores(ship);
+
+    stepGame(landState, { coast: { ...quietInput, throttle: 3 } }, dt, 1);
+
+    expect(landState.events).toContainEqual(expect.objectContaining({
+      type: "damage",
+      targetId: ship.playerId,
+      x: ship.x,
+      y: ship.y,
+      amount: GAME_CONFIG.land.damage,
+      cause: "land",
+    }));
+
+    const turretState = createGameState(openWorld(), [homeSite()]);
+    const base = turretState.bases[0]!;
+    base.active = true;
+    base.ownerId = "owner";
+    base.turret = "active";
+    base.turretReadyAt = 100;
+    const owner = frigate("owner", 8000, 8000);
+    const target = frigate("target", 6000, 6000);
+    turretState.frigates = { owner, target };
+    turretState.scores = scores(owner, target);
+    turretState.shells.push({
+      id: "turret-shell",
+      ownerId: owner.playerId,
+      turretBaseId: base.id,
+      startX: base.cityX,
+      startY: base.cityY,
+      impactX: target.x,
+      impactY: target.y,
+      elapsed: 0,
+      duration: 0,
+    });
+
+    stepGame(turretState, {}, dt, 1);
+
+    expect(turretState.events).toContainEqual(expect.objectContaining({
+      type: "damage",
+      playerId: owner.playerId,
+      targetId: target.playerId,
+      amount: GAME_CONFIG.cannon.damage,
+      cause: "turret",
+    }));
+  });
+
+  it("emits shell damage to a turret and no frigate damage during spawn protection", () => {
+    const state = createGameState(openWorld(), [homeSite()]);
+    const base = state.bases[0]!;
+    base.active = true;
+    base.ownerId = "defender";
+    base.turret = "active";
+    base.turretHp = GAME_CONFIG.bases.turretHp;
+    base.turretReadyAt = 100;
+    const shooter = frigate("shooter", 9000, 8000);
+    const defender = frigate("defender", 8000, 9000);
+    const protectedTarget = frigate("protected", 7000, 7000);
+    protectedTarget.spawnProtectedUntil = 10;
+    state.frigates = { shooter, defender, protected: protectedTarget };
+    state.scores = scores(shooter, defender, protectedTarget);
+    state.shells.push({
+      id: "turret-hit",
+      ownerId: shooter.playerId,
+      startX: base.cityX,
+      startY: base.cityY,
+      impactX: base.cityX,
+      impactY: base.cityY,
+      elapsed: 0,
+      duration: 0,
+    }, {
+      id: "protected-hit",
+      ownerId: shooter.playerId,
+      startX: protectedTarget.x,
+      startY: protectedTarget.y,
+      impactX: protectedTarget.x,
+      impactY: protectedTarget.y,
+      elapsed: 0,
+      duration: 0,
+    });
+
+    stepGame(state, {}, dt, 1);
+
+    expect(state.events).toContainEqual({
+      type: "damage",
+      playerId: shooter.playerId,
+      baseId: base.id,
+      x: base.cityX,
+      y: base.cityY,
+      amount: GAME_CONFIG.cannon.damage,
+      cause: "shell",
+    });
+    expect(protectedTarget.hp).toBe(maxHp);
+    expect(state.events.filter((event) => event.type === "damage" && event.targetId === protectedTarget.playerId)).toEqual([]);
+  });
+});
+
 describe("torpedoes and scoring", () => {
   it("launches a 3-torpedo spread, hits hulls for configured damage, and uses the configured reload", () => {
     const world = openWorld();

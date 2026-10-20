@@ -2,6 +2,12 @@
 
 All notable changes to Warships are recorded here. Versions follow semantic versioning: patch for fixes, minor for new features, major for breaking changes.
 
+## [Unreleased]
+
+- Synthesised positional sound effects for weapons, impacts, damage, sinking, radar contacts and harbour actions.
+- Sound volume and screen-shake settings, plus hit markers, merged damage numbers and local hit-feed feedback.
+- Own-boat damage adds a red vignette and optional world-layer shake.
+
 ## [2.0.0] — 2026-10-18
 
 Second major release. It implements specification v2.5. Rules and defaults changed (bases, supplies, speeds, default map size), hence the major version.

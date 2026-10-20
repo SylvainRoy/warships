@@ -28,6 +28,8 @@
 - Home and neutral bases, harbour resupply and capture, turrets, and home-base loss and return.
 - Distance-based fuel consumption and finite cannon and torpedo ammunition.
 - Host settings for neutral bases, fuel capacity, ammunition capacity, and harbour-action times.
+- Synthesised sound effects (no music).
+- Sound and effects settings, hit feedback, and own-damage feedback.
 
 ## Out of scope (v1) — candidates for later
 
@@ -36,7 +38,6 @@
 - AI-controlled boats (bots).
 - Power-ups, ship upgrades, different ship classes.
 - Chat.
-- Sound and music.
 
 ## Glossary
 

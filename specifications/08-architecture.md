@@ -19,6 +19,8 @@ The server serves the static client files **and** the WebSocket endpoint on the 
 - Own frigate: **client-side prediction** with server reconciliation, so controls feel instant even with latency.
 - Snapshots carry frigates and scores only. Each shell and torpedo is sent once on spawn; the server sends torpedo removals when they hit, touch land, or leave the world. A full projectile reset is sent after join and world regeneration. Clients advance projectiles along their known paths using the same delayed server clock as frigate interpolation (Q49).
 - The `welcome` message includes the current game settings; a `settings` message broadcasts host updates to joined clients.
+- Game events include `damage` notifications when a frigate loses HP or a shell damages a turret. They identify the target position, amount, cause, and source where applicable; these events carry no feed message. Clients use them for shooter-only hit feedback and own-damage effects.
+- Sound synthesis and hit/effects settings are client-only. They do not add assets or network messages; settings persist in localStorage.
 - Messages: JSON for v1; binary encoding only if bandwidth requires it.
 - Target playable latency: up to 150 ms round-trip.
 

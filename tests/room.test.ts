@@ -375,6 +375,54 @@ describe("multiplayer room", () => {
     }
   });
 
+  it("broadcasts damage events to every joined client without adding a message", () => {
+    const room = new Room(11, () => 0, openWorld, fixtureSites);
+    const shooterSocket = connect(room);
+    const targetSocket = connect(room);
+    join(room, shooterSocket, "Harbor");
+    join(room, targetSocket, "Buoy");
+    const shooterId = welcome(shooterSocket).playerId;
+    const targetId = welcome(targetSocket).playerId;
+    const shooter = room.game.frigates[shooterId]!;
+    const target = room.game.frigates[targetId]!;
+    shooter.x = 9000;
+    shooter.y = 8000;
+    shooter.spawnProtectedUntil = 0;
+    target.x = 8500;
+    target.y = 8000;
+    target.spawnProtectedUntil = 0;
+    room.game.shells.push({
+      id: "damage-shell",
+      ownerId: shooterId,
+      startX: shooter.x,
+      startY: shooter.y,
+      impactX: target.x,
+      impactY: target.y,
+      elapsed: 0,
+      duration: 0,
+    });
+
+    room.advanceTick();
+
+    for (const socket of [shooterSocket, targetSocket]) {
+      expect(socket.messages).toContainEqual(expect.objectContaining({
+        type: "event",
+        event: expect.objectContaining({
+          type: "damage",
+          playerId: shooterId,
+          targetId,
+          x: target.x,
+          y: target.y,
+          amount: GAME_CONFIG.cannon.damage,
+          cause: "shell",
+        }),
+      }));
+      const damageMessage = socket.messages.find((message) =>
+        message.type === "event" && message.event.type === "damage");
+      expect(damageMessage?.type === "event" ? damageMessage.event : undefined).not.toHaveProperty("message");
+    }
+  });
+
   it("sends base statuses only when changed and after world regeneration", () => {
     const room = new Room(11, () => 0, openWorld, fixtureSites);
     const socket = connect(room);

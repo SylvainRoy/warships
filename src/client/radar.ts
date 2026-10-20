@@ -27,7 +27,10 @@ type StoredRadarBlip = Omit<RadarBlip, "alpha">;
 export class RadarSweep {
   private readonly painted = new Map<string, StoredRadarBlip>();
 
-  constructor(private readonly colorForSlot: (slot: number) => string) {}
+  constructor(
+    private readonly colorForSlot: (slot: number) => string,
+    private readonly onPaint?: (frigate: RadarFrigate) => void,
+  ) {}
 
   update(
     prevAngle: number,
@@ -58,6 +61,7 @@ export class RadarSweep {
         color: this.colorForSlot(frigate.slot),
         paintedAt: now,
       });
+      this.onPaint?.(frigate);
     }
   }
 

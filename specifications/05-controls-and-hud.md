@@ -33,7 +33,7 @@ The game MUST work on both **Mac and PC** keyboards (Windows/Linux). Implementat
 
 ## Host menu
 
-Every player opens the shared menu with Esc. It is titled HOST CONTROL for the host and MENU for other players. C opens Controls for everyone. The host additionally has R for world regeneration, X for a score reset, K for a numbered list of captains to kick, and S for Settings; these actions remain host-only. Select a kick target with `Digit1`–`Digit3` or `Numpad1`–`Numpad3`. Enter or NumpadEnter confirms a pending action; Esc cancels it or returns from kick selection. Confirmations are shown in-game, not in browser dialogs. If host status is lost while the menu is open, host-only pending actions are dropped while the shared menu and Controls remain usable.
+Every player opens the shared menu with Esc. It is titled HOST CONTROL for the host and MENU for other players. C opens Controls and V opens Sound & effects for everyone. The host additionally has R for world regeneration, X for a score reset, K for a numbered list of captains to kick, and S for Settings; these actions remain host-only. Select a kick target with `Digit1`–`Digit3` or `Numpad1`–`Numpad3`. Enter or NumpadEnter confirms a pending action; Esc cancels it or returns from kick selection. Confirmations are shown in-game, not in browser dialogs. If host status is lost while the menu is open, host-only pending actions are dropped while the shared menu, Controls, and Sound & effects remain usable.
 
 In Settings, the rows include Boat speed, Rotation speed, Cannon rotation, Torpedo rotation, Shell speed, Torpedo speed, Cannon reload, Torpedo reload, Land coverage, Map size, Neutral bases, Fuel, Shells, Torpedoes, Resupply time, Capture time, and Repair time (Q120, Q133). Map size MUST default to Standard and offer Small, Standard, and Big; its row MUST immediately follow Land coverage. Up/Down selects a row, Left/Right changes its value, D restores defaults, Enter applies the draft, and Esc returns to the host menu. Changing Map size or Land coverage MUST make the hint say `Enter: apply + new map`; applying either immediately generates a new map while keeping scores.
 
@@ -43,9 +43,12 @@ Each browser stores its own bindings in `localStorage` under `warships.controls`
 
 Bindings use `KeyboardEvent.code` so they follow physical key positions. When supported, the client reads `navigator.keyboard.getLayoutMap()` at startup and refreshes it when Controls opens, displaying uppercase printed characters; otherwise it uses friendly QWERTY names. Arrows and Shift retain friendly names. While the shared menu is open, the boat keeps its throttle and ignores all bound game actions.
 
+The Sound & effects panel is available to all players. Up/Down selects Volume or Screen shake; Left/Right changes Volume from 0–100% in 10% steps or toggles shake On/Off. The default is 60% volume with shake On. Changes apply immediately and are saved only in the browser's `warships.effects` localStorage setting; invalid or missing values use defaults. Esc returns to the shared menu.
+
 ## In-world indicators
 
 - **Cannon target**: a green "modern" reticle (circle with four ticks and a centre dot) drawn on the map at the aim point, rendered above terrain. Its radius is 30 u, half the 60 u blast radius, so it marks the aim point rather than the full damage zone. The ticks span 25–27.5 u and the centre dot has a 1.25 u radius. The ticks are oriented along the line of fire from the frigate to the aim point. While reloading, a 2 u line-width arc at 33.5 u radius shows reload progress starting at that bearing.
+- **Hit feedback**: only the shooter sees a white X marker for 0.3 s and floating white bold `−N` damage number for 1 s after own shell or torpedo damage to an enemy frigate or turret. Nearby repeated hits on one target merge; own hit-feed lines update for the same target within 1 s. Shell hits flash the cannon reticle white for 0.15 s. No marker or damage number is shown for a hit that sinks the target.
 - **Cannon bearing arrow**: a filled triangle in the sight colour, from 60 u to 70 u from the frigate centre with a 4 u half-width, points along the cannon bearing and dims while reloading.
 - **Torpedo arrow**: a green, segmented radar-style arrow along the torpedo bearing: five equal shaft dashes from 19 u to 48 u radius, separated by 1.5 u gaps; an open chevron from a 56 u tip to points at 49 u radius and ±4.5 u perpendicular; and a 6 u base tick at 19 u. Its dash and chevron line width is 1.25 u and the base tick line width is 1 u. While reloading, completed dashes fill in, remaining dashes and the chevron dim, and the base tick dims; there is no reload arc.
 - **Frigate HP bars**: the small bar below a frigate is shown for enemies only; own hull integrity remains in the bottom-left HUD.
@@ -67,3 +70,9 @@ The own boat is a white 6 u triangle pointing along its heading. When the sweep 
 - The server MUST send fuel and ammunition only for the receiving player's own boat; other players' amounts MUST remain hidden (Q131).
 - Event feed (top-left): short messages "Alice sank Bob", "Carol joined", "World regenerated", fading after 5 s.
 - Death screen: "Sunk by *X*" + respawn countdown.
+
+## Sound and damage effects
+
+Sound effects are synthesised in code with Web Audio; there are no audio assets, music, or engine hum. Fire, splash, explosion, torpedo, hull damage, sinking, turret, radar-contact, capture, turret-install/repair, and resupply-complete sounds use the specified distinct synthesised cues. World sounds attenuate from 400 u to silence at 1,600 u and pan with world x position; own-boat sounds are centred and full volume. Sound is enabled after the first user gesture. The volume setting controls the master output; sounds are rate-limited and capped at 12 concurrent voices.
+
+Own-boat damage from any cause shakes only the world layer for 0.3 s when Screen shake is On, with an 8 u maximum amplitude scaled by damage and decaying linearly. A red vignette always flashes over the frame for 0.3 s. Shake changes only the camera offset; the 1600 × 900 u visible-area clip and HUD remain fixed.

@@ -89,7 +89,7 @@ export interface PlayerScore {
 }
 
 export interface GameEvent {
-  type: "explosion" | "sank" | "join" | "leave" | "host" | "capture" | "turret";
+  type: "explosion" | "sank" | "join" | "leave" | "host" | "capture" | "turret" | "damage";
   x?: number;
   y?: number;
   kind?: ExplosionKind;
@@ -97,6 +97,9 @@ export interface GameEvent {
   name?: string;
   targetId?: string;
   targetName?: string;
+  baseId?: string;
+  amount?: number;
+  cause?: "shell" | "torpedo" | "land" | "turret";
   message?: string;
 }
 
@@ -598,8 +601,20 @@ export function stepBases(
   }
 }
 
-function emitExplosion(state: GameState, x: number, y: number, kind: ExplosionKind): void {
-  state.events.push({ type: "explosion", x, y, kind });
+function emitExplosion(
+  state: GameState,
+  x: number,
+  y: number,
+  kind: ExplosionKind,
+  cause?: "shell" | "torpedo" | "land" | "turret",
+): void {
+  state.events.push({
+    type: "explosion",
+    x,
+    y,
+    kind,
+    ...(cause === "torpedo" ? { cause } : {}),
+  });
 }
 
 function sinkFrigate(
@@ -639,10 +654,23 @@ function damageFrigate(
   sourceId: string | null,
   now: number,
   sourceLabel?: string,
+  cause: "shell" | "torpedo" | "turret" = "shell",
 ): void {
   if (target.status !== "alive" || now < target.spawnProtectedUntil) return;
+  const previousHp = target.hp;
   target.hp = Math.max(0, target.hp - amount);
+  const damage = previousHp - target.hp;
+  if (damage <= 0) return;
   target.lastDamageSource = sourceId;
+  state.events.push({
+    type: "damage",
+    ...(sourceId !== null ? { playerId: sourceId } : {}),
+    targetId: target.playerId,
+    x: target.x,
+    y: target.y,
+    amount: damage,
+    cause,
+  });
   if (target.hp === 0) sinkFrigate(state, target, sourceId, now, sourceLabel);
 }
 
@@ -751,8 +779,19 @@ export function stepGame(state: GameState, inputs: Record<string, FrigateInput |
     }
     const input = inputs[frigate.playerId] ?? { seq: 0, keys: 0, throttle: 0, fireCannon: false, fireTorpedo: false };
     if (frigate.status === "alive") {
+      const previousHp = frigate.hp;
       const updated = applyFrigateInput(frigate, input, dt, state.world, now, state.settings);
       Object.assign(frigate, updated);
+      if (frigate.hp < previousHp) {
+        state.events.push({
+          type: "damage",
+          targetId: frigate.playerId,
+          x: frigate.x,
+          y: frigate.y,
+          amount: previousHp - frigate.hp,
+          cause: "land",
+        });
+      }
       if (frigate.hp <= 0) sinkFrigate(state, frigate, frigate.playerId, now);
       const cannonEdge = input.fireCannon && !frigate.lastFireCannon;
       const torpedoEdge = input.fireTorpedo && !frigate.lastFireTorpedo;
@@ -787,7 +826,8 @@ export function stepGame(state: GameState, inputs: Record<string, FrigateInput |
       continue;
     }
     const kind: ExplosionKind = isLandAt(state.world, shell.impactX, shell.impactY) ? "land" : "splash";
-    emitExplosion(state, shell.impactX, shell.impactY, kind);
+    const shellCause = shell.turretBaseId ? "turret" : "shell";
+    emitExplosion(state, shell.impactX, shell.impactY, kind, shellCause);
     const shooterName = playerName(state, shell.ownerId);
     const sourceLabel = shell.turretBaseId ? `${shooterName}'s turret` : undefined;
     for (const target of Object.values(state.frigates)) {
@@ -796,8 +836,16 @@ export function stepGame(state: GameState, inputs: Record<string, FrigateInput |
         && !(shell.turretBaseId && target.playerId === shell.ownerId)
         && pointToHullDistance(shell.impactX, shell.impactY, target) <= GAME_CONFIG.cannon.damageRadius
       ) {
-        damageFrigate(state, target, GAME_CONFIG.cannon.damage, shell.ownerId, now, sourceLabel);
-        if (target.hp > 0) emitExplosion(state, shell.impactX, shell.impactY, "hit");
+        damageFrigate(
+          state,
+          target,
+          GAME_CONFIG.cannon.damage,
+          shell.ownerId,
+          now,
+          sourceLabel,
+          shell.turretBaseId ? "turret" : "shell",
+        );
+        if (target.hp > 0) emitExplosion(state, shell.impactX, shell.impactY, "hit", shellCause);
       }
     }
     for (const base of state.bases) {
@@ -807,10 +855,20 @@ export function stepGame(state: GameState, inputs: Record<string, FrigateInput |
         || base.ownerId === shell.ownerId
         || distanceToCity(base, shell.impactX, shell.impactY) > GAME_CONFIG.cannon.damageRadius
       ) continue;
+      const previousHp = base.turretHp;
       base.turretHp = Math.max(0, base.turretHp - GAME_CONFIG.cannon.damage);
+      state.events.push({
+        type: "damage",
+        playerId: shell.ownerId,
+        baseId: base.id,
+        x: base.cityX,
+        y: base.cityY,
+        amount: previousHp - base.turretHp,
+        cause: "shell",
+      });
       if (base.turretHp > 0) continue;
       base.turret = "destroyed";
-      emitExplosion(state, base.cityX, base.cityY, "hit");
+      emitExplosion(state, base.cityX, base.cityY, "hit", shellCause);
       const ownerName = base.ownerId ? playerName(state, base.ownerId) : "Unknown";
       state.events.push({
         type: "turret",
@@ -837,7 +895,7 @@ export function stepGame(state: GameState, inputs: Record<string, FrigateInput |
       if (isLandAt(state.world, x, y)) {
         torpedo.x = x;
         torpedo.y = y;
-        emitExplosion(state, x, y, "land");
+        emitExplosion(state, x, y, "land", "torpedo");
         exploded = true;
         break;
       }
@@ -846,8 +904,8 @@ export function stepGame(state: GameState, inputs: Record<string, FrigateInput |
       for (const target of Object.values(state.frigates)) {
         if (target.status !== "alive" || (target.playerId === torpedo.ownerId && torpedo.elapsed < GAME_CONFIG.torpedo.armingTime)) continue;
         if (segmentHitsHull(oldX, oldY, x, y, target)) {
-          damageFrigate(state, target, GAME_CONFIG.torpedo.damage, torpedo.ownerId, now);
-          emitExplosion(state, x, y, "hit");
+          damageFrigate(state, target, GAME_CONFIG.torpedo.damage, torpedo.ownerId, now, undefined, "torpedo");
+          emitExplosion(state, x, y, "hit", "torpedo");
           exploded = true;
           break;
         }
@@ -857,7 +915,7 @@ export function stepGame(state: GameState, inputs: Record<string, FrigateInput |
     if (!exploded && torpedo.x >= 0 && torpedo.y >= 0 && torpedo.x < state.world.width && torpedo.y < state.world.height) {
       remainingTorpedoes.push(torpedo);
     } else if (!exploded) {
-      emitExplosion(state, torpedo.x, torpedo.y, "land");
+      emitExplosion(state, torpedo.x, torpedo.y, "land", "torpedo");
     }
   }
   state.torpedoes = remainingTorpedoes;
