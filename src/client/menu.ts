@@ -35,6 +35,7 @@ export const settingsRows: Array<{ key: keyof GameSettings; label: string }> = [
   { key: "baseIncomeInterval", label: "Base income" },
   { key: "bots", label: "Bots" },
   { key: "botSkill", label: "Bot skill" },
+  { key: "roundMinutes", label: "Round length" },
 ];
 
 function kickablePlayers(snapshot: Snapshot) {
@@ -173,6 +174,8 @@ export function drawMenu(snapshot: Snapshot, width: number, height: number): voi
           ? `${value}`
         : row.key === "botSkill"
           ? BOT_SKILL_LABELS[value] ?? `${value}`
+        : row.key === "roundMinutes"
+          ? value === 0 ? "Endless" : `${value} min`
         : row.key === "cannonReload" || row.key === "torpedoReload" || row.key === "resupplyTime" || row.key === "captureTime" || row.key === "repairTime"
           ? `${value.toFixed(1).replace(/\.0$/, "")} s`
           : row.key === "neutralBases" || row.key === "shells" || row.key === "torpedoes"

@@ -111,6 +111,12 @@ export function simulationTick(): void {
     client.torpedoFirePending = false;
     return;
   }
+  if (client.round?.phase === "over") {
+    client.cannonFirePending = false;
+    client.torpedoFirePending = false;
+    client.pendingInputs = [];
+    return;
+  }
   const input = nextInput();
   client.cannonFirePending = false;
   client.torpedoFirePending = false;
@@ -147,6 +153,11 @@ window.addEventListener("keydown", (event) => {
   const target = event.target;
   const isTyping = target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement;
   if (!client.joined || isTyping) return;
+  if (client.round?.phase === "over" && event.code !== "Escape" && event.code !== "Tab") {
+    event.preventDefault();
+    event.stopImmediatePropagation();
+    return;
+  }
   const capturePending = client.menuOpen && client.menuPending?.action === "controls" && client.menuPending.capturing
     ? client.menuPending
     : null;

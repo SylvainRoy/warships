@@ -35,3 +35,9 @@ A frigate spawns when its player joins, after being sunk, and when the world is 
 - When a new map is generated, all bases MUST be re-placed and each player MUST get their home base back (Q110).
 - Resetting scores MUST NOT change bases.
 - On a new map, every non-home base starts neutral, and each player gets their home base back (Q110, Q118).
+
+## Rounds
+
+The default round lasts 10 minutes. The host may choose 5–30 minutes in 5-minute steps or Endless. At the end of a timed round the simulation freezes for a 10-second intermission; projectiles are cleared and snapshots continue. The end screen lists all current players, including bots, ordered by score, sinks, then deaths. Every player with the top score wins; if every player is tied, the result is a Draw. Accuracy is hits divided by shots, or `—` when no shots were fired. After the intermission, a new map is generated with current settings, scores and round stats reset, base timers cleared, and all frigates respawned at home with full supplies (Q193–Q200).
+
+Reset scores starts a fresh round immediately without an end screen. Regenerate changes the map but keeps scores and the current timer. Changing Round length restarts the timer; Endless has no timer. During intermission, settings apply to the next round, while Regenerate and Reset scores are rejected (Q199).

@@ -4,6 +4,7 @@ All notable changes to Warships are recorded here. Versions follow semantic vers
 
 ## [Unreleased]
 
+- Timed rounds with a configurable length, countdown, results screen, and automatic new rounds; Endless remains available.
 - Server-side bots fill open berths, navigate, fight, capture bases and resupply; hosts can set their count and skill.
 - Internal: client split into modules (no gameplay change)
 - Hull repair now happens alongside harbour resupply; hosts can configure recurring income from held non-home bases.

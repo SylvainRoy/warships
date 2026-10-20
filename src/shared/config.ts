@@ -137,5 +137,6 @@ export const GAME_CONFIG = {
       { bearingSigmaDegrees: 1, rangeSigmaPercent: 2, reactionInterval: 0.25, lead: true, torpedoes: true },
     ],
   },
+  rounds: { defaultMinutes: 10, intermissionSeconds: 10 },
   name: { minLength: 1, maxLength: 16 },
 } as const;

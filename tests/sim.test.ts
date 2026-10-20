@@ -663,6 +663,7 @@ describe("turrets", () => {
       impactX: nearest.x,
       impactY: nearest.y,
     });
+    expect(state.shells[0]).not.toHaveProperty("shotId");
     expect(state.shells[0]?.duration).toBeCloseTo(200 / (GAME_CONFIG.cannon.shellSpeed * 2));
     expect(base.turretReadyAt).toBe(2 + GAME_CONFIG.bases.turretReload);
 
@@ -1105,6 +1106,8 @@ describe("fuel, ammunition, and resupply", () => {
 
     expect(state.shells).toHaveLength(2);
     expect(state.torpedoes).toHaveLength(3);
+    expect(new Set(state.shells.map((shell) => shell.shotId)).size).toBe(1);
+    expect(new Set(state.torpedoes.map((torpedo) => torpedo.shotId)).size).toBe(1);
     expect(shooter.shells).toBe(0);
     expect(shooter.torpedoes).toBe(0);
 

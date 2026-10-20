@@ -109,6 +109,15 @@ export function drawHud(snapshot: Snapshot, frigate: Frigate | undefined, now: n
   const consolePanelHeight = 140;
   const consolePanelY = logicalHeight - hudMargin - consolePanelHeight;
   ctx.save();
+  if (client.round?.phase === "playing" && client.round.endsAt !== null) {
+    const seconds = Math.max(0, Math.ceil(client.round.endsAt - now));
+    const timerColor = seconds < 10 ? "#ff776c" : seconds < 60 ? "#ffb347" : "#e8f4f4";
+    ctx.textAlign = "center";
+    ctx.textBaseline = "top";
+    ctx.fillStyle = timerColor;
+    ctx.font = "600 17px DM Mono, monospace";
+    ctx.fillText(`${String(Math.floor(seconds / 60)).padStart(2, "0")}:${String(seconds % 60).padStart(2, "0")}`, logicalWidth / 2, 15);
+  }
   ctx.textBaseline = "top";
   ctx.textAlign = "left";
   ctx.fillStyle = "rgba(5, 20, 29, .72)";
@@ -238,6 +247,53 @@ export function drawHud(snapshot: Snapshot, frigate: Frigate | undefined, now: n
     ctx.fillStyle = "#a4bdc4";
     ctx.font = "500 14px DM Mono, monospace";
     ctx.fillText(`RESPAWNING IN ${countdown.toFixed(1)}s`, logicalWidth / 2, logicalHeight / 2 + 22);
+  }
+  if (client.round?.phase === "over") {
+    const round = client.round;
+    const names = round.winners.map((id) => round.results.find((result) => result.playerId === id)?.name).filter((name): name is string => Boolean(name));
+    const winnerLine = names.length === 0 ? "Draw" : `${names.join(" and ")} ${names.length === 1 ? "wins!" : "win!"}`;
+    const panelWidth = Math.min(900, logicalWidth - 48);
+    const left = (logicalWidth - panelWidth) / 2;
+    const top = logicalHeight / 2 - 230;
+    ctx.fillStyle = "rgba(2, 12, 18, .84)";
+    ctx.fillRect(left, top, panelWidth, 460);
+    ctx.textAlign = "center";
+    ctx.fillStyle = "#6be0cf";
+    ctx.font = "800 22px Manrope, sans-serif";
+    ctx.fillText("ROUND OVER", logicalWidth / 2, top + 24);
+    ctx.fillStyle = "#f3f7f6";
+    ctx.font = "700 18px Manrope, sans-serif";
+    ctx.fillText(winnerLine, logicalWidth / 2, top + 62);
+    const columns = [left + 38, left + 490, left + 560, left + 630, left + 750, left + 850];
+    const headers = ["CAPTAIN", "SCORE", "SINKS", "DEATHS", "ACCURACY", "BASES"];
+    ctx.font = "500 10px DM Mono, monospace";
+    ctx.fillStyle = "#9bb6bf";
+    headers.forEach((header, index) => {
+      ctx.textAlign = index === 0 ? "left" : "right";
+      ctx.fillText(header, columns[index] ?? left, top + 112);
+    });
+    round.results.forEach((result, index) => {
+      const y = top + 143 + index * 48;
+      if (result.playerId === client.ownId) {
+        ctx.fillStyle = "rgba(96, 224, 203, .15)";
+        ctx.fillRect(left + 24, y - 8, panelWidth - 48, 34);
+      }
+      ctx.textAlign = "left";
+      ctx.fillStyle = colours[result.slot - 1] ?? "#fff";
+      ctx.font = "600 13px Manrope, sans-serif";
+      ctx.fillText(result.name, columns[0] ?? left, y);
+      const values = [result.score, result.sinks, result.deaths, result.shots ? `${Math.round(result.hits / result.shots * 100)}%` : "—", result.bases];
+      ctx.fillStyle = "#e5f1f2";
+      ctx.font = "12px DM Mono, monospace";
+      values.forEach((value, valueIndex) => {
+        ctx.textAlign = "right";
+        ctx.fillText(String(value), columns[valueIndex + 1] ?? left, y);
+      });
+    });
+    ctx.textAlign = "center";
+    ctx.fillStyle = "#a4bdc4";
+    ctx.font = "500 13px DM Mono, monospace";
+    ctx.fillText(`New round in ${Math.max(0, Math.ceil(round.nextRoundAt - now))} s`, logicalWidth / 2, top + 420);
   }
   if (client.tabHeld) drawFullScoreboard(snapshot, logicalWidth, logicalHeight);
   if (client.menuOpen) drawMenu(snapshot, logicalWidth, logicalHeight);

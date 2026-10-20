@@ -58,6 +58,7 @@ export interface Frigate {
 
 export interface Shell {
   id: string;
+  shotId?: string;
   ownerId: string;
   turretBaseId?: string;
   startX: number;
@@ -70,6 +71,7 @@ export interface Shell {
 
 export interface Torpedo {
   id: string;
+  shotId?: string;
   ownerId: string;
   x: number;
   y: number;
@@ -100,6 +102,7 @@ export interface GameEvent {
   baseId?: string;
   amount?: number;
   cause?: "shell" | "torpedo" | "land" | "turret";
+  shotId?: string;
   message?: string;
 }
 
@@ -114,6 +117,7 @@ export interface GameState {
   scores: Record<string, PlayerScore>;
   events: GameEvent[];
   nextProjectileId: number;
+  nextShotId: number;
 }
 
 function normalizeAngle(angle: number): number {
@@ -399,6 +403,7 @@ export function createGameState(world: World, sites: readonly BaseSite[] = []): 
     scores: {},
     events: [],
     nextProjectileId: 1,
+    nextShotId: 1,
   };
 }
 
@@ -689,6 +694,7 @@ function damageFrigate(
   now: number,
   sourceLabel?: string,
   cause: "shell" | "torpedo" | "turret" = "shell",
+  shotId?: string,
 ): void {
   if (target.status !== "alive" || now < target.spawnProtectedUntil) return;
   const previousHp = target.hp;
@@ -704,11 +710,13 @@ function damageFrigate(
     y: target.y,
     amount: damage,
     cause,
+    ...(shotId ? { shotId } : {}),
   });
   if (target.hp === 0) sinkFrigate(state, target, sourceId, now, sourceLabel);
 }
 
 function fireCannon(state: GameState, frigate: Frigate, now: number, settings: GameSettings): void {
+  const shotId = `q${state.nextShotId++}`;
   const angle = frigate.heading + frigate.cannonBearing;
   const forwardX = Math.cos(angle);
   const forwardY = Math.sin(angle);
@@ -718,6 +726,7 @@ function fireCannon(state: GameState, frigate: Frigate, now: number, settings: G
   for (const side of [-1, 1]) {
     state.shells.push({
       id: `s${state.nextProjectileId++}`,
+      shotId,
       ownerId: frigate.playerId,
       startX: frigate.x + perpendicularX * GAME_CONFIG.cannon.shellOffset * side,
       startY: frigate.y + perpendicularY * GAME_CONFIG.cannon.shellOffset * side,
@@ -731,10 +740,12 @@ function fireCannon(state: GameState, frigate: Frigate, now: number, settings: G
 }
 
 function fireTorpedoes(state: GameState, frigate: Frigate, now: number, settings: GameSettings): void {
+  const shotId = `q${state.nextShotId++}`;
   const centre = frigate.heading + frigate.torpedoBearing;
   for (const offset of [-GAME_CONFIG.torpedo.spread, 0, GAME_CONFIG.torpedo.spread]) {
     state.torpedoes.push({
       id: `t${state.nextProjectileId++}`,
+      shotId,
       ownerId: frigate.playerId,
       x: frigate.x,
       y: frigate.y,
@@ -878,6 +889,7 @@ export function stepGame(state: GameState, inputs: Record<string, FrigateInput |
           now,
           sourceLabel,
           shell.turretBaseId ? "turret" : "shell",
+          shell.shotId,
         );
         if (target.hp > 0) emitExplosion(state, shell.impactX, shell.impactY, "hit", shellCause);
       }
@@ -899,6 +911,7 @@ export function stepGame(state: GameState, inputs: Record<string, FrigateInput |
         y: base.cityY,
         amount: previousHp - base.turretHp,
         cause: "shell",
+        ...(shell.shotId ? { shotId: shell.shotId } : {}),
       });
       if (base.turretHp > 0) continue;
       base.turret = "destroyed";
@@ -938,7 +951,7 @@ export function stepGame(state: GameState, inputs: Record<string, FrigateInput |
       for (const target of Object.values(state.frigates)) {
         if (target.status !== "alive" || (target.playerId === torpedo.ownerId && torpedo.elapsed < GAME_CONFIG.torpedo.armingTime)) continue;
         if (segmentHitsHull(oldX, oldY, x, y, target)) {
-          damageFrigate(state, target, GAME_CONFIG.torpedo.damage, torpedo.ownerId, now, undefined, "torpedo");
+          damageFrigate(state, target, GAME_CONFIG.torpedo.damage, torpedo.ownerId, now, undefined, "torpedo", torpedo.shotId);
           emitExplosion(state, x, y, "hit", "torpedo");
           exploded = true;
           break;

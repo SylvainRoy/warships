@@ -27,6 +27,9 @@ describe("game settings", () => {
     expect(SETTINGS_LIMITS.baseIncomeInterval).toEqual({ min: 0, max: 180, step: 30 });
     expect(DEFAULT_SETTINGS.bots).toBe(2);
     expect(DEFAULT_SETTINGS.botSkill).toBe(1);
+    expect(DEFAULT_SETTINGS.roundMinutes).toBe(10);
+    expect(SETTINGS_LIMITS.roundMinutes).toEqual({ min: 0, max: 30, step: 5 });
+    expect(SETTING_LABELS.roundMinutes).toBe("round length");
     expect(SETTINGS_LIMITS.bots).toEqual({ min: 0, max: 3, step: 1 });
     expect(SETTINGS_LIMITS.botSkill).toEqual({ min: 0, max: 2, step: 1 });
     expect(BOT_SKILL_LABELS).toEqual(["Easy", "Normal", "Hard"]);
@@ -59,6 +62,7 @@ describe("game settings", () => {
       baseIncomeInterval: 0,
       bots: 0,
       botSkill: 0,
+      roundMinutes: 0,
     })).toEqual({
       boatSpeedPct: 50,
       rotationPct: 200,
@@ -80,6 +84,7 @@ describe("game settings", () => {
       baseIncomeInterval: 0,
       bots: 0,
       botSkill: 0,
+      roundMinutes: 0,
     });
     expect(sanitizeSettings({ ...DEFAULT_SETTINGS, cannonReload: 10, torpedoReload: 1 })).toEqual({
       ...DEFAULT_SETTINGS,
@@ -198,5 +203,13 @@ describe("game settings", () => {
       ...DEFAULT_SETTINGS,
       baseIncomeInterval: 0,
     })).toEqual(["base income Off"]);
+    expect(describeSettingsChanges(DEFAULT_SETTINGS, {
+      ...DEFAULT_SETTINGS,
+      roundMinutes: 0,
+    })).toEqual(["round length Endless"]);
+    expect(describeSettingsChanges(DEFAULT_SETTINGS, {
+      ...DEFAULT_SETTINGS,
+      roundMinutes: 15,
+    })).toEqual(["round length 15 min"]);
   });
 });

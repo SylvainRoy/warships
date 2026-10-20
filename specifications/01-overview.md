@@ -2,7 +2,7 @@
 
 ## Pitch
 
-*Warships* is an online multiplayer naval combat game seen from above in 2D. Each player commands a frigate armed with **cannons** (ballistic, fire over islands) and **torpedoes** (underwater, blocked by land). Players roam an archipelago, manage fuel and ammunition, capture bases, and sink each other to score points. The game never ends: it is a persistent free-for-all.
+*Warships* is an online multiplayer naval combat game seen from above in 2D. Each player commands a frigate armed with **cannons** (ballistic, fire over islands) and **torpedoes** (underwater, blocked by land). Players roam an archipelago, manage fuel and ammunition, capture bases, and sink each other to score points in timed rounds or Endless mode.
 
 ## Key characteristics
 
@@ -32,6 +32,7 @@
 - Sound and effects settings, hit feedback, and own-damage feedback.
 - Hull repair in owned harbours and income from holding non-home bases.
 - Configurable server-side bots that navigate, fight, capture bases, and resupply.
+- Timed rounds with a results screen and optional Endless mode.
 
 ## Out of scope (v1) — candidates for later
 

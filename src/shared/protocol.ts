@@ -26,9 +26,26 @@ export type SnapshotFrigate = Pick<
   "playerId" | "name" | "slot" | "x" | "y" | "heading" | "hp" | "status" | "sinkingStartedAt" | "spawnProtectedUntil"
 > & Partial<Omit<Frigate, "playerId" | "name" | "slot" | "x" | "y" | "heading" | "hp" | "status" | "sinkingStartedAt" | "spawnProtectedUntil">>;
 
+export interface RoundResult {
+  playerId: string;
+  name: string;
+  slot: number;
+  score: number;
+  sinks: number;
+  deaths: number;
+  shots: number;
+  hits: number;
+  bases: number;
+}
+
+export type RoundState =
+  | { phase: "playing"; endsAt: number | null }
+  | { phase: "over"; results: RoundResult[]; winners: string[]; nextRoundAt: number };
+
 export type ServerMessage =
   | LobbyMessage
-  | { type: "welcome"; playerId: string; token: string; slot: number; world: number[]; columns: number; rows: number; bases: BasePublic[]; settings: GameSettings }
+  | { type: "welcome"; playerId: string; token: string; slot: number; world: number[]; columns: number; rows: number; bases: BasePublic[]; settings: GameSettings; round: RoundState }
+  | { type: "round"; round: RoundState }
   | { type: "settings"; settings: GameSettings }
   | { type: "world"; world: number[]; columns: number; rows: number; bases: BasePublic[] }
   | { type: "projectiles"; serverTime: number; shells: Shell[]; torpedoes: Torpedo[]; removed: string[]; reset?: true }

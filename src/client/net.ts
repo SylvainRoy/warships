@@ -126,6 +126,7 @@ export function handleMessage(message: ServerMessage): void {
     ownDamageTimes.length = 0;
     recentSinkTimes.clear();
     client.gameSettings = { ...message.settings };
+    client.round = message.round;
     client.bases = message.bases;
     sessionStorage.setItem("warships.token", message.token);
     sessionStorage.setItem("warships.sessionName", nameInput.value.trim());
@@ -148,6 +149,14 @@ export function handleMessage(message: ServerMessage): void {
     client.world = worldFromMessage(message.world, message.columns, message.rows, client.world?.seed ?? 0);
     resetWorldCaches();
     addFeed("World regenerated");
+  } else if (message.type === "round") {
+    client.round = message.round;
+    const round = message.round;
+    if (round.phase === "over") {
+      const winnerNames = round.winners.map((id) => round.results.find((result) => result.playerId === id)?.name).filter((name): name is string => Boolean(name));
+      addFeed(winnerNames.length ? `Round over — ${winnerNames.join(" and ")} ${winnerNames.length === 1 ? "wins" : "win"}` : "Round over — draw");
+      if (round.winners.includes(client.ownId ?? "")) audio.play("chime", { own: true });
+    }
   } else if (message.type === "settings") {
     client.gameSettings = { ...message.settings };
   } else if (message.type === "snapshot") {

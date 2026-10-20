@@ -1,7 +1,7 @@
 import type { BasePublic } from "../shared/bases.js";
 import { DEFAULT_SETTINGS, type GameSettings } from "../shared/settings.js";
 import type { Frigate, FrigateInput, GameEvent, Shell, Torpedo } from "../shared/sim.js";
-import type { LobbyMessage, ServerMessage, SnapshotFrigate } from "../shared/protocol.js";
+import type { LobbyMessage, RoundState, ServerMessage, SnapshotFrigate } from "../shared/protocol.js";
 import type { World } from "../shared/world.js";
 import type { Bindings, KeyboardLayout } from "./controls.js";
 import type { EffectsSettings, HitFeedLine, HitNumber } from "./feedback.js";
@@ -45,6 +45,7 @@ export const client = {
   latestSnapshot: null as Snapshot | null,
   predictedOwn: null as Frigate | null,
   gameSettings: DEFAULT_SETTINGS as GameSettings,
+  round: null as RoundState | null,
   snapshots: [] as StoredSnapshot[],
   renderedProjectiles: { shells: [], torpedoes: [] } as { shells: Shell[]; torpedoes: Torpedo[] },
   projectileServerTime: 0,

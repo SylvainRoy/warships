@@ -3,7 +3,7 @@ import { performance } from "node:perf_hooks";
 import type { WebSocket } from "ws";
 import { generateWorldWithBases, placeBases, restoreHome, type BasePublic, type BaseSite, type BaseSnapshot } from "../shared/bases.js";
 import { GAME_CONFIG } from "../shared/config.js";
-import type { ClientMessage, ServerMessage, SnapshotFrigate } from "../shared/protocol.js";
+import type { ClientMessage, RoundResult, RoundState, ServerMessage, SnapshotFrigate } from "../shared/protocol.js";
 import { DEFAULT_SETTINGS, describeSettingsChanges, sanitizeSettings } from "../shared/settings.js";
 import { createBotBrain } from "./bot.js";
 import {
@@ -32,6 +32,9 @@ interface PlayerSession {
   slot: number;
   score: number;
   sunk: number;
+  sinks: number;
+  shots: number;
+  hits: number;
   host: boolean;
   joinedAt: number;
   socket: WebSocket | null;
@@ -58,6 +61,9 @@ export class Room {
   private snapshotAccumulator = 0;
   private sentProjectileIds = new Set<string>();
   private lastBotReconcileAt = Number.NEGATIVE_INFINITY;
+  private roundState!: RoundState;
+  private readonly countedShotIds = new Set<string>();
+  private readonly hitShotIds = new Set<string>();
 
   constructor(
     seed = randomBytes(4).readUInt32LE(),
@@ -81,6 +87,7 @@ export class Room {
       if (matchingSize >= 0) this.game.settings.mapSize = matchingSize;
     }
     this.random = createSeededRandom(seed ^ 0x753a9);
+    this.roundState = this.playingRound(this.clock());
   }
 
   accept(socket: WebSocket): void {
@@ -198,6 +205,9 @@ export class Room {
         slot,
         score: 0,
         sunk: 0,
+        sinks: 0,
+        shots: 0,
+        hits: 0,
         host: ![...this.sessions.values()].some((candidate) => !candidate.bot && candidate.host),
         joinedAt: now,
         socket,
@@ -250,6 +260,7 @@ export class Room {
       rows: this.game.world.rows,
       bases: this.publicBases(),
       settings: { ...this.game.settings },
+      round: this.roundState,
     });
     this.send(socket, {
       type: "projectiles",
@@ -284,17 +295,16 @@ export class Room {
       return;
     }
     const now = this.clock();
+    if (this.roundState.phase === "over" && (message.action === "regenerate" || message.action === "resetScores")) {
+      this.send(session.socket!, { type: "error", code: "invalid_action" });
+      return;
+    }
     if (message.action === "regenerate") {
       this.regenerateWorld(session, now);
       return;
     }
     if (message.action === "resetScores") {
-      for (const player of this.sessions.values()) {
-        player.score = 0;
-        player.sunk = 0;
-        this.game.scores[player.id] = this.scoreRecord(player);
-      }
-      for (const base of this.game.bases) base.heldFor = 0;
+      this.startNewRound(now, false);
       this.broadcastEvent({ type: "host", playerId: session.id, name: session.name, message: `${session.name} reset the scores` });
       return;
     }
@@ -322,19 +332,27 @@ export class Room {
       const neutralBasesChanged = this.game.settings.neutralBases !== settings.neutralBases;
       const mapSizeChanged = this.game.settings.mapSize !== settings.mapSize;
       const previousIncomeInterval = this.game.settings.baseIncomeInterval;
+      const previousRoundMinutes = this.game.settings.roundMinutes;
+      const inIntermission = this.roundState.phase === "over";
       this.game.settings = settings;
-      this.reconcileBots(now);
-      if (previousIncomeInterval !== settings.baseIncomeInterval) {
-        for (const base of this.game.bases) {
-          base.heldFor = previousIncomeInterval === 0 || settings.baseIncomeInterval === 0
-            ? 0
-            : base.heldFor * settings.baseIncomeInterval / previousIncomeInterval;
-        }
+      if (this.roundState.phase === "playing" && previousRoundMinutes !== settings.roundMinutes) {
+        this.roundState = this.playingRound(now);
+        this.broadcastJoined({ type: "round", round: this.roundState });
       }
-      for (const frigate of Object.values(this.game.frigates)) {
-        frigate.fuel = Math.min(frigate.fuel, fuelCapacity(settings));
-        frigate.shells = Math.min(frigate.shells, settings.shells);
-        frigate.torpedoes = Math.min(frigate.torpedoes, settings.torpedoes);
+      if (!inIntermission) {
+        this.reconcileBots(now);
+        if (previousIncomeInterval !== settings.baseIncomeInterval) {
+          for (const base of this.game.bases) {
+            base.heldFor = previousIncomeInterval === 0 || settings.baseIncomeInterval === 0
+              ? 0
+              : base.heldFor * settings.baseIncomeInterval / previousIncomeInterval;
+          }
+        }
+        for (const frigate of Object.values(this.game.frigates)) {
+          frigate.fuel = Math.min(frigate.fuel, fuelCapacity(settings));
+          frigate.shells = Math.min(frigate.shells, settings.shells);
+          frigate.torpedoes = Math.min(frigate.torpedoes, settings.torpedoes);
+        }
       }
       for (const player of this.sessions.values()) {
         if (player.socket) this.send(player.socket, { type: "settings", settings: { ...settings } });
@@ -347,7 +365,7 @@ export class Room {
           message: `Host ${session.name}: ${changes.join(", ")}`,
         });
       }
-      if (coverageChanged || neutralBasesChanged || mapSizeChanged) this.regenerateWorld(session, now);
+      if (!inIntermission && (coverageChanged || neutralBasesChanged || mapSizeChanged)) this.regenerateWorld(session, now);
       return;
     }
     this.send(session.socket!, { type: "error", code: "invalid_action" });
@@ -402,6 +420,24 @@ export class Room {
       this.lastBotReconcileAt = now;
       this.reconcileBots(now);
     }
+    if (this.roundState.phase === "playing" && this.roundState.endsAt !== null && now >= this.roundState.endsAt) {
+      this.endRound(now);
+    } else if (this.roundState.phase === "over" && now >= this.roundState.nextRoundAt) {
+      this.startNewRound(now);
+      this.lastBotReconcileAt = now;
+      this.reconcileBots(now);
+    }
+    if (this.roundState.phase === "over") {
+      for (const session of this.sessions.values()) session.inputQueue.length = 0;
+      this.snapshotAccumulator += GAME_CONFIG.network.snapshotRate / GAME_CONFIG.network.tickRate;
+      if (this.snapshotAccumulator >= 1) {
+        this.snapshotAccumulator -= 1;
+        this.broadcastSnapshots(now);
+      }
+      this.broadcastLobbyIfChanged();
+      return;
+    }
+    const previousShotIds = new Set([...this.game.shells, ...this.game.torpedoes].map((projectile) => projectile.shotId).filter((id): id is string => Boolean(id)));
     const inputs: Record<string, FrigateInput | undefined> = {};
     for (const session of this.sessions.values()) {
       if (session.bot) {
@@ -421,6 +457,13 @@ export class Room {
       }
     }
     stepGame(this.game, inputs, 1 / GAME_CONFIG.network.tickRate, now);
+    for (const projectile of [...this.game.shells, ...this.game.torpedoes]) {
+      const shotId = projectile.shotId;
+      if (!shotId || previousShotIds.has(shotId) || this.countedShotIds.has(shotId)) continue;
+      this.countedShotIds.add(shotId);
+      const owner = this.sessions.get(projectile.ownerId);
+      if (owner) owner.shots += 1;
+    }
     this.broadcastProjectileChanges(now);
     for (const session of this.sessions.values()) {
       const score = this.game.scores[session.id];
@@ -430,13 +473,87 @@ export class Room {
       }
     }
     this.respawnReady(now);
-    for (const event of this.game.events) this.broadcastEvent(event);
+    for (const event of this.game.events) {
+      if (event.type === "sank" && event.playerId) {
+        const owner = this.sessions.get(event.playerId);
+        if (owner && event.playerId !== event.targetId) owner.sinks += 1;
+      }
+      if (event.type === "damage" && event.shotId && event.playerId && event.playerId !== event.targetId && !this.hitShotIds.has(event.shotId)) {
+        this.hitShotIds.add(event.shotId);
+        const owner = this.sessions.get(event.playerId);
+        if (owner) owner.hits += 1;
+      }
+      this.broadcastEvent(event);
+    }
     this.snapshotAccumulator += GAME_CONFIG.network.snapshotRate / GAME_CONFIG.network.tickRate;
     if (this.snapshotAccumulator >= 1) {
       this.snapshotAccumulator -= 1;
       this.broadcastSnapshots(now);
     }
     this.broadcastLobbyIfChanged();
+  }
+
+  private playingRound(now: number): RoundState {
+    return { phase: "playing", endsAt: this.game.settings.roundMinutes === 0 ? null : now + this.game.settings.roundMinutes * 60 };
+  }
+
+  private endRound(now: number): void {
+    const results: RoundResult[] = [...this.sessions.values()].map((session) => ({
+      playerId: session.id,
+      name: session.name,
+      slot: session.slot,
+      score: session.score,
+      sinks: session.sinks,
+      deaths: session.sunk,
+      shots: session.shots,
+      hits: session.hits,
+      bases: this.game.bases.filter((base) => base.active && base.ownerId === session.id).length,
+    })).sort((a, b) => b.score - a.score || b.sinks - a.sinks || a.deaths - b.deaths);
+    const topScore = results[0]?.score;
+    const top = results.filter((result) => result.score === topScore);
+    const winners = top.length === results.length ? [] : top.map((result) => result.playerId);
+    this.roundState = { phase: "over", results, winners, nextRoundAt: now + GAME_CONFIG.rounds.intermissionSeconds };
+    this.game.shells = [];
+    this.game.torpedoes = [];
+    this.sentProjectileIds.clear();
+    this.broadcastJoined({ type: "projectiles", reset: true, serverTime: now, shells: [], torpedoes: [], removed: [] });
+    this.broadcastJoined({ type: "round", round: this.roundState });
+  }
+
+  private startNewRound(now: number, regenerate = true): void {
+    for (const session of this.sessions.values()) {
+      session.score = 0;
+      session.sunk = 0;
+      session.sinks = 0;
+      session.shots = 0;
+      session.hits = 0;
+      this.game.scores[session.id] = this.scoreRecord(session);
+    }
+    for (const base of this.game.bases) base.heldFor = 0;
+    this.countedShotIds.clear();
+    this.hitShotIds.clear();
+    this.roundState = this.playingRound(now);
+    if (!regenerate) {
+      this.broadcastJoined({ type: "round", round: this.roundState });
+      return;
+    }
+    const seed = randomBytes(4).readUInt32LE();
+    const generated = generateWorldWithBases(seed, this.game.settings.landCoveragePct / 100, this.game.settings.neutralBases, mapDimensions(this.game.settings.mapSize));
+    regenerateGameWorld(this.game, generated.world, generated.sites, now, this.random);
+    for (const player of this.sessions.values()) {
+      player.lastBasesJson = null;
+      const frigate = this.game.frigates[player.id];
+      if (frigate) frigate.name = player.name;
+    }
+    this.roundState = this.playingRound(now);
+    const encoded = encodeWorld(this.game.world.grid);
+    this.broadcast({ type: "world", world: encoded, columns: this.game.world.columns, rows: this.game.world.rows, bases: this.publicBases() });
+    this.sentProjectileIds.clear();
+    this.countedShotIds.clear();
+    this.hitShotIds.clear();
+    this.broadcastJoined({ type: "projectiles", reset: true, serverTime: now, shells: [], torpedoes: [], removed: [] });
+    this.broadcastJoined({ type: "round", round: this.roundState });
+    this.broadcastEvent({ type: "host", message: "New round" });
   }
 
   private respawnReady(now: number): void {
@@ -711,6 +828,7 @@ export class Room {
   }
 
   private reconcileBots(now: number): void {
+    if (this.roundState.phase === "over") return;
     const humans = this.humanCount();
     const target = humans > 0
       ? Math.min(this.game.settings.bots, GAME_CONFIG.player.maxPlayers - humans)
@@ -742,6 +860,9 @@ export class Room {
         slot,
         score: 0,
         sunk: 0,
+        sinks: 0,
+        shots: 0,
+        hits: 0,
         host: false,
         joinedAt: now,
         socket: null,

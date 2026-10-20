@@ -21,6 +21,7 @@ export interface GameSettings {
   baseIncomeInterval: number;
   bots: number;
   botSkill: number;
+  roundMinutes: number;
 }
 
 export const DEFAULT_SETTINGS: GameSettings = {
@@ -44,6 +45,7 @@ export const DEFAULT_SETTINGS: GameSettings = {
   baseIncomeInterval: GAME_CONFIG.baseIncome.defaultInterval,
   bots: GAME_CONFIG.bots.defaultCount,
   botSkill: GAME_CONFIG.bots.defaultSkill,
+  roundMinutes: GAME_CONFIG.rounds.defaultMinutes,
 };
 
 export const SETTINGS_LIMITS: Record<keyof GameSettings, { min: number; max: number; step: number }> = {
@@ -67,6 +69,7 @@ export const SETTINGS_LIMITS: Record<keyof GameSettings, { min: number; max: num
   baseIncomeInterval: { min: 0, max: 180, step: 30 },
   bots: { min: 0, max: 3, step: 1 },
   botSkill: { min: 0, max: 2, step: 1 },
+  roundMinutes: { min: 0, max: 30, step: 5 },
 };
 
 const SETTINGS_KEYS: readonly (keyof GameSettings)[] = [
@@ -90,6 +93,7 @@ const SETTINGS_KEYS: readonly (keyof GameSettings)[] = [
   "baseIncomeInterval",
   "bots",
   "botSkill",
+  "roundMinutes",
 ];
 
 export const SETTING_LABELS: Record<keyof GameSettings, string> = {
@@ -113,6 +117,7 @@ export const SETTING_LABELS: Record<keyof GameSettings, string> = {
   baseIncomeInterval: "base income",
   bots: "bots",
   botSkill: "bot skill",
+  roundMinutes: "round length",
 };
 
 export const MAP_SIZE_LABELS = GAME_CONFIG.world.mapSizes.map(({ label }) => label);
@@ -153,6 +158,8 @@ export function describeSettingsChanges(before: GameSettings, after: GameSetting
         ? after[key] === 0 ? "Off" : `every ${after[key]} s`
       : key === "botSkill"
         ? BOT_SKILL_LABELS[after[key]] ?? `${after[key]}`
+      : key === "roundMinutes"
+        ? after[key] === 0 ? "Endless" : `${after[key]} min`
       : key === "cannonReload" || key === "torpedoReload" || key === "resupplyTime" || key === "captureTime" || key === "repairTime"
       ? `${after[key].toFixed(1).replace(/\.0$/, "")} s`
       : key === "neutralBases" || key === "shells" || key === "torpedoes" || key === "bots"

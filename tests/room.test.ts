@@ -992,4 +992,163 @@ describe("room bots", () => {
     expect(fifth.last("error")?.code).toBe("full");
     expect(room.sessions.size).toBe(4);
   });
+
+  it("ends timed rounds with sorted results and gives late joiners the end state", () => {
+    let now = 0;
+    const room = roomWithoutBots(11, () => now, openWorld, fixtureSites);
+    const alice = connect(room);
+    const bob = connect(room);
+    join(room, alice, "Alice");
+    join(room, bob, "Bob");
+    const aliceId = welcome(alice).playerId;
+    const bobId = welcome(bob).playerId;
+    room.sessions.get(aliceId)!.score = 5;
+    room.game.scores[aliceId]!.score = 5;
+    room.sessions.get(bobId)!.score = 2;
+    room.game.scores[bobId]!.score = 2;
+    now = 600;
+    room.advanceTick();
+    expect(alice.last("round")).toMatchObject({
+      round: {
+        phase: "over",
+        winners: [aliceId],
+        results: [{ playerId: aliceId, score: 5 }, { playerId: bobId, score: 2 }],
+      },
+    });
+    const lateJoiner = connect(room);
+    join(room, lateJoiner, "Cara");
+    expect(welcome(lateJoiner).round.phase).toBe("over");
+    expect(alice.last("round")?.round.phase).toBe("over");
+  });
+
+  it("freezes and drains intermission input, rejects host map actions, then resets the next round", () => {
+    let now = 0;
+    const room = roomWithoutBots(11, () => now, openWorld, fixtureSites);
+    const socket = connect(room);
+    join(room, socket, "Harbor");
+    const id = welcome(socket).playerId;
+    const initialSeed = room.game.world.seed;
+    room.sessions.get(id)!.score = 4;
+    room.game.scores[id]!.score = 4;
+    room.game.shells.push({ id: "s0", ownerId: id, startX: 0, startY: 0, impactX: 1, impactY: 1, elapsed: 0, duration: 1 });
+    now = 600;
+    room.advanceTick();
+    const frigate = room.game.frigates[id]!;
+    const position = { x: frigate.x, y: frigate.y };
+    expect(room.game.shells).toHaveLength(0);
+    expect(socket.last("projectiles")).toMatchObject({ reset: true });
+    send(room, socket, { type: "input", seq: 1, keys: 0, throttle: 3, fireCannon: true, fireTorpedo: false });
+    room.advanceTick();
+    expect(room.game.frigates[id]).toMatchObject(position);
+    expect(room.sessions.get(id)!.inputQueue).toHaveLength(0);
+    send(room, socket, { type: "host", action: "regenerate" });
+    expect(socket.last("error")?.code).toBe("invalid_action");
+    send(room, socket, { type: "host", action: "resetScores" });
+    expect(socket.last("error")?.code).toBe("invalid_action");
+    now = 610;
+    room.advanceTick();
+    expect(socket.last("round")?.round.phase).toBe("playing");
+    expect(room.game.world.seed).not.toBe(initialSeed);
+    expect(room.sessions.get(id)).toMatchObject({ score: 0, sunk: 0, sinks: 0, shots: 0, hits: 0 });
+    expect(room.game.frigates[id]).toMatchObject({ status: "alive", hp: GAME_CONFIG.player.maxHp });
+    expect(room.game.bases.every((base) => base.heldFor <= 1 / GAME_CONFIG.network.tickRate)).toBe(true);
+  });
+
+  it("restarts the timer on round-length changes and keeps Endless rounds active", () => {
+    let now = 12;
+    const room = roomWithoutBots(11, () => now, openWorld, fixtureSites);
+    const socket = connect(room);
+    join(room, socket, "Harbor");
+    send(room, socket, { type: "host", action: "settings", settings: { ...room.game.settings, roundMinutes: 5 } });
+    expect(socket.last("round")?.round).toEqual({ phase: "playing", endsAt: 312 });
+    now = 20;
+    send(room, socket, { type: "host", action: "resetScores" });
+    expect(socket.last("round")?.round).toEqual({ phase: "playing", endsAt: 320 });
+    send(room, socket, { type: "host", action: "settings", settings: { ...room.game.settings, roundMinutes: 0 } });
+    expect(socket.last("round")?.round).toEqual({ phase: "playing", endsAt: null });
+    now = 10000;
+    room.advanceTick();
+    expect(socket.last("round")?.round).toEqual({ phase: "playing", endsAt: null });
+  });
+
+  it("counts cannon salvos and torpedo spreads once per trigger and once per hitting shot", () => {
+    let now = 0;
+    const room = roomWithoutBots(11, () => now, openWorld, fixtureSites);
+    const shooterSocket = connect(room);
+    const targetSocket = connect(room);
+    join(room, shooterSocket, "Shooter");
+    join(room, targetSocket, "Target");
+    const shooterId = welcome(shooterSocket).playerId;
+    const targetId = welcome(targetSocket).playerId;
+    const shooter = room.game.frigates[shooterId]!;
+    const target = room.game.frigates[targetId]!;
+    Object.assign(shooter, { x: 4800, y: 1500, heading: 0, cannonBearing: 0, cannonRange: 100 });
+    Object.assign(target, { x: 4900, y: 1500, heading: 0, spawnProtectedUntil: 0 });
+
+    send(room, shooterSocket, { type: "input", seq: 1, keys: 0, throttle: 0, fireCannon: true, fireTorpedo: false });
+    room.advanceTick();
+    expect(room.sessions.get(shooterId)?.shots).toBe(1);
+    for (let tick = 0; tick < 10; tick += 1) room.advanceTick();
+    expect(room.sessions.get(shooterId)?.hits).toBe(1);
+
+    Object.assign(target, { x: 5200, y: 1500, hp: GAME_CONFIG.player.maxHp, spawnProtectedUntil: 0 });
+    shooter.torpedoReadyAt = 0;
+    send(room, shooterSocket, { type: "input", seq: 2, keys: 0, throttle: 0, fireCannon: false, fireTorpedo: true });
+    room.advanceTick();
+    const shotId = room.game.torpedoes[0]!.shotId!;
+    expect(room.sessions.get(shooterId)?.shots).toBe(2);
+    room.game.torpedoes = [0, 1].map((index) => ({
+      id: `test-${index}`,
+      shotId,
+      ownerId: shooterId,
+      x: target.x - 20,
+      y: target.y,
+      angle: 0,
+      elapsed: 0.6,
+      speed: GAME_CONFIG.torpedo.speed,
+    }));
+    room.advanceTick();
+    expect(target.hp).toBe(GAME_CONFIG.player.maxHp - 2 * GAME_CONFIG.torpedo.damage);
+    expect(room.sessions.get(shooterId)?.hits).toBe(2);
+  });
+
+  it("includes bots in tied results and returns Draw when all scores tie", () => {
+    let now = 0;
+    const room = new Room(11, () => now, openWorld, fixtureSites);
+    const socket = connect(room);
+    join(room, socket, "Harbor");
+    for (const session of room.sessions.values()) {
+      session.score = 4;
+      room.game.scores[session.id]!.score = 4;
+    }
+    now = 600;
+    room.advanceTick();
+    const round = socket.last("round")?.round;
+    expect(round?.phase).toBe("over");
+    if (round?.phase !== "over") return;
+    expect(round.winners).toEqual([]);
+    expect(round.results).toHaveLength(3);
+    expect(round.results.map((result) => result.score)).toEqual([4, 4, 4]);
+  });
+
+  it("credits a sink caused by the player's own turret", () => {
+    let now = 0;
+    const room = roomWithoutBots(11, () => now, openWorld, fixtureSites);
+    const hostSocket = connect(room);
+    const targetSocket = connect(room);
+    join(room, hostSocket, "Harbor");
+    join(room, targetSocket, "Target");
+    const hostId = welcome(hostSocket).playerId;
+    const targetId = welcome(targetSocket).playerId;
+    const base = room.game.bases.find((candidate) => candidate.kind === "home" && candidate.homeSlot === 0)!;
+    const target = room.game.frigates[targetId]!;
+    Object.assign(target, { x: base.cityX + 200, y: base.cityY, hp: 10, spawnProtectedUntil: 0 });
+    for (let tick = 0; tick < 20 && target.status === "alive"; tick += 1) {
+      now += 1 / GAME_CONFIG.network.tickRate;
+      room.advanceTick();
+    }
+    expect(target.status).toBe("sinking");
+    expect(room.sessions.get(hostId)?.sinks).toBe(1);
+    expect(room.sessions.get(hostId)?.shots).toBe(0);
+  });
 });

@@ -35,7 +35,7 @@ The game MUST work on both **Mac and PC** keyboards (Windows/Linux). Implementat
 
 Every player opens the shared menu with Esc. It is titled HOST CONTROL for the host and MENU for other players. C opens Controls and V opens Sound & effects for everyone. The host additionally has R for world regeneration, X for a score reset, K for a numbered list of captains to kick, and S for Settings; these actions remain host-only. Select a kick target with `Digit1`–`Digit3` or `Numpad1`–`Numpad3`. Enter or NumpadEnter confirms a pending action; Esc cancels it or returns from kick selection. Confirmations are shown in-game, not in browser dialogs. If host status is lost while the menu is open, host-only pending actions are dropped while the shared menu, Controls, and Sound & effects remain usable.
 
-In Settings, the rows include Boat speed, Rotation speed, Cannon rotation, Torpedo rotation, Shell speed, Torpedo speed, Cannon reload, Torpedo reload, Land coverage, Map size, Neutral bases, Fuel, Shells, Torpedoes, Resupply time, Capture time, Repair time, Base income, Bots, and Bot skill (Q120, Q133, Q182). Map size MUST default to Standard and offer Small, Standard, and Big; its row MUST immediately follow Land coverage. Bots is 0–3, step 1, default 2; Bot skill is Easy, Normal, or Hard, default Normal. Up/Down selects a row, Left/Right changes its value, D restores defaults, Enter applies the draft, and Esc returns to the host menu. Changing Map size or Land coverage MUST make the hint say `Enter: apply + new map`; applying either immediately generates a new map while keeping scores.
+In Settings, the rows include Boat speed, Rotation speed, Cannon rotation, Torpedo rotation, Shell speed, Torpedo speed, Cannon reload, Torpedo reload, Land coverage, Map size, Neutral bases, Fuel, Shells, Torpedoes, Resupply time, Capture time, Repair time, Base income, Bots, Bot skill, and Round length (Q120, Q133, Q182, Q193). Map size MUST default to Standard and offer Small, Standard, and Big; its row MUST immediately follow Land coverage. Bots is 0–3, step 1, default 2; Bot skill is Easy, Normal, or Hard, default Normal. Round length is 0–30 minutes in steps of 5, default 10; 0 is Endless. Up/Down selects a row, Left/Right changes its value, D restores defaults, Enter applies the draft, and Esc returns to the host menu. Changing Map size or Land coverage MUST make the hint say `Enter: apply + new map`; applying either immediately generates a new map while keeping scores.
 
 The lobby roster marks server-controlled bots with a muted `(bot)` suffix. Bots occupy berths and appear in scoreboards, but do not count against the displayed free slots for human players (Q184).
 
@@ -73,6 +73,8 @@ The own boat is a white 6 u triangle pointing along its heading. When the sweep 
 - Event feed (top-left): short messages "Alice sank Bob", "Carol joined", "World regenerated", fading after 5 s.
 - The Tab scoreboard MUST show each player's active base count, including home bases, in a `Bases` column after score. The compact scoreboard remains unchanged (Q178).
 - Death screen: "Sunk by *X*" + respawn countdown.
+- Round timer: a top-centre `mm:ss` countdown in the top band, orange below 60 s and red below 10 s; hidden in Endless and during intermission.
+- Round end: a centred results panel shows `ROUND OVER`, winners or `Draw`, and Captain, Score, Sinks, Deaths, Accuracy, and Bases. It highlights the own row and counts down to the next round. During intermission, only Esc and Tab work.
 
 ## Sound and damage effects
 
