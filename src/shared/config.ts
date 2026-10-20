@@ -29,6 +29,15 @@ export const GAME_CONFIG = {
     homeReturnDelay: 30,
     homeCapturePoints: 5,
   },
+  baseIncome: {
+    defaultInterval: 60,
+    payout: 1,
+    feedbackDuration: 1.2,
+    feedbackFade: 0.4,
+    feedbackRise: 30,
+    feedbackFontSize: 14,
+    coinGain: 0.3,
+  },
   frigate: {
     length: 30,
     beam: 10,

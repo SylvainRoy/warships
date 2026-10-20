@@ -89,7 +89,7 @@ export interface PlayerScore {
 }
 
 export interface GameEvent {
-  type: "explosion" | "sank" | "join" | "leave" | "host" | "capture" | "turret" | "damage";
+  type: "explosion" | "sank" | "join" | "leave" | "host" | "capture" | "turret" | "damage" | "income";
   x?: number;
   y?: number;
   kind?: ExplosionKind;
@@ -289,6 +289,7 @@ export function refillSupplies(frigate: Frigate, settings: GameSettings): void {
   frigate.fuel = fuelCapacity(settings);
   frigate.shells = settings.shells;
   frigate.torpedoes = settings.torpedoes;
+  frigate.hp = GAME_CONFIG.player.maxHp;
   frigate.resupplying = false;
 }
 
@@ -390,6 +391,7 @@ export function createGameState(world: World, sites: readonly BaseSite[] = []): 
       repairProgress: 0,
       lostFrom: null,
       returnAt: null,
+      heldFor: 0,
     })),
     frigates: {},
     shells: [],
@@ -454,6 +456,7 @@ export function stepBases(
   firedPlayers: ReadonlySet<string> = new Set(),
 ): void {
   for (const base of state.bases) {
+    let ownershipChanged = false;
     if (base.kind === "home" && base.returnAt !== null && now >= base.returnAt) {
       const ownerId = base.lostFrom;
       const ownerName = ownerId ? playerName(state, ownerId) : null;
@@ -491,6 +494,8 @@ export function stepBases(
         const capturerId = occupant.playerId;
         const capturerName = playerName(state, capturerId);
         base.ownerId = capturerId;
+        base.heldFor = 0;
+        ownershipChanged = true;
         base.captureBy = null;
         base.captureProgress = 0;
         if (base.kind === "home" && base.lostFrom !== null && capturerId === base.lostFrom) {
@@ -537,6 +542,29 @@ export function stepBases(
     }
 
     const ownerId = base.ownerId;
+    const incomeInterval = state.settings.baseIncomeInterval;
+    if (!base.active || !ownerId || incomeInterval === 0) {
+      base.heldFor = 0;
+    } else if (!ownershipChanged) {
+      base.heldFor += dt;
+      while (base.heldFor >= incomeInterval) {
+        if (base.kind !== "home") {
+          const ownerScore = state.scores[ownerId];
+          if (ownerScore) {
+            ownerScore.score += GAME_CONFIG.baseIncome.payout;
+            state.events.push({
+              type: "income",
+              playerId: ownerId,
+              baseId: base.id,
+              x: base.cityX,
+              y: base.cityY,
+              amount: GAME_CONFIG.baseIncome.payout,
+            });
+          }
+        }
+        base.heldFor -= incomeInterval;
+      }
+    }
     if (!base.active || !ownerId || base.turret === "active") {
       base.repairBy = null;
       base.repairProgress = 0;
@@ -586,7 +614,8 @@ export function stepBases(
     const maxFuel = fuelCapacity(state.settings);
     const hasSuppliesMissing = frigate.fuel < maxFuel
       || frigate.shells < state.settings.shells
-      || frigate.torpedoes < state.settings.torpedoes;
+      || frigate.torpedoes < state.settings.torpedoes
+      || frigate.hp < GAME_CONFIG.player.maxHp;
     if (!hasSuppliesMissing) {
       frigate.resupplying = false;
       continue;
@@ -595,9 +624,14 @@ export function stepBases(
     frigate.fuel = Math.min(maxFuel, frigate.fuel + maxFuel * fractionPerSecond);
     frigate.shells = Math.min(state.settings.shells, frigate.shells + state.settings.shells * fractionPerSecond);
     frigate.torpedoes = Math.min(state.settings.torpedoes, frigate.torpedoes + state.settings.torpedoes * fractionPerSecond);
+    frigate.hp = Math.min(
+      GAME_CONFIG.player.maxHp,
+      frigate.hp + GAME_CONFIG.player.maxHp * fractionPerSecond,
+    );
     frigate.resupplying = frigate.fuel < maxFuel
       || frigate.shells < state.settings.shells
-      || frigate.torpedoes < state.settings.torpedoes;
+      || frigate.torpedoes < state.settings.torpedoes
+      || frigate.hp < GAME_CONFIG.player.maxHp;
   }
 }
 
@@ -947,6 +981,7 @@ export function regenerateGameWorld(
       repairProgress: 0,
       lostFrom: null,
       returnAt: null,
+      heldFor: 0,
     };
   });
   state.shells = [];

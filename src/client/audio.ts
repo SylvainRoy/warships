@@ -10,7 +10,8 @@ export type SoundKind =
   | "sinking"
   | "turret-fire"
   | "radar-ping"
-  | "chime";
+  | "chime"
+  | "coin";
 
 export interface SoundPosition {
   distance?: number;
@@ -137,6 +138,7 @@ function soundDuration(kind: SoundKind): number {
     case "turret-fire": return 0.16;
     case "radar-ping": return 0.18;
     case "chime": return 0.44;
+    case "coin": return 0.24;
   }
 }
 
@@ -195,5 +197,7 @@ function createSoundSources(
       return [oscillator("sine", 980, 560)];
     case "chime":
       return [oscillator("sine", 587, 587, 0, 0.16), oscillator("sine", 784, 784, 0.15, 0.22)];
+    case "coin":
+      return [oscillator("sine", 1175, 1175, 0, 0.12), oscillator("sine", 1568, 1568, 0.04, 0.16)];
   }
 }

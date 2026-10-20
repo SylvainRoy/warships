@@ -24,6 +24,11 @@ export interface HitFeedLine {
   at: number;
 }
 
+export interface FloatingNumberStyle {
+  offset: number;
+  alpha: number;
+}
+
 export const DEFAULT_EFFECTS_SETTINGS: EffectsSettings = {
   volume: GAME_CONFIG.effects.defaultVolume,
   shake: GAME_CONFIG.effects.defaultShake,
@@ -92,6 +97,26 @@ export function mergeHitFeedLine(
   return lines.map((line, index) => index === match
     ? { ...incoming, amount: line.amount + incoming.amount, at: now }
     : line);
+}
+
+export function leastFullResupplyFraction(fractions: {
+  fuel: number;
+  shells: number;
+  torpedoes: number;
+  hull: number;
+}): number {
+  return Math.max(0, Math.min(1, fractions.fuel, fractions.shells, fractions.torpedoes, fractions.hull));
+}
+
+export function floatingNumberStyle(
+  age: number,
+  duration: number,
+  fade: number,
+  rise: number,
+): FloatingNumberStyle {
+  const progress = Math.max(0, Math.min(1, age / duration));
+  const alpha = age <= duration - fade ? 1 : Math.max(0, (duration - age) / fade);
+  return { offset: rise * progress, alpha };
 }
 
 export function formatHitFeedLine(line: HitFeedLine): string {

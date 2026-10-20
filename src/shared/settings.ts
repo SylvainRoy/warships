@@ -18,6 +18,7 @@ export interface GameSettings {
   resupplyTime: number;
   captureTime: number;
   repairTime: number;
+  baseIncomeInterval: number;
 }
 
 export const DEFAULT_SETTINGS: GameSettings = {
@@ -38,6 +39,7 @@ export const DEFAULT_SETTINGS: GameSettings = {
   resupplyTime: 5,
   captureTime: 5,
   repairTime: 5,
+  baseIncomeInterval: GAME_CONFIG.baseIncome.defaultInterval,
 };
 
 export const SETTINGS_LIMITS: Record<keyof GameSettings, { min: number; max: number; step: number }> = {
@@ -58,6 +60,7 @@ export const SETTINGS_LIMITS: Record<keyof GameSettings, { min: number; max: num
   resupplyTime: { min: 1, max: 30, step: 1 },
   captureTime: { min: 1, max: 30, step: 1 },
   repairTime: { min: 1, max: 30, step: 1 },
+  baseIncomeInterval: { min: 0, max: 180, step: 30 },
 };
 
 const SETTINGS_KEYS: readonly (keyof GameSettings)[] = [
@@ -78,6 +81,7 @@ const SETTINGS_KEYS: readonly (keyof GameSettings)[] = [
   "resupplyTime",
   "captureTime",
   "repairTime",
+  "baseIncomeInterval",
 ];
 
 const SETTING_LABELS: Record<keyof GameSettings, string> = {
@@ -98,6 +102,7 @@ const SETTING_LABELS: Record<keyof GameSettings, string> = {
   resupplyTime: "resupply time",
   captureTime: "capture time",
   repairTime: "repair time",
+  baseIncomeInterval: "base income",
 };
 
 export const MAP_SIZE_LABELS = GAME_CONFIG.world.mapSizes.map(({ label }) => label);
@@ -133,6 +138,8 @@ export function describeSettingsChanges(before: GameSettings, after: GameSetting
     if (before[key] === after[key]) return [];
     const value = key === "mapSize"
       ? formatMapSize(after[key])
+      : key === "baseIncomeInterval"
+        ? after[key] === 0 ? "Off" : `every ${after[key]} s`
       : key === "cannonReload" || key === "torpedoReload" || key === "resupplyTime" || key === "captureTime" || key === "repairTime"
       ? `${after[key].toFixed(1).replace(/\.0$/, "")} s`
       : key === "neutralBases" || key === "shells" || key === "torpedoes"

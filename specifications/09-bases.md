@@ -14,8 +14,8 @@
 
 ### Resupply
 
-- A frigate MUST be alive, have its whole hull inside an active base it owns, and have commanded throttle STOP to resupply. Fuel, shells, and torpedoes MUST refill simultaneously; each resource MUST take exactly the configured **resupply time** to fill from empty to capacity. Firing MUST NOT interrupt resupply (Q128).
-- Leaving the harbour MUST stop resupply; fuel and ammunition already refilled remain on board (Q112).
+- A frigate MUST be alive, have its whole hull inside an active base it owns, and have commanded throttle STOP to resupply. Fuel, shells, torpedoes, and hull MUST refill simultaneously; each MUST take exactly the configured **resupply time** to fill from empty to capacity. Firing MUST NOT interrupt resupply (Q128, Q172).
+- Leaving the harbour MUST stop resupply; fuel, ammunition, and hull already restored remain on board (Q112, Q172).
 
 ### Capture
 
@@ -29,7 +29,14 @@
 - In an owned harbour, a frigate MUST remain without firing for the configured **repair time** to rebuild a destroyed turret or install one on a captured base.
 - Firing, leaving the harbour, or sinking MUST restart the repair timer from zero (Q97, Q113). Turret repair/installation MUST proceed simultaneously with resupply when both actions' conditions are met.
 
-The three action times are host settings; their ranges, steps, and defaults are specified in [07-multiplayer.md](07-multiplayer.md).
+The action times are host settings; their ranges, steps, and defaults are specified in [07-multiplayer.md](07-multiplayer.md).
+
+## Base income
+
+- Each active, owned non-home base pays its owner **+1 point** each time it remains held for the configured Base income interval. Home bases never pay, even when captured; capture itself gives no points (Q115, Q175).
+- Each base has its own server-only timer. It accumulates while the base is active and owned, pays once per interval, and resets on ownership change, neutralization, map generation, or score reset (Q175, Q180).
+- The host may set Base income to Off or 30–180 s in 30 s steps; the default is 60 s. Changing a nonzero interval preserves progress as a fraction; Off resets timers (Q176).
+- Each payout emits a message-free income event. Every client shows a floating `+1` in the owner's colour; the owner hears a quiet, centred coin tick (Q177).
 
 ## Turrets
 

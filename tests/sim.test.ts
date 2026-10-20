@@ -1054,16 +1054,18 @@ describe("fuel, ammunition, and resupply", () => {
     expect(advanced.x - moving.x).toBeCloseTo(distance);
   });
 
-  it("refills all three supplies to the configured capacity", () => {
+  it("refills all resources to the configured capacity", () => {
     const ship = frigate("captain");
     ship.fuel = 0;
     ship.shells = 0;
     ship.torpedoes = 0;
+    ship.hp = 0;
     refillSupplies(ship, { ...DEFAULT_SETTINGS, mapSize: 2, fuelCrossings: 3, shells: 80, torpedoes: 40 });
     expect(ship).toMatchObject({
       fuel: 3 * mapDimensions(2).width,
       shells: 80,
       torpedoes: 40,
+      hp: maxHp,
       resupplying: false,
     });
   });
@@ -1202,6 +1204,7 @@ describe("fuel, ammunition, and resupply", () => {
     owner.fuel = 0;
     owner.shells = 1;
     owner.torpedoes = 0;
+    owner.hp = 50;
 
     stepGame(state, { owner: { ...quietInput, fireCannon: true } }, 0.1, 0);
 
@@ -1209,7 +1212,151 @@ describe("fuel, ammunition, and resupply", () => {
     expect(owner.fuel).toBeCloseTo(fuelCapacity(state.settings) / 40);
     expect(owner.shells).toBeCloseTo(state.settings.shells / 40);
     expect(owner.torpedoes).toBeCloseTo(state.settings.torpedoes / 40);
+    expect(owner.hp).toBeCloseTo(50 + maxHp / 40);
     expect(owner.resupplying).toBe(true);
+  });
+
+  it("repairs hull at the resupply rate and stops when STOP, harbour, or alive conditions end", () => {
+    const { state, base, owner } = ownedHarbour();
+    state.settings.resupplyTime = 4;
+    owner.hp = 0;
+    owner.throttle = 1;
+
+    stepBases(state, 1, 0);
+    expect(owner.hp).toBe(0);
+    expect(owner.resupplying).toBe(false);
+
+    owner.throttle = 0;
+    stepBases(state, 2, 1);
+    expect(owner.hp).toBeCloseTo(maxHp / 2);
+    expect(owner.resupplying).toBe(true);
+
+    owner.x += 200;
+    stepBases(state, 1, 3);
+    expect(owner.hp).toBeCloseTo(maxHp / 2);
+    expect(owner.resupplying).toBe(false);
+
+    owner.x = base.harbourX;
+    owner.status = "sinking";
+    stepBases(state, 1, 4);
+    expect(owner.hp).toBeCloseTo(maxHp / 2);
+    expect(owner.resupplying).toBe(false);
+  });
+
+  it("restores hull fully in exactly the configured resupply time", () => {
+    const { state, owner } = ownedHarbour();
+    state.settings.resupplyTime = 4;
+    owner.hp = 0;
+
+    stepBases(state, 4, 0);
+
+    expect(owner.hp).toBe(maxHp);
+    expect(owner.resupplying).toBe(false);
+  });
+});
+
+describe("base income", () => {
+  const neutralSite = {
+    id: "n0",
+    kind: "neutral" as const,
+    homeSlot: null,
+    cityX: 5000,
+    cityY: 4500,
+    harbourX: 5050,
+    harbourY: 4500,
+    facing: 0,
+  };
+
+  it("pays exactly one point at the interval and emits the income event shape", () => {
+    const state = createGameState(openWorld(), [neutralSite]);
+    const base = state.bases[0]!;
+    const owner = frigate("owner", base.harbourX, base.harbourY);
+    base.ownerId = owner.playerId;
+    state.frigates.owner = owner;
+    state.scores = scores(owner);
+    state.settings = { ...DEFAULT_SETTINGS, baseIncomeInterval: 2 };
+
+    stepBases(state, 1, 1);
+    expect(state.scores.owner?.score).toBe(0);
+    expect(base.heldFor).toBe(1);
+    stepBases(state, 1, 2);
+
+    expect(state.scores.owner?.score).toBe(1);
+    expect(base.heldFor).toBe(0);
+    expect(state.events.filter((event) => event.type === "income")).toEqual([{
+      type: "income",
+      playerId: owner.playerId,
+      baseId: base.id,
+      x: base.cityX,
+      y: base.cityY,
+      amount: 1,
+    }]);
+  });
+
+  it("stops payouts and clears progress when base income is Off", () => {
+    const state = createGameState(openWorld(), [neutralSite]);
+    const base = state.bases[0]!;
+    const owner = frigate("owner");
+    base.ownerId = owner.playerId;
+    base.heldFor = 15;
+    state.scores = scores(owner);
+    state.settings = { ...DEFAULT_SETTINGS, baseIncomeInterval: 0 };
+
+    stepBases(state, 30, 30);
+
+    expect(state.scores.owner?.score).toBe(0);
+    expect(base.heldFor).toBe(0);
+    expect(state.events.some((event) => event.type === "income")).toBe(false);
+  });
+
+  it("does not pay for owned or lost home bases or a neutral base", () => {
+    const state = createGameState(openWorld(), [
+      homeSite("h0", 0),
+      { ...homeSite("h1", 1), cityX: 8000, harbourX: 8050 },
+      neutralSite,
+    ]);
+    const original = frigate("original");
+    const holder = frigate("holder");
+    const ownedHome = state.bases[0]!;
+    const lostHome = state.bases[1]!;
+    ownedHome.active = true;
+    ownedHome.ownerId = original.playerId;
+    lostHome.active = true;
+    lostHome.ownerId = holder.playerId;
+    lostHome.lostFrom = original.playerId;
+    state.scores = scores(original, holder);
+    state.settings = { ...DEFAULT_SETTINGS, baseIncomeInterval: 1 };
+
+    stepBases(state, 30.5, 30.5);
+
+    expect(state.scores.original?.score).toBe(0);
+    expect(state.scores.holder?.score).toBe(0);
+    expect(state.bases.map((base) => base.heldFor)).toEqual([0.5, 0.5, 0]);
+    expect(state.events.some((event) => event.type === "income")).toBe(false);
+  });
+
+  it("resets progress when a base changes owner and when the world is regenerated", () => {
+    const state = createGameState(openWorld(), [neutralSite]);
+    const base = state.bases[0]!;
+    const owner = frigate("owner", 9000, 9000);
+    const capturer = frigate("capturer", base.harbourX, base.harbourY);
+    base.ownerId = owner.playerId;
+    base.turret = "destroyed";
+    base.turretHp = 0;
+    base.heldFor = 15;
+    state.frigates.owner = owner;
+    state.frigates.capturer = capturer;
+    state.scores = scores(owner, capturer);
+    state.settings = { ...DEFAULT_SETTINGS, captureTime: 1, baseIncomeInterval: 1 };
+
+    stepBases(state, 1, 1);
+    expect(base.ownerId).toBe(capturer.playerId);
+    expect(base.heldFor).toBe(0);
+    expect(state.events.some((event) => event.type === "income")).toBe(false);
+
+    base.heldFor = 15;
+    regenerateGameWorld(state, openWorld(), [neutralSite], 2, () => 0.5);
+    expect(state.bases[0]?.heldFor).toBe(0);
   });
 });
 

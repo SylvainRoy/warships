@@ -66,9 +66,10 @@ The own boat is a white 6 u triangle pointing along its heading. When the sweep 
 - Top-right: the compact scoreboard shows the colour dot, name and score only, in berth order; the own row is highlighted and bold. The sunk count appears only in the full Tab scoreboard (Q153).
 - Holding Tab shows the full scoreboard; when settings differ from defaults, it adds a `CUSTOM RULES · …` line listing each changed setting, including Map size.
 - Bottom-left: a 440 × 140 u console MUST show hull and fuel dials, cannon and torpedo tiles with current/max counts, status and reload bars, and a vertical throttle telegraph with the selected stop highlighted. Normal arcs and ready bars MUST be green; numbers MUST be white when normal, orange below 20% of capacity, and red when empty; the hull arc and number MUST be red at ≤35 HP (Q108, Q130, Q142).
-- A progress ring around the own boat MUST prioritize `Repairing turret` (or `Installing turret` when the base has no turret yet), then `Capturing <time>`, then `Resupplying`. The resupply ring MUST show the least-full of fuel, shells, and torpedoes and disappear when all are full (Q98, Q129).
+- A progress ring around the own boat MUST prioritize `Repairing turret` (or `Installing turret` when the base has no turret yet), then `Capturing <time>`, then `Resupplying`. The resupply ring MUST show the least-full of fuel, shells, torpedoes, and hull, and disappear when all are full (Q98, Q129, Q173).
 - The server MUST send fuel and ammunition only for the receiving player's own boat; other players' amounts MUST remain hidden (Q131).
 - Event feed (top-left): short messages "Alice sank Bob", "Carol joined", "World regenerated", fading after 5 s.
+- The Tab scoreboard MUST show each player's active base count, including home bases, in a `Bases` column after score. The compact scoreboard remains unchanged (Q178).
 - Death screen: "Sunk by *X*" + respawn countdown.
 
 ## Sound and damage effects
@@ -76,3 +77,5 @@ The own boat is a white 6 u triangle pointing along its heading. When the sweep 
 Sound effects are synthesised in code with Web Audio; there are no audio assets, music, or engine hum. Fire, splash, explosion, torpedo, hull damage, sinking, turret, radar-contact, capture, turret-install/repair, and resupply-complete sounds use the specified distinct synthesised cues. World sounds attenuate from 400 u to silence at 1,600 u and pan with world x position; own-boat sounds are centred and full volume. Sound is enabled after the first user gesture. The volume setting controls the master output; sounds are rate-limited and capped at 12 concurrent voices.
 
 Own-boat damage from any cause shakes only the world layer for 0.3 s when Screen shake is On, with an 8 u maximum amplitude scaled by damage and decaying linearly. A red vignette always flashes over the frame for 0.3 s. Shake changes only the camera offset; the 1600 × 900 u visible-area clip and HUD remain fixed.
+
+Base income shows all players a floating `+1` in the owner's colour above the building, rising 30 u over 1.2 s and fading over the last 0.4 s. The owner hears a quiet, centred coin tick.

@@ -32,6 +32,7 @@ A spawn point is valid only when no land tile lies within 60 u of the frigate hu
     - **Fuel crossings**: 1–10, step 1, default 2. Each crossing is the current map width (Q103, Q137).
     - **Shells**: 10–200, step 10, default 50; **Torpedoes**: 5–100, step 5, default 30 (Q105).
     - **Resupply time**, **Capture time**, and **Repair time**: each 1–30 s, step 1 s, default 5 s (Q95–Q97).
+    - **Base income**: Off or every 30–180 s, step 30 s, default every 60 s. Changing a nonzero interval preserves each base's progress as a fraction; Off resets timers and stops payouts (Q176).
     - Fuel and ammunition setting changes apply immediately; current amounts MUST be clamped to the new maximum (Q107). A time-setting change applies immediately to an action in progress, preserving progress as a fraction of that action (Q119).
 - Enter confirms a pending action; Esc cancels it or returns from kick selection.
 - All players see a notification in the event feed when the host performs an action.

@@ -30,6 +30,7 @@
 - Host settings for neutral bases, fuel capacity, ammunition capacity, and harbour-action times.
 - Synthesised sound effects (no music).
 - Sound and effects settings, hit feedback, and own-damage feedback.
+- Hull repair in owned harbours and income from holding non-home bases.
 
 ## Out of scope (v1) — candidates for later
 

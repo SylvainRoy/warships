@@ -1,11 +1,12 @@
 import { GAME_CONFIG } from "../shared/config.js";
-import type { Base } from "../shared/bases.js";
+import type { BasePublic } from "../shared/bases.js";
 import { mapDimensions } from "../shared/world.js";
 import type { GameSettings } from "../shared/settings.js";
+import { leastFullResupplyFraction } from "./feedback.js";
 
 export function drawBases(
   ctx: CanvasRenderingContext2D,
-  bases: readonly Base[],
+  bases: readonly BasePublic[],
   colorForOwner: (ownerId: string) => string | undefined,
 ): void {
   const citySize = GAME_CONFIG.bases.citySize;
@@ -107,8 +108,8 @@ export function drawBases(
 
 export function drawCaptureProgress(
   ctx: CanvasRenderingContext2D,
-  frigate: { x: number; y: number; fuel: number; shells: number; torpedoes: number; resupplying: boolean },
-  bases: readonly Base[],
+  frigate: { x: number; y: number; fuel: number; shells: number; torpedoes: number; hp: number; resupplying: boolean },
+  bases: readonly BasePublic[],
   playerId: string,
   captureTime: number,
   _repairTime: number,
@@ -124,11 +125,12 @@ export function drawCaptureProgress(
     ? base?.repairProgress ?? 0
     : capturing
       ? base?.captureProgress ?? 0
-      : Math.min(
-          frigate.fuel / (settings.fuelCrossings * mapDimensions(settings.mapSize).width),
-          frigate.shells / settings.shells,
-          frigate.torpedoes / settings.torpedoes,
-        );
+      : leastFullResupplyFraction({
+          fuel: frigate.fuel / (settings.fuelCrossings * mapDimensions(settings.mapSize).width),
+          shells: frigate.shells / settings.shells,
+          torpedoes: frigate.torpedoes / settings.torpedoes,
+          hull: frigate.hp / GAME_CONFIG.player.maxHp,
+        });
   const label = repairing
     ? repairBase?.turret === "none"
       ? "Installing turret"

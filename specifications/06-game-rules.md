@@ -23,6 +23,7 @@ A frigate spawns when its player joins, after being sunk, and when the world is 
 
 - Capturing another player's home base costs its original owner **5 points** and awards the capturer **5 points**. Scores may be negative (Q101).
 - **+1 point** to the player whose shell or torpedo dealt the final damage.
+- Each active, owned non-home base awards its owner **+1 point** for each Base income interval it remains held; home bases never pay, and capture itself awards no points (Q115, Q175).
 - Sinking yourself (own shell / torpedo, or running into land): no point gained, **−1 point**.
 - No points for damage that does not sink.
 - Scores are kept for as long as the player stays connected; a player leaving loses their score.

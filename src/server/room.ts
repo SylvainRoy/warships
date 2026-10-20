@@ -1,7 +1,7 @@
 import { randomBytes } from "node:crypto";
 import { performance } from "node:perf_hooks";
 import type { WebSocket } from "ws";
-import { generateWorldWithBases, placeBases, restoreHome, type BaseSite, type BaseSnapshot } from "../shared/bases.js";
+import { generateWorldWithBases, placeBases, restoreHome, type BasePublic, type BaseSite, type BaseSnapshot } from "../shared/bases.js";
 import { GAME_CONFIG } from "../shared/config.js";
 import type { ClientMessage, ServerMessage, SnapshotFrigate } from "../shared/protocol.js";
 import { DEFAULT_SETTINGS, describeSettingsChanges, sanitizeSettings } from "../shared/settings.js";
@@ -227,7 +227,7 @@ export class Room {
       world: encodeWorld(this.game.world.grid),
       columns: this.game.world.columns,
       rows: this.game.world.rows,
-      bases: this.game.bases,
+      bases: this.publicBases(),
       settings: { ...this.game.settings },
     });
     this.send(socket, {
@@ -253,6 +253,10 @@ export class Room {
     };
   }
 
+  private publicBases(): BasePublic[] {
+    return this.game.bases.map(({ heldFor: _heldFor, ...base }) => base);
+  }
+
   private performHostAction(session: PlayerSession, message: Extract<ClientMessage, { type: "host" }>): void {
     if (!session.host) {
       this.send(session.socket!, { type: "error", code: "not_host" });
@@ -269,6 +273,7 @@ export class Room {
         player.sunk = 0;
         this.game.scores[player.id] = this.scoreRecord(player);
       }
+      for (const base of this.game.bases) base.heldFor = 0;
       this.broadcastEvent({ type: "host", playerId: session.id, name: session.name, message: `${session.name} reset the scores` });
       return;
     }
@@ -293,7 +298,15 @@ export class Room {
       const coverageChanged = this.game.settings.landCoveragePct !== settings.landCoveragePct;
       const neutralBasesChanged = this.game.settings.neutralBases !== settings.neutralBases;
       const mapSizeChanged = this.game.settings.mapSize !== settings.mapSize;
+      const previousIncomeInterval = this.game.settings.baseIncomeInterval;
       this.game.settings = settings;
+      if (previousIncomeInterval !== settings.baseIncomeInterval) {
+        for (const base of this.game.bases) {
+          base.heldFor = previousIncomeInterval === 0 || settings.baseIncomeInterval === 0
+            ? 0
+            : base.heldFor * settings.baseIncomeInterval / previousIncomeInterval;
+        }
+      }
       for (const frigate of Object.values(this.game.frigates)) {
         frigate.fuel = Math.min(frigate.fuel, fuelCapacity(settings));
         frigate.shells = Math.min(frigate.shells, settings.shells);
@@ -336,7 +349,7 @@ export class Room {
       world: encoded,
       columns: this.game.world.columns,
       rows: this.game.world.rows,
-      bases: this.game.bases,
+      bases: this.publicBases(),
     });
     this.sentProjectileIds.clear();
     this.broadcastJoined({
@@ -584,6 +597,7 @@ export class Room {
       if (home) {
         base.active = false;
         base.ownerId = null;
+        base.heldFor = 0;
         base.turret = "none";
         base.turretHp = 0;
         base.turretReadyAt = 0;
@@ -607,6 +621,7 @@ export class Room {
           });
         } else {
           base.ownerId = null;
+          base.heldFor = 0;
           base.turret = "none";
           base.turretHp = 0;
           base.turretReadyAt = 0;

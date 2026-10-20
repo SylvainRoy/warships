@@ -1,5 +1,5 @@
 import { GAME_CONFIG } from "../shared/config.js";
-import type { Base } from "../shared/bases.js";
+import type { BasePublic } from "../shared/bases.js";
 import { INPUT_KEYS, applyFrigateInput, type Frigate, type FrigateInput, type GameEvent, type Shell, type Torpedo } from "../shared/sim.js";
 import { DEFAULT_SETTINGS, describeSettingsChanges, formatMapSize, SETTINGS_LIMITS, type GameSettings } from "../shared/settings.js";
 import { APP_VERSION } from "../shared/version.js";
@@ -26,6 +26,7 @@ import {
   damageTargetKey,
   DEFAULT_EFFECTS_SETTINGS,
   EFFECTS_STORAGE_KEY,
+  floatingNumberStyle,
   formatHitFeedLine,
   mergeHitFeedLine,
   mergeHitNumber,
@@ -63,6 +64,7 @@ type MenuPending = HostMenuPending | ControlsMenuPending | EffectsMenuPending | 
 type HitMarker = { x: number; y: number; at: number };
 type PendingHitFeed = { targetKey: string; targetId?: string; label: string; amount: number; at: number };
 type PendingSplashSound = { x: number; y: number; timer: number };
+type IncomeNumber = { x: number; y: number; playerId: string; amount: number; startedAt: number };
 
 function storedBindings(): string | null {
   try {
@@ -78,7 +80,7 @@ declare global {
       ownId: string | null;
       latestSnapshot: Readonly<Snapshot> | null;
       predictedOwnFrigate: Readonly<Frigate> | null;
-      bases: ReadonlyArray<Readonly<Base>>;
+      bases: ReadonlyArray<Readonly<BasePublic>>;
       projectiles: Readonly<{ shells: Shell[]; torpedoes: Torpedo[] }>;
       projectileServerTime: number;
     }>;
@@ -129,6 +131,7 @@ const effects: Array<{ event: GameEvent; at: number }> = [];
 const feed: Array<{ text: string; at: number; hit?: HitFeedLine }> = [];
 const hitMarkers: HitMarker[] = [];
 const hitNumbers = new Map<string, HitNumber>();
+const incomeNumbers: IncomeNumber[] = [];
 const pendingHitFeed: PendingHitFeed[] = [];
 const recentSinkTimes = new Map<string, { at: number; playerId?: string }>();
 const knownPositions = new Map<string, { x: number; y: number }>();
@@ -141,7 +144,7 @@ let previousResupplying: boolean | null = null;
 let ownSinking = false;
 let socket: WebSocket | null = null;
 let world: World | null = null;
-let bases: Base[] = [];
+let bases: BasePublic[] = [];
 let ownId: string | null = null;
 let latestSnapshot: Snapshot | null = null;
 let predictedOwn: Frigate | null = null;
@@ -346,6 +349,7 @@ function handleMessage(message: ServerMessage): void {
     knownPositions.clear();
     hitMarkers.length = 0;
     hitNumbers.clear();
+    incomeNumbers.length = 0;
     pendingHitFeed.length = 0;
     ownDamageTimes.length = 0;
     recentSinkTimes.clear();
@@ -367,6 +371,7 @@ function handleMessage(message: ServerMessage): void {
     addFeed("Connected to the battle");
   } else if (message.type === "world") {
     throttleLevel = 0;
+    incomeNumbers.length = 0;
     bases = message.bases;
     world = worldFromMessage(message.world, message.columns, message.rows, world?.seed ?? 0);
     resetWorldCaches();
@@ -474,6 +479,19 @@ function handleGameEvent(event: GameEvent, at: number): void {
       cancelPendingSplashAt(event.x, event.y);
     }
     handleDamageEvent(event, at);
+  } else if (event.type === "income") {
+    if (event.x !== undefined && event.y !== undefined && event.playerId) {
+      incomeNumbers.push({
+        x: event.x,
+        y: event.y,
+        playerId: event.playerId,
+        amount: event.amount ?? GAME_CONFIG.baseIncome.payout,
+        startedAt: at,
+      });
+    }
+    if (event.playerId === ownId) {
+      audio.play("coin", { own: true, gain: GAME_CONFIG.baseIncome.coinGain });
+    }
   } else if (event.playerId === ownId && event.type === "capture") {
     audio.play("chime", { own: true });
   } else if (event.playerId === ownId && event.type === "turret" && /installed|repaired/i.test(event.message ?? "")) {
@@ -662,6 +680,7 @@ const settingsRows: Array<{ key: keyof GameSettings; label: string }> = [
   { key: "resupplyTime", label: "Resupply time" },
   { key: "captureTime", label: "Capture time" },
   { key: "repairTime", label: "Repair time" },
+  { key: "baseIncomeInterval", label: "Base income" },
 ];
 
 function isOwnHost(snapshot: Snapshot | null = latestSnapshot): boolean {
@@ -1586,9 +1605,14 @@ function drawHitFeedback(now: number): void {
       hitNumbers.delete(targetKey);
       continue;
     }
-    const fadeStart = GAME_CONFIG.effects.damageNumberDuration - GAME_CONFIG.effects.damageNumberFade;
+    const style = floatingNumberStyle(
+      age,
+      GAME_CONFIG.effects.damageNumberDuration,
+      GAME_CONFIG.effects.damageNumberFade,
+      GAME_CONFIG.effects.damageNumberRise,
+    );
     ctx.save();
-    ctx.globalAlpha = age <= fadeStart ? 1 : (GAME_CONFIG.effects.damageNumberDuration - age) / GAME_CONFIG.effects.damageNumberFade;
+    ctx.globalAlpha = style.alpha;
     ctx.fillStyle = "#fff";
     ctx.font = `700 ${GAME_CONFIG.effects.damageNumberFontSize}px Manrope, sans-serif`;
     ctx.textAlign = "center";
@@ -1596,8 +1620,32 @@ function drawHitFeedback(now: number): void {
     ctx.fillText(
       `−${hit.amount}`,
       hit.x,
-      hit.y - GAME_CONFIG.effects.damageNumberRise * age / GAME_CONFIG.effects.damageNumberDuration,
+      hit.y - style.offset,
     );
+    ctx.restore();
+  }
+  for (let index = incomeNumbers.length - 1; index >= 0; index -= 1) {
+    const number = incomeNumbers[index];
+    if (!number) continue;
+    const age = (now - number.startedAt) / 1000;
+    if (age >= GAME_CONFIG.baseIncome.feedbackDuration) {
+      incomeNumbers.splice(index, 1);
+      continue;
+    }
+    const style = floatingNumberStyle(
+      age,
+      GAME_CONFIG.baseIncome.feedbackDuration,
+      GAME_CONFIG.baseIncome.feedbackFade,
+      GAME_CONFIG.baseIncome.feedbackRise,
+    );
+    const owner = latestSnapshot?.players.find((player) => player.playerId === number.playerId);
+    ctx.save();
+    ctx.globalAlpha = style.alpha;
+    ctx.fillStyle = owner ? colours[owner.slot - 1] ?? "#fff" : "#fff";
+    ctx.font = `700 ${GAME_CONFIG.baseIncome.feedbackFontSize}px Manrope, sans-serif`;
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.fillText(`+${number.amount}`, number.x, number.y - style.offset);
     ctx.restore();
   }
 }
@@ -2098,6 +2146,14 @@ function drawFullScoreboard(snapshot: Snapshot, width: number, height: number): 
   ctx.fillStyle = "#9bb6bf";
   ctx.textAlign = "left";
   ctx.fillText("WATERSIDE SCOREBOARD", width / 2 - 215, height / 2 - 128);
+  ctx.fillStyle = "#829ca4";
+  ctx.font = "10px DM Mono, monospace";
+  ctx.textAlign = "right";
+  ctx.fillText("PTS", width / 2 + 60, height / 2 - 104);
+  ctx.textAlign = "center";
+  ctx.fillText("BASES", width / 2 + 117, height / 2 - 104);
+  ctx.textAlign = "right";
+  ctx.fillText("SUNK", width / 2 + 202, height / 2 - 104);
   snapshot.players.slice().sort((a, b) => b.score - a.score || a.sunk - b.sunk).forEach((player, index) => {
     const y = height / 2 - 89 + index * 48;
     ctx.fillStyle = player.playerId === ownId ? "rgba(96, 224, 203, .13)" : "rgba(225, 243, 244, .04)";
@@ -2111,7 +2167,12 @@ function drawFullScoreboard(snapshot: Snapshot, width: number, height: number): 
     ctx.fillText(`${player.host ? "♛ " : ""}${player.name}`, width / 2 - 187, y + 2);
     ctx.textAlign = "right";
     ctx.font = "12px DM Mono, monospace";
-    ctx.fillText(`${player.score} PTS    ${player.sunk} SUNK`, width / 2 + 202, y + 4);
+    const baseCount = bases.filter((base) => base.active && base.ownerId === player.playerId).length;
+    ctx.fillText(`${player.score}`, width / 2 + 60, y + 4);
+    ctx.textAlign = "center";
+    ctx.fillText(`${baseCount}`, width / 2 + 117, y + 4);
+    ctx.textAlign = "right";
+    ctx.fillText(`${player.sunk}`, width / 2 + 202, y + 4);
     ctx.textAlign = "left";
   });
   if (customRules) {
@@ -2225,12 +2286,12 @@ function drawMenu(snapshot: Snapshot, width: number, height: number): void {
   if (menuPending?.action === "settings") {
     const pending = menuPending;
     settingsRows.forEach((row, index) => {
-      const y = centerY - 85 + index * 20;
+      const y = centerY - 85 + index * 18;
       const selected = index === pending.index;
       const value = pending.draft[row.key];
       if (selected) {
         ctx.fillStyle = "rgba(107, 224, 207, .14)";
-        ctx.fillRect(width / 2 - 200, y - 6, 400, 23);
+        ctx.fillRect(width / 2 - 200, y - 5, 400, 20);
       }
       ctx.fillStyle = selected ? "#6be0cf" : "#d7e5e9";
       ctx.font = "600 12px Manrope, sans-serif";
@@ -2240,6 +2301,8 @@ function drawMenu(snapshot: Snapshot, width: number, height: number): void {
       ctx.font = "500 12px DM Mono, monospace";
       const displayedValue = row.key === "mapSize"
         ? formatMapSize(value)
+        : row.key === "baseIncomeInterval"
+          ? value === 0 ? "Off" : `every ${value} s`
         : row.key === "cannonReload" || row.key === "torpedoReload" || row.key === "resupplyTime" || row.key === "captureTime" || row.key === "repairTime"
           ? `${value.toFixed(1).replace(/\.0$/, "")} s`
           : row.key === "neutralBases" || row.key === "shells" || row.key === "torpedoes"

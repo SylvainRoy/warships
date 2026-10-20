@@ -15,6 +15,8 @@ describe("game settings", () => {
     expect(DEFAULT_SETTINGS.resupplyTime).toBe(5);
     expect(DEFAULT_SETTINGS.captureTime).toBe(5);
     expect(DEFAULT_SETTINGS.repairTime).toBe(5);
+    expect(DEFAULT_SETTINGS.baseIncomeInterval).toBe(60);
+    expect(SETTINGS_LIMITS.baseIncomeInterval).toEqual({ min: 0, max: 180, step: 30 });
     const defaults = sanitizeSettings(DEFAULT_SETTINGS);
     expect(defaults).toEqual(DEFAULT_SETTINGS);
     expect(defaults).not.toBe(DEFAULT_SETTINGS);
@@ -37,6 +39,7 @@ describe("game settings", () => {
       resupplyTime: 1,
       captureTime: 1,
       repairTime: 1,
+      baseIncomeInterval: 0,
     })).toEqual({
       boatSpeedPct: 50,
       rotationPct: 200,
@@ -55,6 +58,7 @@ describe("game settings", () => {
       resupplyTime: 1,
       captureTime: 1,
       repairTime: 1,
+      baseIncomeInterval: 0,
     });
     expect(sanitizeSettings({ ...DEFAULT_SETTINGS, cannonReload: 10, torpedoReload: 1 })).toEqual({
       ...DEFAULT_SETTINGS,
@@ -64,6 +68,9 @@ describe("game settings", () => {
     expect(sanitizeSettings({ ...DEFAULT_SETTINGS, boatSpeedPct: 150.0000005 })).toEqual({
       ...DEFAULT_SETTINGS,
       boatSpeedPct: 150,
+    });
+    expect(sanitizeSettings({ ...DEFAULT_SETTINGS, baseIncomeInterval: 180 })).toMatchObject({
+      baseIncomeInterval: 180,
     });
   });
 
@@ -104,6 +111,9 @@ describe("game settings", () => {
     expect(sanitizeSettings({ ...DEFAULT_SETTINGS, repairTime: 0 })).toBeNull();
     expect(sanitizeSettings({ ...DEFAULT_SETTINGS, repairTime: 31 })).toBeNull();
     expect(sanitizeSettings({ ...DEFAULT_SETTINGS, repairTime: 5.5 })).toBeNull();
+    expect(sanitizeSettings({ ...DEFAULT_SETTINGS, baseIncomeInterval: -30 })).toBeNull();
+    expect(sanitizeSettings({ ...DEFAULT_SETTINGS, baseIncomeInterval: 210 })).toBeNull();
+    expect(sanitizeSettings({ ...DEFAULT_SETTINGS, baseIncomeInterval: 45 })).toBeNull();
 
     const missing = { ...DEFAULT_SETTINGS } as Record<string, unknown>;
     delete missing.torpedoReload;
@@ -133,6 +143,7 @@ describe("game settings", () => {
       resupplyTime: 3,
       captureTime: 10,
       repairTime: 10,
+      baseIncomeInterval: 30,
     })).toEqual([
       "boat speed 150%",
       "rotation 120%",
@@ -150,6 +161,11 @@ describe("game settings", () => {
       "resupply time 3 s",
       "capture time 10 s",
       "repair time 10 s",
+      "base income every 30 s",
     ]);
+    expect(describeSettingsChanges(DEFAULT_SETTINGS, {
+      ...DEFAULT_SETTINGS,
+      baseIncomeInterval: 0,
+    })).toEqual(["base income Off"]);
   });
 });

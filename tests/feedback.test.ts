@@ -4,6 +4,8 @@ import {
   DEFAULT_EFFECTS_SETTINGS,
   damageTargetKey,
   formatHitFeedLine,
+  floatingNumberStyle,
+  leastFullResupplyFraction,
   mergeHitFeedLine,
   mergeHitNumber,
   parseEffectsSettings,
@@ -29,6 +31,20 @@ describe("client feedback helpers", () => {
     expect(damageTargetKey({ targetId: "p2" })).toBe("frigate:p2");
     expect(damageTargetKey({ baseId: "b4" })).toBe("turret:b4");
     expect(damageTargetKey({})).toBeNull();
+  });
+
+  it("uses the least-full hull, fuel, ammunition, or torpedo fraction for the resupply ring", () => {
+    expect(leastFullResupplyFraction({ fuel: 0.8, shells: 0.7, torpedoes: 0.9, hull: 0.2 })).toBe(0.2);
+    expect(leastFullResupplyFraction({ fuel: 1.2, shells: 1, torpedoes: 1, hull: 1 })).toBe(1);
+  });
+
+  it("shares rising and fading number animation timing", () => {
+    const beforeFade = floatingNumberStyle(0.4, 1.2, 0.4, 30);
+    expect(beforeFade.offset).toBeCloseTo(10);
+    expect(beforeFade.alpha).toBe(1);
+    const duringFade = floatingNumberStyle(1, 1.2, 0.4, 30);
+    expect(duringFade.offset).toBeCloseTo(25);
+    expect(duringFade.alpha).toBeCloseTo(0.5);
   });
 
   it("merges damage numbers for the same target only inside the configured window", () => {

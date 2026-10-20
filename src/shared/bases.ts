@@ -32,7 +32,8 @@ export interface BaseStatus {
   returnAt: number | null;
 }
 
-export type Base = BaseSite & BaseStatus;
+export type BasePublic = BaseSite & BaseStatus;
+export type Base = BasePublic & { heldFor: number };
 export type BaseSnapshot = Pick<
   BaseStatus,
   "id" | "active" | "ownerId" | "captureBy" | "captureProgress" | "turret" | "turretHp" | "repairBy" | "repairProgress"
@@ -41,6 +42,7 @@ export type BaseSnapshot = Pick<
 export function restoreHome(base: Base, now: number): void {
   base.active = true;
   base.ownerId = base.lostFrom ?? base.ownerId;
+  base.heldFor = 0;
   base.lostFrom = null;
   base.returnAt = null;
   base.turret = "active";

@@ -202,9 +202,13 @@ describe("multiplayer room", () => {
     expect(room.game.scores[host.playerId]?.score).toBe(4);
     expect(room.game.frigates[host.playerId]?.status).toBe("alive");
     expect(room.game.frigates[guest.playerId]?.hp).toBe(GAME_CONFIG.player.maxHp);
+    const incomeBase = room.game.bases.find((base) => base.kind === "neutral")!;
+    incomeBase.ownerId = host.playerId;
+    incomeBase.heldFor = 12;
     send(room, hostSocket, { type: "host", action: "resetScores" });
     expect(room.game.scores[host.playerId]?.score).toBe(0);
     expect(room.game.scores[guest.playerId]?.sunk).toBe(0);
+    expect(incomeBase.heldFor).toBe(0);
     send(room, hostSocket, { type: "host", action: "kick", target: guest.playerId });
     expect(room.sessions.has(guest.playerId)).toBe(false);
     expect(guestSocket.last("error")?.code).toBe("kicked");
@@ -257,6 +261,49 @@ describe("multiplayer room", () => {
       message.type === "event"
         && message.event.message === "Host Harbor: boat speed 150%, cannon reload 2 s, fuel 3 crossings, shells 100, torpedoes 60, resupply time 6 s",
     )).toHaveLength(eventCount);
+  });
+
+  it("preserves base income progress as a fraction and resets it when income is Off", () => {
+    const room = new Room(11, () => 0, openWorld, fixtureSites);
+    const hostSocket = connect(room);
+    join(room, hostSocket, "Harbor");
+    const hostId = welcome(hostSocket).playerId;
+    const base = room.game.bases.find((candidate) => candidate.kind === "neutral")!;
+    base.ownerId = hostId;
+    base.heldFor = 30;
+
+    send(room, hostSocket, {
+      type: "host",
+      action: "settings",
+      settings: { ...room.game.settings, baseIncomeInterval: 120 },
+    });
+    expect(base.heldFor).toBe(60);
+
+    base.heldFor = 42;
+    send(room, hostSocket, {
+      type: "host",
+      action: "settings",
+      settings: { ...room.game.settings, baseIncomeInterval: 0 },
+    });
+    expect(base.heldFor).toBe(0);
+  });
+
+  it("resets base income progress when its owner is neutralized", () => {
+    let now = 0;
+    const room = new Room(11, () => now, openWorld, fixtureSites);
+    const hostSocket = connect(room);
+    join(room, hostSocket, "Harbor");
+    const hostId = welcome(hostSocket).playerId;
+    const base = room.game.bases.find((candidate) => candidate.kind === "neutral")!;
+    base.ownerId = hostId;
+    base.heldFor = 18;
+
+    hostSocket.close();
+    now = GAME_CONFIG.network.reconnectGrace + 1;
+    room.advanceTick();
+
+    expect(base.ownerId).toBeNull();
+    expect(base.heldFor).toBe(0);
   });
 
   it("regenerates the world when the host changes land coverage", () => {
@@ -339,6 +386,7 @@ describe("multiplayer room", () => {
     join(room, host, "Harbor");
     join(room, guest, "Buoy");
     const playerId = welcome(host).playerId;
+    expect(welcome(host).bases[0]).not.toHaveProperty("heldFor");
     send(room, host, {
       type: "input",
       seq: 1,
@@ -357,6 +405,7 @@ describe("multiplayer room", () => {
     expect(snapshot?.bases?.[0]).not.toHaveProperty("cityX");
     expect(snapshot?.bases?.[0]).not.toHaveProperty("lostFrom");
     expect(snapshot?.bases?.[0]).not.toHaveProperty("turretReadyAt");
+    expect(snapshot?.bases?.[0]).not.toHaveProperty("heldFor");
 
     for (const socket of [host, guest]) {
       const spawned = socket.messages.filter(

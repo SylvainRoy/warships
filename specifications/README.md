@@ -1,6 +1,6 @@
 # Warships — Specifications
 
-**Status: APPROVED v2.6** (2026-10-20) — game release v2.0.0 implements spec v2.5; release v1.0.0 implemented spec v1.18.
+**Status: APPROVED v2.7** (2026-10-20) — game release v2.0.0 implements spec v2.5; release v1.0.0 implemented spec v1.18.
 
 | # | Document | Content |
 |---|----------|---------|
@@ -23,6 +23,7 @@
 
 ## Changelog
 
+- v2.7 — hull repair in owned harbours and income from held non-home bases (Q172–Q181).
 - v2.6 — synthesised sound effects, sound and effects settings, and hit and own-damage feedback (Q160–Q171).
 - v2.5 — faster boats, shells and torpedoes (Q154–Q159).
 - v2.4 — compact scoreboard shows only each player's score (Q153).

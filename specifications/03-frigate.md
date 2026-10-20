@@ -43,4 +43,4 @@ The frigate has inertia: the throttle sets a target speed, and acceleration move
 
 - Each frigate has **100 hull points (HP)**.
 - Damage values are defined in [04-weapons.md](04-weapons.md). At 0 HP the frigate sinks ([06-game-rules.md](06-game-rules.md)).
-- No regeneration of HP while alive.
+- HP regenerates only while resupplying in an owned harbour (Q172).
