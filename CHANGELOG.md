@@ -4,6 +4,7 @@ All notable changes to Warships are recorded here. Versions follow semantic vers
 
 ## [Unreleased]
 
+- Internal: client split into modules (no gameplay change)
 - Hull repair now happens alongside harbour resupply; hosts can configure recurring income from held non-home bases.
 - Base income appears as a floating `+1` and quiet coin tick; the Tab scoreboard adds an active `Bases` count.
 - Synthesised positional sound effects for weapons, impacts, damage, sinking, radar contacts and harbour actions.
