@@ -4,19 +4,32 @@ All notable changes to Warships are recorded here. Versions follow semantic vers
 
 ## [Unreleased]
 
-- Base turrets follow the Bot skill setting: Normal and Easy turrets reach less far, fire more slowly and aim less accurately; Hard is unchanged.
-- Bot skill levels rebalanced: Hard plays like the former Normal; Normal and Easy bots aim worse, open fire at shorter range and manoeuvre less.
-- Enemy fire interrupts boat resupply and turret rebuilding until the boat leaves the harbour and returns.
-- Still white throttle-wave arcs show commanded throttle on every boat.
-- Four-team play with shared team bases and scoring, team selection, and friendly-fire prevention.
-- Timed rounds with a configurable length, countdown, results screen, and automatic new rounds; Endless remains available.
-- Server-side bots fill open berths, navigate, fight, capture bases and resupply; hosts can set their count and skill.
-- Internal: client split into modules (no gameplay change)
-- Hull repair now happens alongside harbour resupply; hosts can configure recurring income from held non-home bases.
-- Base income appears as a floating `+1` and quiet coin tick; the Tab scoreboard adds an active `Bases` count.
-- Synthesised positional sound effects for weapons, impacts, damage, sinking, radar contacts and harbour actions.
-- Sound volume and screen-shake settings, plus hit markers, merged damage numbers and local hit-feed feedback.
-- Own-boat damage adds a red vignette and optional world-layer shake.
+## [3.0.0] — 2026-10-20
+
+Third major release. It implements specification v2.14. Teams, timed rounds, bots and new difficulty levels change how a game is played and scored, hence the major version.
+
+### Teams and rounds
+- Four colour teams (Blue, Red, Yellow, Purple): pick one in the lobby or switch from Esc → Team. Teammates share colour, home, bases, turrets and radar, and cannot damage each other.
+- Team scores combine members' scores with base income and home-capture bonuses; scoreboards and results group players by team when a team has two or more players.
+- Timed rounds (10 min by default, or Endless) with a countdown, a results screen and an automatic new map.
+
+### Bots and difficulty
+- Server-side bots fill open berths (0–3, default 2); they navigate, fight, capture bases and resupply.
+- Bot skill Easy / Normal / Hard (default Normal). Hard plays like the previous default bots; Normal and Easy bots aim worse, open fire at shorter range and manoeuvre less.
+- Base turrets follow the same setting: Normal and Easy turrets reach less far, fire more slowly and aim less accurately. Hard turrets behave as in v2.0.0.
+
+### Bases
+- Stopping in your own harbour repairs the hull as well as refuelling and rearming.
+- Each held non-home base pays recurring income (+1 every 60 s by default), shown as a floating `+1`.
+- Enemy fire interrupts harbour repairs and turret rebuilding; leave the harbour and come back to resume.
+
+### Feel and feedback
+- Synthesised positional sound effects for weapons, impacts, damage, sinking, radar contacts and harbour actions, with a volume setting.
+- Hit markers, merged damage numbers, hit-feed lines, a red damage vignette and optional screen shake.
+- White throttle-wave arcs in front of the bow (or behind the stern when astern) show each boat's commanded throttle.
+
+### Internal
+- Client split into modules (no gameplay change).
 
 ## [2.0.0] — 2026-10-18
 
