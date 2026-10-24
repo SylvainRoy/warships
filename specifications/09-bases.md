@@ -16,6 +16,10 @@
 
 ### Resupply
 
+A player may upgrade a living frigate while its whole hull is inside an active harbour owned by its team. Rebindable U opens the panel; digits 1–6 purchase one of the six tracks. Upgrades persist through sinking and team changes, but reset with the round or Reset scores. Repair-locked frigates cannot purchase (Q242–Q245).
+
+The six tracks are speed (+10% per level), cannon range (+100 u), hull (+25 max and current HP immediately), frigate cannon damage (+3; no turret damage), torpedo speed (+20%, fixed at launch), and torpedo damage (+5). Each has three levels, costing $100, $200, then $400. Resupply repairs hull to its current max HP (Q244–Q245).
+
 - A frigate MUST be alive, have its whole hull inside an active base owned by its team, and have commanded throttle STOP to resupply. Fuel, shells, torpedoes, and hull MUST refill simultaneously; each MUST take exactly the configured **resupply time** to fill from empty to capacity. Firing MUST NOT interrupt resupply. Teammates may use one another's bases (Q128, Q172, Q208).
 - Enemy shell, torpedo, or turret-shell damage locks the hit boat to its team's active owned harbour when the boat centre is inside it. The locked boat MUST stop resupplying at that base until its centre leaves the harbour; previously restored fuel, ammunition, and hull remain on board, and resupply resumes from current levels after it returns. Land damage does not create a lock. An unhit teammate remains eligible to resupply (Q222, Q224, Q227).
 - Leaving the harbour MUST stop resupply; fuel, ammunition, and hull already restored remain on board (Q112, Q172).

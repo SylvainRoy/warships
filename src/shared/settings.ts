@@ -22,6 +22,7 @@ export interface GameSettings {
   bots: number;
   botSkill: number;
   roundMinutes: number;
+  treasures: boolean;
 }
 
 export const DEFAULT_SETTINGS: GameSettings = {
@@ -46,9 +47,12 @@ export const DEFAULT_SETTINGS: GameSettings = {
   bots: GAME_CONFIG.bots.defaultCount,
   botSkill: GAME_CONFIG.bots.defaultSkill,
   roundMinutes: GAME_CONFIG.rounds.defaultMinutes,
+  treasures: true,
 };
 
-export const SETTINGS_LIMITS: Record<keyof GameSettings, { min: number; max: number; step: number }> = {
+type NumericSetting = Exclude<keyof GameSettings, "treasures">;
+
+export const SETTINGS_LIMITS: Record<NumericSetting, { min: number; max: number; step: number }> = {
   boatSpeedPct: { min: 50, max: 200, step: 10 },
   rotationPct: { min: 50, max: 200, step: 10 },
   cannonRotationPct: { min: 50, max: 200, step: 10 },
@@ -94,6 +98,7 @@ const SETTINGS_KEYS: readonly (keyof GameSettings)[] = [
   "bots",
   "botSkill",
   "roundMinutes",
+  "treasures",
 ];
 
 export const SETTING_LABELS: Record<keyof GameSettings, string> = {
@@ -118,6 +123,7 @@ export const SETTING_LABELS: Record<keyof GameSettings, string> = {
   bots: "bots",
   botSkill: "bot skill",
   roundMinutes: "round length",
+  treasures: "Treasures & upgrades",
 };
 
 export const MAP_SIZE_LABELS = GAME_CONFIG.world.mapSizes.map(({ label }) => label);
@@ -139,12 +145,17 @@ export function sanitizeSettings(value: unknown): GameSettings | null {
   const settings: Partial<GameSettings> = {};
   for (const key of SETTINGS_KEYS) {
     const setting = source[key];
+    if (key === "treasures") {
+      if (typeof setting !== "boolean") return null;
+      settings.treasures = setting;
+      continue;
+    }
     const { min, max, step } = SETTINGS_LIMITS[key];
     if (typeof setting !== "number" || !Number.isFinite(setting) || setting < min || setting > max) return null;
     const stepCount = Math.round((setting - min) / step);
     const alignedSetting = min + stepCount * step;
     if (Math.abs(setting - alignedSetting) > 1e-6) return null;
-    settings[key] = alignedSetting;
+    settings[key as NumericSetting] = alignedSetting;
   }
   return settings as GameSettings;
 }
@@ -152,6 +163,7 @@ export function sanitizeSettings(value: unknown): GameSettings | null {
 export function describeSettingsChanges(before: GameSettings, after: GameSettings): string[] {
   return SETTINGS_KEYS.flatMap((key) => {
     if (before[key] === after[key]) return [];
+    if (key === "treasures") return [`${SETTING_LABELS[key]} ${after.treasures ? "On" : "Off"}`];
     const value = key === "mapSize"
       ? formatMapSize(after[key])
       : key === "baseIncomeInterval"

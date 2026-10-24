@@ -36,6 +36,7 @@ export const settingsRows: Array<{ key: keyof GameSettings; label: string }> = [
   { key: "bots", label: "Bots" },
   { key: "botSkill", label: "Bot skill" },
   { key: "roundMinutes", label: "Round length" },
+  { key: "treasures", label: "Treasures & upgrades" },
 ];
 
 function kickablePlayers(snapshot: Snapshot) {
@@ -167,17 +168,19 @@ export function drawMenu(snapshot: Snapshot, width: number, height: number): voi
       ctx.fillStyle = value !== DEFAULT_SETTINGS[row.key] ? "#e4ad80" : "#d7e5e9";
       ctx.font = "500 12px DM Mono, monospace";
       const displayedValue = row.key === "mapSize"
-        ? formatMapSize(value)
+        ? formatMapSize(value as number)
+        : row.key === "treasures"
+          ? value ? "On" : "Off"
         : row.key === "baseIncomeInterval"
           ? value === 0 ? "Off" : `every ${value} s`
         : row.key === "bots"
           ? `${value}`
         : row.key === "botSkill"
-          ? BOT_SKILL_LABELS[value] ?? `${value}`
+          ? BOT_SKILL_LABELS[value as number] ?? `${value}`
         : row.key === "roundMinutes"
           ? value === 0 ? "Endless" : `${value} min`
         : row.key === "cannonReload" || row.key === "torpedoReload" || row.key === "resupplyTime" || row.key === "captureTime" || row.key === "repairTime"
-          ? `${value.toFixed(1).replace(/\.0$/, "")} s`
+          ? `${(value as number).toFixed(1).replace(/\.0$/, "")} s`
           : row.key === "neutralBases" || row.key === "shells" || row.key === "torpedoes"
             ? `${value}`
             : row.key === "fuelCrossings"
@@ -313,6 +316,13 @@ window.addEventListener("keydown", (event) => {
     }
     const row = settingsRows[settingsPending.index];
     if (!row) return;
+    if (row.key === "treasures") {
+      client.menuPending = {
+        ...settingsPending,
+        draft: { ...settingsPending.draft, treasures: !settingsPending.draft.treasures },
+      };
+      return;
+    }
     const limits = SETTINGS_LIMITS[row.key];
     const currentSteps = Math.round((settingsPending.draft[row.key] - limits.min) / limits.step);
     const totalSteps = Math.round((limits.max - limits.min) / limits.step);

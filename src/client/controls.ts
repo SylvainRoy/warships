@@ -10,7 +10,8 @@ export type ControlAction =
   | "fireCannon"
   | "torpedoLeft"
   | "torpedoRight"
-  | "fireTorpedo";
+  | "fireTorpedo"
+  | "upgradeMenu";
 
 export const CONTROL_ACTIONS: ReadonlyArray<{ action: ControlAction; label: string }> = [
   { action: "throttleUp", label: "Throttle up" },
@@ -25,6 +26,7 @@ export const CONTROL_ACTIONS: ReadonlyArray<{ action: ControlAction; label: stri
   { action: "torpedoLeft", label: "Torpedo left" },
   { action: "torpedoRight", label: "Torpedo right" },
   { action: "fireTorpedo", label: "Fire torpedoes" },
+  { action: "upgradeMenu", label: "Upgrade menu" },
 ];
 
 export type Bindings = Record<ControlAction, string[]>;
@@ -42,6 +44,7 @@ export const DEFAULT_BINDINGS: Bindings = {
   torpedoLeft: ["BracketLeft"],
   torpedoRight: ["Backslash", "IntlBackslash"],
   fireTorpedo: ["BracketRight"],
+  upgradeMenu: ["KeyU"],
 };
 
 export const RESERVED_CODES: ReadonlySet<string> = new Set(["Escape", "Tab", "F3"]);

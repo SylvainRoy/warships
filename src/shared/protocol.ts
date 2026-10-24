@@ -1,4 +1,4 @@
-import type { FrigateInput, GameEvent, Frigate, Shell, Torpedo, PlayerScore } from "./sim.js";
+import type { FrigateInput, GameEvent, Frigate, Shell, Torpedo, PlayerScore, Treasure, UpgradeLevels, UpgradeTrack } from "./sim.js";
 import type { BasePublic, BaseSnapshot } from "./bases.js";
 import type { GameSettings } from "./settings.js";
 
@@ -13,7 +13,11 @@ export type ClientMessage =
   | { type: "join"; name: string; token?: string; team?: number }
   | { type: "team"; team: number }
   | ({ type: "input" } & FrigateInput)
+  | { type: "upgrade"; track: UpgradeTrack }
   | ({ type: "host" } & HostAction);
+
+export type SnapshotPlayer = Omit<PlayerScore, "money" | "moneyEarned" | "upgrades">;
+export type PlayerEconomy = Pick<PlayerScore, "playerId" | "money" | "moneyEarned" | "upgrades">;
 
 export type LobbyMessage = {
   type: "lobby";
@@ -38,6 +42,7 @@ export interface RoundResult {
   shots: number;
   hits: number;
   bases: number;
+  moneyEarned: number;
 }
 
 export type RoundState =
@@ -57,9 +62,10 @@ export type ServerMessage =
       ackSeq: number;
       serverTime: number;
       frigates: SnapshotFrigate[];
-      players: PlayerScore[];
+      players: SnapshotPlayer[];
       teamBonus: number[];
       bases?: BaseSnapshot[];
+      economy?: { players: PlayerEconomy[]; treasures: Treasure[] };
     }
   | { type: "event"; event: GameEvent }
   | { type: "error"; code: "name_taken" | "full" | "invalid_name" | "not_host" | "invalid_action" | "cooldown" | "kicked" };

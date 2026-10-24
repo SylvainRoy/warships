@@ -24,7 +24,7 @@ export type MenuPending = HostMenuPending | ControlsMenuPending | EffectsMenuPen
 export type HitMarker = { x: number; y: number; at: number };
 export type PendingHitFeed = { targetKey: string; targetId?: string; label: string; amount: number; at: number };
 export type PendingSplashSound = { x: number; y: number; timer: number };
-export type IncomeNumber = { x: number; y: number; team: number; amount: number; startedAt: number };
+export type IncomeNumber = { x: number; y: number; team: number; amount: number; startedAt: number; money?: boolean };
 
 export const client = {
   previousRadarSweepAngle: null as number | null,
@@ -61,6 +61,7 @@ export const client = {
   joined: false,
   tabHeld: false,
   menuOpen: false,
+  upgradeMenuOpen: false,
   menuPending: null as MenuPending,
   debugVisible: false,
   cannonFirePending: false,

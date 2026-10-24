@@ -1,5 +1,6 @@
 import { GAME_CONFIG } from "../shared/config.js";
 import { applyFrigateInput, type Frigate } from "../shared/sim.js";
+import type { UpgradeTrack } from "../shared/sim.js";
 import { DEFAULT_SETTINGS, type GameSettings } from "../shared/settings.js";
 import { decodeWorld, createEmptyWorld, mapDimensions, type World } from "../shared/world.js";
 import type { ServerMessage } from "../shared/protocol.js";
@@ -241,11 +242,10 @@ export function sendJoin(): void {
 }
 
 export function onSnapshot(snapshot: Snapshot): void {
-  const snapshotWithBases: Snapshot = snapshot.bases
-    ? snapshot
-    : {
+  const economy = snapshot.economy ?? client.latestSnapshot?.economy;
+  const snapshotWithBases: Snapshot = {
         ...snapshot,
-        bases: client.latestSnapshot?.bases ?? client.bases.map(({
+        bases: snapshot.bases ?? client.latestSnapshot?.bases ?? client.bases.map(({
           id,
           active,
           ownerTeam,
@@ -266,6 +266,7 @@ export function onSnapshot(snapshot: Snapshot): void {
           repairBy,
           repairProgress,
         })),
+        ...(economy ? { economy } : {}),
       };
   client.latestSnapshot = snapshotWithBases;
   if (!isOwnHost() && client.menuPending && client.menuPending.action !== "controls" && client.menuPending.action !== "effects" && client.menuPending.action !== "teamSelect") client.menuPending = null;
@@ -294,6 +295,7 @@ export function onSnapshot(snapshot: Snapshot): void {
     }
     client.pendingInputs = client.pendingInputs.filter((entry) => entry.input.seq > snapshot.ackSeq);
     client.predictedOwn = { ...own };
+    const ownEconomy = snapshotWithBases.economy?.players.find((player) => player.playerId === client.ownId);
     let localTime = performance.now() / 1000 + client.serverTimeOffset;
     for (const pending of client.pendingInputs) {
       client.predictedOwn = applyFrigateInput(
@@ -303,6 +305,7 @@ export function onSnapshot(snapshot: Snapshot): void {
         client.world ?? createEmptyWorld(mapDimensions(client.gameSettings.mapSize)),
         localTime,
         client.gameSettings,
+        ownEconomy?.upgrades,
       );
       localTime += 1 / GAME_CONFIG.network.tickRate;
     }
@@ -312,6 +315,12 @@ export function onSnapshot(snapshot: Snapshot): void {
 export function sendTeam(team: number): void {
   if (client.socket?.readyState === WebSocket.OPEN) {
     client.socket.send(JSON.stringify({ type: "team", team }));
+  }
+}
+
+export function sendUpgrade(track: UpgradeTrack): void {
+  if (client.socket?.readyState === WebSocket.OPEN) {
+    client.socket.send(JSON.stringify({ type: "upgrade", track }));
   }
 }
 

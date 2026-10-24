@@ -13,14 +13,15 @@ import {
 } from "../src/client/controls.js";
 
 describe("control bindings", () => {
-  it("provides twelve unique default actions without reserved codes", () => {
+  it("provides thirteen unique default actions without reserved codes", () => {
     const codes = CONTROL_ACTIONS.flatMap(({ action }) => DEFAULT_BINDINGS[action]);
-    expect(CONTROL_ACTIONS).toHaveLength(12);
+    expect(CONTROL_ACTIONS).toHaveLength(13);
     expect(new Set(codes).size).toBe(codes.length);
     expect(codes.some((code) => RESERVED_CODES.has(code))).toBe(false);
     expect(DEFAULT_BINDINGS.fireCannon).toEqual(["Space"]);
     expect(DEFAULT_BINDINGS.torpedoRight).toEqual(["Backslash", "IntlBackslash"]);
     expect(DEFAULT_BINDINGS.fireTorpedo).toEqual(["BracketRight"]);
+    expect(DEFAULT_BINDINGS.upgradeMenu).toEqual(["KeyU"]);
     expect(BINDINGS_STORAGE_KEY).toBe("warships.controls");
   });
 
@@ -56,7 +57,14 @@ describe("control bindings", () => {
     expect(actionForCode(DEFAULT_BINDINGS, "IntlBackslash")).toBe("torpedoRight");
     expect(actionForCode(DEFAULT_BINDINGS, "Space")).toBe("fireCannon");
     expect(actionForCode(DEFAULT_BINDINGS, "BracketRight")).toBe("fireTorpedo");
+    expect(actionForCode(DEFAULT_BINDINGS, "KeyU")).toBe("upgradeMenu");
     expect(actionForCode(DEFAULT_BINDINGS, "Escape")).toBeUndefined();
+  });
+
+  it("allows rebinding the upgrade panel action", () => {
+    const next = assignBinding(DEFAULT_BINDINGS, "upgradeMenu", "KeyI");
+    expect(next.upgradeMenu).toEqual(["KeyI"]);
+    expect(DEFAULT_BINDINGS.upgradeMenu).toEqual(["KeyU"]);
   });
 
   it("uses a fresh default copy for missing, malformed, or invalid stored data", () => {

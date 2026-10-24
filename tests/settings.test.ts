@@ -63,6 +63,7 @@ describe("game settings", () => {
       bots: 0,
       botSkill: 0,
       roundMinutes: 0,
+      treasures: true,
     })).toEqual({
       boatSpeedPct: 50,
       rotationPct: 200,
@@ -85,6 +86,7 @@ describe("game settings", () => {
       bots: 0,
       botSkill: 0,
       roundMinutes: 0,
+      treasures: true,
     });
     expect(sanitizeSettings({ ...DEFAULT_SETTINGS, cannonReload: 10, torpedoReload: 1 })).toEqual({
       ...DEFAULT_SETTINGS,

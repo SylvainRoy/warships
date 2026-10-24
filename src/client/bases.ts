@@ -117,6 +117,7 @@ export function drawCaptureProgress(
     hp: number;
     resupplying: boolean;
     repairLockBaseId?: string | null;
+    maxHp?: number;
   },
   bases: readonly BasePublic[],
   team: number,
@@ -129,7 +130,7 @@ export function drawCaptureProgress(
   const base = repairBase ?? captureBase;
   const repairing = Boolean(repairBase);
   const capturing = !repairing && Boolean(captureBase);
-  if (!base && (!frigate.resupplying || frigate.repairLockBaseId)) return;
+  if (frigate.repairLockBaseId || (!base && !frigate.resupplying)) return;
   const progress = repairing
     ? base?.repairProgress ?? 0
     : capturing
@@ -138,7 +139,7 @@ export function drawCaptureProgress(
           fuel: frigate.fuel / (settings.fuelCrossings * mapDimensions(settings.mapSize).width),
           shells: frigate.shells / settings.shells,
           torpedoes: frigate.torpedoes / settings.torpedoes,
-          hull: frigate.hp / GAME_CONFIG.player.maxHp,
+          hull: frigate.hp / (frigate.maxHp ?? GAME_CONFIG.player.maxHp),
         });
   const label = repairing
     ? repairBase?.turret === "none"

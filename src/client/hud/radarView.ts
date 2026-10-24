@@ -1,3 +1,4 @@
+import { GAME_CONFIG } from "../../shared/config.js";
 import { type Frigate } from "../../shared/sim.js";
 import type { World } from "../../shared/world.js";
 import { RADAR, radarBearing, radarRange, worldToRadar } from "../radar.js";
@@ -175,6 +176,23 @@ export function drawRadar(snapshot: Snapshot, frigate: Frigate, now: number, log
     }
   }
   ctx.globalAlpha = 1;
+
+  for (const treasure of snapshot.economy?.treasures ?? []) {
+    const dx = treasure.x - frigate.x;
+    const dy = treasure.y - frigate.y;
+    const distance = Math.hypot(dx, dy);
+    const bearing = Math.atan2(dy, dx);
+    const sweepDistance = (sweepAngle - bearing + Math.PI * 4) % (Math.PI * 2);
+    if (distance > range || sweepDistance > Math.PI / 6) continue;
+    const [radarX, radarY] = worldToRadar(dx, dy, range);
+    ctx.fillStyle = GAME_CONFIG.economy.feedback.gold;
+    ctx.beginPath();
+    ctx.arc(centerX + radarX, centerY + radarY, 2.2, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.strokeStyle = RADAR_OUTLINE;
+    ctx.lineWidth = 1;
+    ctx.stroke();
+  }
 
   for (const base of client.bases) {
     if (!base.active) continue;

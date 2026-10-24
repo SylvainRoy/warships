@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { GAME_CONFIG } from "../src/shared/config.js";
 import { mulberry32 } from "../src/shared/rng.js";
-import { applyFrigateInput, createGameState, createFrigate, createSeededRandom, fuelCapacity, INPUT_KEYS, pointToHullDistance, regenerateGameWorld, refillSupplies, spawnFrigate, spawnPlayerFrigate, stepBases, stepGame, stepTurrets, turretSkill, type Frigate, type FrigateInput } from "../src/shared/sim.js";
+import { applyFrigateInput, createGameState, createFrigate, createSeededRandom, emptyUpgrades, fuelCapacity, INPUT_KEYS, pointToHullDistance, purchaseUpgrade, regenerateGameWorld, refillSupplies, refillTreasures, spawnFrigate, spawnPlayerFrigate, stepBases, stepGame, stepTurrets, turretSkill, type Frigate, type FrigateInput } from "../src/shared/sim.js";
 import { DEFAULT_SETTINGS, type GameSettings } from "../src/shared/settings.js";
 import { createEmptyWorld, generateWorld, isLandAt, mapDimensions, type World } from "../src/shared/world.js";
 import { generateWorldWithBases } from "../src/shared/bases.js";
@@ -37,6 +37,7 @@ function homeSite(id = "h0", homeTeam = 0) {
 function scores(...ships: Frigate[]) {
   return Object.fromEntries(ships.map((ship) => [ship.playerId, {
     playerId: ship.playerId, name: ship.name, slot: ship.slot, team: ship.team, score: 0, sunk: 0, host: false, connected: true,
+    money: 0, moneyEarned: 0, upgrades: emptyUpgrades(),
   }]));
 }
 
@@ -1326,6 +1327,7 @@ describe("home bases and turret repair", () => {
     state.frigates.third = third;
     state.scores.third = {
       playerId: third.playerId, name: third.name, slot: third.slot, team: third.team, score: 0, sunk: 0, host: false, connected: true,
+      money: 0, moneyEarned: 0, upgrades: emptyUpgrades(),
     };
     base.turret = "destroyed";
     base.turretHp = 0;
@@ -1342,6 +1344,8 @@ describe("home bases and turret repair", () => {
     expect(state.teamBonus[original.team]).toBe(-GAME_CONFIG.bases.homeCapturePoints);
     expect(state.teamBonus[capturer.team]).toBe(GAME_CONFIG.bases.homeCapturePoints);
     expect(state.teamBonus[third.team]).toBe(GAME_CONFIG.bases.homeCapturePoints);
+    expect(state.scores.capturer?.money).toBe(GAME_CONFIG.economy.rewards.homeCapture);
+    expect(state.scores.third?.money).toBe(GAME_CONFIG.economy.rewards.homeCapture);
   });
 
   it("installs and repairs turrets after the configured fraction, preserving progress after time changes", () => {
@@ -1962,3 +1966,201 @@ function awaitApply(
 ): Frigate {
   return applyFrigateInput(ship, input, step, world, now, settings);
 }
+
+describe("economy simulation", () => {
+  it("fills the configured treasure count, respects clearances, and refills after protected pickup", () => {
+    const state = createGameState(openWorld(), [homeSite()]);
+    for (const [mapSize, count] of [[0, 10], [1, 20], [2, 40]] as const) {
+      state.settings = { ...state.settings, mapSize };
+      state.treasures = [];
+      refillTreasures(state);
+      expect(state.treasures).toHaveLength(count);
+    }
+
+    const ship = frigate("captain", 9000, 7000);
+    state.frigates.captain = ship;
+    state.scores = scores(ship);
+    state.treasures = [];
+    refillTreasures(state);
+    const base = state.bases[0]!;
+    expect(state.treasures.every((treasure) => !isLandAt(state.world, treasure.x, treasure.y))).toBe(true);
+    expect(state.treasures.every((treasure) => Math.hypot(treasure.x - ship.x, treasure.y - ship.y) >= GAME_CONFIG.economy.treasure.boatClearance)).toBe(true);
+    for (const treasure of state.treasures) {
+      const dx = Math.max(Math.abs(treasure.x - base.harbourX) - GAME_CONFIG.bases.harbourSize / 2, 0);
+      const dy = Math.max(Math.abs(treasure.y - base.harbourY) - GAME_CONFIG.bases.harbourSize / 2, 0);
+      expect(Math.hypot(dx, dy)).toBeGreaterThanOrEqual(GAME_CONFIG.economy.treasure.harbourClearance);
+    }
+
+    state.settings = { ...state.settings, mapSize: 1 };
+    state.treasures = [{ id: "pickup", x: ship.x, y: ship.y }];
+    ship.spawnProtectedUntil = 100;
+    stepGame(state, {}, dt, 0);
+    expect(state.scores.captain).toMatchObject({ money: 25, moneyEarned: 25 });
+    expect(state.events).toContainEqual({ type: "money", playerId: "captain", amount: 25, x: ship.x, y: ship.y });
+    expect(state.treasures).toHaveLength(20);
+    expect(state.treasures.some((treasure) => treasure.id === "pickup")).toBe(false);
+
+    const landWorld = generateWorld(101, 0.25, mapDimensions(0));
+    const landState = createGameState(landWorld);
+    landState.settings = { ...landState.settings, mapSize: 0 };
+    landState.treasures = [];
+    refillTreasures(landState);
+    const clearance = GAME_CONFIG.economy.treasure.landClearance;
+    const tile = GAME_CONFIG.world.tileSize;
+    for (const treasure of landState.treasures) {
+      for (let row = Math.floor((treasure.y - clearance) / tile); row <= Math.floor((treasure.y + clearance) / tile); row += 1) {
+        for (let column = Math.floor((treasure.x - clearance) / tile); column <= Math.floor((treasure.x + clearance) / tile); column += 1) {
+          if (landWorld.grid[row * landWorld.columns + column] !== 1) continue;
+          const nearestX = Math.max(column * tile, Math.min(treasure.x, (column + 1) * tile));
+          const nearestY = Math.max(row * tile, Math.min(treasure.y, (row + 1) * tile));
+          expect(Math.hypot(nearestX - treasure.x, nearestY - treasure.y)).toBeGreaterThanOrEqual(clearance);
+        }
+      }
+    }
+  });
+
+  it("awards sink money to the final-damage player and capture money to the capturer", () => {
+    const state = createGameState(openWorld());
+    const shooter = frigate("shooter");
+    const victim = frigate("victim", shooter.x + 100, shooter.y);
+    victim.hp = 10;
+    state.frigates = { shooter, victim };
+    state.scores = scores(shooter, victim);
+    state.shells = [shellAt(shooter, "sink", victim.x, victim.y)];
+    stepGame(state, {}, dt, 0);
+    expect(state.scores.shooter).toMatchObject({ money: GAME_CONFIG.economy.rewards.sink, moneyEarned: GAME_CONFIG.economy.rewards.sink });
+
+    const captureState = createGameState(openWorld(), [homeSite()]);
+    const base = captureState.bases[0]!;
+    base.kind = "neutral";
+    base.homeTeam = null;
+    base.active = true;
+    base.ownerTeam = null;
+    captureState.settings = { ...captureState.settings, captureTime: 1 };
+    const capturer = frigate("capturer", base.harbourX, base.harbourY);
+    captureState.frigates.capturer = capturer;
+    captureState.scores = scores(capturer);
+    stepBases(captureState, 1, 1);
+    expect(captureState.scores.capturer?.money).toBe(GAME_CONFIG.economy.rewards.capture);
+  });
+
+  it("validates upgrade purchases, charges progressive costs, and adds hull HP immediately", () => {
+    const { state, base } = ownedHarbourState();
+    const ship = frigate("owner", base.harbourX, base.harbourY);
+    state.frigates.owner = ship;
+    state.scores = scores(ship);
+    state.scores.owner!.money = 1000;
+    expect(purchaseUpgrade(state, "owner", "hull")).toBe(true);
+    expect(ship).toMatchObject({ maxHp: maxHp + 25, hp: maxHp + 25 });
+    expect(state.scores.owner?.money).toBe(900);
+    ship.hp = 1;
+    refillSupplies(ship, state.settings);
+    expect(ship.hp).toBe(maxHp + 25);
+
+    expect(purchaseUpgrade(state, "owner", "speed")).toBe(true);
+    expect(state.scores.owner?.money).toBe(800);
+    expect(purchaseUpgrade(state, "owner", "speed")).toBe(true);
+    expect(state.scores.owner?.money).toBe(600);
+    expect(purchaseUpgrade(state, "owner", "speed")).toBe(true);
+    expect(state.scores.owner?.money).toBe(200);
+    expect(purchaseUpgrade(state, "owner", "speed")).toBe(false);
+
+    state.scores.owner!.money = 1000;
+    ship.x += 500;
+    expect(purchaseUpgrade(state, "owner", "cannonRange")).toBe(false);
+    ship.x = base.harbourX;
+    base.ownerTeam = 1;
+    expect(purchaseUpgrade(state, "owner", "cannonRange")).toBe(false);
+    base.ownerTeam = 0;
+    ship.repairLockBaseId = base.id;
+    expect(purchaseUpgrade(state, "owner", "cannonRange")).toBe(false);
+    ship.repairLockBaseId = null;
+    state.scores.owner!.money = 0;
+    expect(purchaseUpgrade(state, "owner", "cannonRange")).toBe(false);
+    state.settings = { ...state.settings, treasures: false };
+    state.scores.owner!.money = 1000;
+    expect(purchaseUpgrade(state, "owner", "cannonRange")).toBe(false);
+  });
+
+  it("applies boat upgrades to speed, cannon range and damage, and torpedo launch speed", () => {
+    const world = openWorld();
+    const ship = frigate("captain");
+    const boosted = applyFrigateInput(
+      ship,
+      { ...quietInput, throttle: 3, keys: INPUT_KEYS.rangeUp },
+      10,
+      world,
+      0,
+      DEFAULT_SETTINGS,
+      { ...emptyUpgrades(), speed: 2, cannonRange: 1 },
+    );
+    expect(boosted.speed).toBeCloseTo(GAME_CONFIG.frigate.maxForwardSpeed * 1.2);
+    expect(boosted.cannonRange).toBeGreaterThan(GAME_CONFIG.cannon.maxRange);
+
+    const state = createGameState(world);
+    const shooter = frigate("shooter");
+    const target = frigate("victim", shooter.x + 100, shooter.y);
+    target.hp = 100;
+    state.frigates = { shooter, victim: target };
+    state.scores = scores(shooter, target);
+    state.scores.shooter!.upgrades.cannonDamage = 1;
+    state.shells = [shellAt(shooter, "boat-upgrade", target.x, target.y)];
+    stepGame(state, {}, dt, 0);
+    expect(target.hp).toBe(100 - GAME_CONFIG.cannon.damage - GAME_CONFIG.economy.upgrades.cannonDamage);
+
+    const torpedoState = createGameState(world);
+    const launcher = frigate("launcher");
+    torpedoState.frigates.launcher = launcher;
+    torpedoState.scores = scores(launcher);
+    torpedoState.scores.launcher!.upgrades.torpedoSpeed = 1;
+    stepGame(torpedoState, { launcher: { ...quietInput, fireTorpedo: true } }, dt, 0);
+    expect(torpedoState.torpedoes[0]?.speed).toBeCloseTo(GAME_CONFIG.torpedo.speed * (1 + GAME_CONFIG.economy.upgrades.torpedoSpeedPct / 100));
+  });
+
+  it("keeps turret and building damage at base values while upgraded torpedoes gain damage", () => {
+    const state = createGameState(openWorld());
+    const shooter = frigate("shooter");
+    const target = frigate("victim", shooter.x + 100, shooter.y);
+    target.hp = 100;
+    state.frigates = { shooter, victim: target };
+    state.scores = scores(shooter, target);
+    state.scores.shooter!.upgrades.cannonDamage = 3;
+    const turretShell = { ...shellAt(shooter, "turret-shell", target.x, target.y), turretBaseId: "h0" };
+    state.shells = [turretShell];
+    stepGame(state, {}, dt, 0);
+    expect(target.hp).toBe(100 - GAME_CONFIG.cannon.damage);
+
+    const torpedoState = createGameState(openWorld());
+    const launcher = frigate("launcher");
+    const torpedoTarget = frigate("victim", launcher.x + 100, launcher.y);
+    torpedoTarget.hp = 100;
+    torpedoState.frigates = { launcher, victim: torpedoTarget };
+    torpedoState.scores = scores(launcher, torpedoTarget);
+    torpedoState.scores.launcher!.upgrades.torpedoDamage = 1;
+    torpedoState.torpedoes = [{
+      id: "damage-test",
+      ownerId: "launcher",
+      x: torpedoTarget.x - 20,
+      y: torpedoTarget.y,
+      angle: 0,
+      elapsed: 1,
+      speed: 20 / dt,
+    }];
+    stepGame(torpedoState, {}, dt, 0);
+    expect(torpedoTarget.hp).toBe(100 - GAME_CONFIG.torpedo.damage - GAME_CONFIG.economy.upgrades.torpedoDamage);
+
+    const buildingState = createGameState(openWorld(), [homeSite()]);
+    const base = buildingState.bases[0]!;
+    base.ownerTeam = 0;
+    base.active = true;
+    base.turret = "active";
+    base.turretHp = GAME_CONFIG.bases.turretHp;
+    const boat = frigate("shooter");
+    buildingState.frigates.shooter = boat;
+    buildingState.scores = scores(boat);
+    buildingState.scores.shooter!.upgrades.cannonDamage = 3;
+    buildingState.shells = [shellAt(boat, "building-test", base.cityX, base.cityY)];
+    stepGame(buildingState, {}, dt, 0);
+    expect(base.turretHp).toBe(GAME_CONFIG.bases.turretHp - GAME_CONFIG.cannon.damage);
+  });
+});

@@ -17,6 +17,13 @@ export const INPUT_KEYS = {
 
 export type FrigateStatus = "alive" | "sinking" | "waiting";
 export type ExplosionKind = "splash" | "land" | "hit";
+export type UpgradeTrack = "speed" | "cannonRange" | "hull" | "cannonDamage" | "torpedoSpeed" | "torpedoDamage";
+export type UpgradeLevels = Record<UpgradeTrack, number>;
+export type Treasure = { id: string; x: number; y: number };
+
+export function emptyUpgrades(): UpgradeLevels {
+  return { speed: 0, cannonRange: 0, hull: 0, cannonDamage: 0, torpedoSpeed: 0, torpedoDamage: 0 };
+}
 
 export interface FrigateInput {
   seq: number;
@@ -42,6 +49,7 @@ export interface Frigate {
   resupplying: boolean;
   repairLockBaseId: string | null;
   hp: number;
+  maxHp: number;
   status: FrigateStatus;
   sinkingStartedAt: number;
   respawnAt: number;
@@ -91,10 +99,13 @@ export interface PlayerScore {
   sunk: number;
   host: boolean;
   connected: boolean;
+  money: number;
+  moneyEarned: number;
+  upgrades: UpgradeLevels;
 }
 
 export interface GameEvent {
-  type: "explosion" | "sank" | "join" | "leave" | "host" | "capture" | "turret" | "damage" | "income" | "repairInterrupted";
+  type: "explosion" | "sank" | "join" | "leave" | "host" | "capture" | "turret" | "damage" | "income" | "money" | "repairInterrupted";
   x?: number;
   y?: number;
   kind?: ExplosionKind;
@@ -123,6 +134,7 @@ export interface GameState {
   events: GameEvent[];
   nextProjectileId: number;
   nextShotId: number;
+  treasures: Treasure[];
 }
 
 function normalizeAngle(angle: number): number {
@@ -189,6 +201,7 @@ export function applyFrigateInput(
   world: World,
   now = 0,
   settings: GameSettings = DEFAULT_SETTINGS,
+  upgrades: Partial<UpgradeLevels> = {},
 ): Frigate {
   const frigate = { ...source };
   if (frigate.status !== "alive") return frigate;
@@ -203,9 +216,11 @@ export function applyFrigateInput(
     frigate.cannonBearing + cannonTurn * GAME_CONFIG.cannon.bearingSpeed * settings.cannonRotationPct / 100 * dt,
   );
   const rangeChange = Number(isPressed(keys, INPUT_KEYS.rangeUp)) - Number(isPressed(keys, INPUT_KEYS.rangeDown));
+  const cannonMaxRange = GAME_CONFIG.cannon.maxRange
+    + (settings.treasures ? (upgrades.cannonRange ?? 0) * GAME_CONFIG.economy.upgrades.cannonRange : 0);
   frigate.cannonRange = Math.max(
     GAME_CONFIG.cannon.minRange,
-    Math.min(GAME_CONFIG.cannon.maxRange, frigate.cannonRange + rangeChange * GAME_CONFIG.cannon.rangeSpeed * dt),
+    Math.min(cannonMaxRange, frigate.cannonRange + rangeChange * GAME_CONFIG.cannon.rangeSpeed * dt),
   );
   const torpedoTurn = Number(isPressed(keys, INPUT_KEYS.torpedoRight)) - Number(isPressed(keys, INPUT_KEYS.torpedoLeft));
   frigate.torpedoBearing = normalizeAngle(
@@ -215,8 +230,9 @@ export function applyFrigateInput(
   const level = Math.max(-1, Math.min(3, Math.round(input.throttle) || 0));
   frigate.throttle = level;
   const speedScale = settings.boatSpeedPct / 100;
-  const maxForwardSpeed = GAME_CONFIG.frigate.maxForwardSpeed * speedScale;
-  const maxReverseSpeed = GAME_CONFIG.frigate.maxReverseSpeed * speedScale;
+  const upgradeSpeedScale = settings.treasures ? 1 + (upgrades.speed ?? 0) * GAME_CONFIG.economy.upgrades.speedPct / 100 : 1;
+  const maxForwardSpeed = GAME_CONFIG.frigate.maxForwardSpeed * speedScale * upgradeSpeedScale;
+  const maxReverseSpeed = GAME_CONFIG.frigate.maxReverseSpeed * speedScale * upgradeSpeedScale;
   const emptyFuelSpeedFactor = frigate.fuel <= 0 ? GAME_CONFIG.frigate.emptyFuelSpeedFactor : 1;
   const targetSpeed = level < 0
     ? -maxReverseSpeed * emptyFuelSpeedFactor
@@ -282,7 +298,7 @@ export function createFrigate(
   team = slot - 1,
 ): Frigate {
   return {
-    playerId, name, slot, team, x, y, heading, speed: 0, hp: GAME_CONFIG.player.maxHp, status: "alive",
+    playerId, name, slot, team, x, y, heading, speed: 0, hp: GAME_CONFIG.player.maxHp, maxHp: GAME_CONFIG.player.maxHp, status: "alive",
     fuel: fuelCapacity(settings), shells: settings.shells, torpedoes: settings.torpedoes, throttle: 0, resupplying: false,
     repairLockBaseId: null,
     sinkingStartedAt: 0, respawnAt: 0, spawnProtectedUntil: now + GAME_CONFIG.player.spawnProtection,
@@ -300,7 +316,7 @@ export function refillSupplies(frigate: Frigate, settings: GameSettings): void {
   frigate.fuel = fuelCapacity(settings);
   frigate.shells = settings.shells;
   frigate.torpedoes = settings.torpedoes;
-  frigate.hp = GAME_CONFIG.player.maxHp;
+  frigate.hp = frigate.maxHp;
   frigate.resupplying = false;
 }
 
@@ -384,11 +400,11 @@ export function spawnPlayerFrigate(
           other.status === "alive"
           && pointToHullDistance(x, y, other) < GAME_CONFIG.frigate.length,
         )) continue;
-        return createFrigate(playerId, name, slot, x, y, base.facing, now, state.settings, team);
+        return applyPlayerHullUpgrade(state, createFrigate(playerId, name, slot, x, y, base.facing, now, state.settings, team));
       }
     }
   }
-  return spawnFrigate(
+  return applyPlayerHullUpgrade(state, spawnFrigate(
     playerId,
     name,
     slot,
@@ -399,11 +415,11 @@ export function spawnPlayerFrigate(
     GAME_CONFIG.player.spawnAttempts,
     state.settings,
     team,
-  );
+  ));
 }
 
 export function createGameState(world: World, sites: readonly BaseSite[] = []): GameState {
-  return {
+  const state: GameState = {
     tick: 0,
     world,
     settings: { ...DEFAULT_SETTINGS },
@@ -430,7 +446,92 @@ export function createGameState(world: World, sites: readonly BaseSite[] = []): 
     events: [],
     nextProjectileId: 1,
     nextShotId: 1,
+    treasures: [],
   };
+  refillTreasures(state);
+  return state;
+}
+
+function applyPlayerHullUpgrade(state: GameState, frigate: Frigate): Frigate {
+  const hullLevel = state.settings.treasures ? state.scores[frigate.playerId]?.upgrades.hull ?? 0 : 0;
+  frigate.maxHp = GAME_CONFIG.player.maxHp + hullLevel * GAME_CONFIG.economy.upgrades.hull;
+  frigate.hp = frigate.maxHp;
+  return frigate;
+}
+
+function landClearanceIsEnough(world: World, x: number, y: number): boolean {
+  const clearance = GAME_CONFIG.economy.treasure.landClearance;
+  const tile = GAME_CONFIG.world.tileSize;
+  if (x < clearance || y < clearance || x > world.width - clearance || y > world.height - clearance) return false;
+  for (let row = Math.floor((y - clearance) / tile); row <= Math.floor((y + clearance) / tile); row += 1) {
+    for (let column = Math.floor((x - clearance) / tile); column <= Math.floor((x + clearance) / tile); column += 1) {
+      if (world.grid[row * world.columns + column] !== 1) continue;
+      const nearestX = Math.max(column * tile, Math.min(x, (column + 1) * tile));
+      const nearestY = Math.max(row * tile, Math.min(y, (row + 1) * tile));
+      if (Math.hypot(nearestX - x, nearestY - y) < clearance) return false;
+    }
+  }
+  return true;
+}
+
+function treasurePointIsClear(state: GameState, x: number, y: number): boolean {
+  const { boatClearance, harbourClearance } = GAME_CONFIG.economy.treasure;
+  if (!landClearanceIsEnough(state.world, x, y)) return false;
+  if (Object.values(state.frigates).some((ship) =>
+    ship.status === "alive" && Math.hypot(ship.x - x, ship.y - y) < boatClearance,
+  )) return false;
+  if (state.bases.some((base) => {
+    const dx = Math.max(Math.abs(x - base.harbourX) - GAME_CONFIG.bases.harbourSize / 2, 0);
+    const dy = Math.max(Math.abs(y - base.harbourY) - GAME_CONFIG.bases.harbourSize / 2, 0);
+    return Math.hypot(dx, dy) < harbourClearance;
+  })) return false;
+  return !state.treasures.some((treasure) => Math.hypot(treasure.x - x, treasure.y - y) < GAME_CONFIG.economy.treasure.radius * 4);
+}
+
+export function refillTreasures(state: GameState): void {
+  if (!state.settings.treasures) {
+    state.treasures = [];
+    return;
+  }
+  const target = GAME_CONFIG.economy.treasure.counts[state.settings.mapSize] ?? 0;
+  while (state.treasures.length < target) {
+    const before = state.treasures.length;
+    for (let attempt = 0; attempt < GAME_CONFIG.economy.treasure.placementAttempts && state.treasures.length < target; attempt += 1) {
+      const seed = (state.tick * 7919 + state.nextProjectileId * 104729 + state.treasures.length * 65537 + attempt) >>> 0;
+      const random = mulberry32(seed);
+      const x = random() * state.world.width;
+      const y = random() * state.world.height;
+      if (!treasurePointIsClear(state, x, y)) continue;
+      state.treasures.push({ id: `treasure-${seed}`, x, y });
+    }
+    if (before === state.treasures.length) break;
+  }
+}
+
+export function purchaseUpgrade(state: GameState, playerId: string, track: UpgradeTrack): boolean {
+  const frigate = state.frigates[playerId];
+  const score = state.scores[playerId];
+  if (!state.settings.treasures || !frigate || frigate.status !== "alive" || !score || frigate.repairLockBaseId !== null) return false;
+  if (!state.bases.some((base) => base.active && base.ownerTeam === frigate.team && hullInsideHarbour(frigate, base))) return false;
+  const level = score.upgrades[track];
+  if (level >= GAME_CONFIG.economy.upgrades.maxLevel) return false;
+  const cost = GAME_CONFIG.economy.upgrades.costs[level];
+  if (cost === undefined || score.money < cost) return false;
+  score.money -= cost;
+  score.upgrades[track] = level + 1;
+  if (track === "hull") {
+    frigate.maxHp += GAME_CONFIG.economy.upgrades.hull;
+    frigate.hp += GAME_CONFIG.economy.upgrades.hull;
+  }
+  return true;
+}
+
+function awardMoney(state: GameState, playerId: string, amount: number, x: number, y: number): void {
+  const score = state.scores[playerId];
+  if (!state.settings.treasures || !score) return;
+  score.money += amount;
+  score.moneyEarned += amount;
+  state.events.push({ type: "money", playerId, amount, x, y });
 }
 
 export function turretSkill(settings: GameSettings) {
@@ -613,6 +714,7 @@ export function stepBases(
             name: capturerName,
             message: `${capturerName} captured ${ownerName}'s home base`,
           });
+          awardMoney(state, capturerId, GAME_CONFIG.economy.rewards.homeCapture, base.cityX, base.cityY);
         } else if (base.kind === "home" && base.lostFrom !== null) {
           const owner = Object.values(state.scores).find((score) => score.team === base.lostFrom);
           const ownerName = owner?.name ?? "Unknown";
@@ -623,6 +725,7 @@ export function stepBases(
             name: capturerName,
             message: `${capturerName} captured ${ownerName}'s home base`,
           });
+          awardMoney(state, capturerId, GAME_CONFIG.economy.rewards.homeCapture, base.cityX, base.cityY);
         } else {
           state.events.push({
             type: "capture",
@@ -630,6 +733,7 @@ export function stepBases(
             name: capturerName,
             message: `${capturerName} captured a base`,
           });
+          awardMoney(state, capturerId, GAME_CONFIG.economy.rewards.capture, base.cityX, base.cityY);
         }
       }
     }
@@ -711,7 +815,7 @@ export function stepBases(
     const hasSuppliesMissing = frigate.fuel < maxFuel
       || frigate.shells < state.settings.shells
       || frigate.torpedoes < state.settings.torpedoes
-      || frigate.hp < GAME_CONFIG.player.maxHp;
+      || frigate.hp < frigate.maxHp;
     if (!hasSuppliesMissing) {
       frigate.resupplying = false;
       continue;
@@ -721,13 +825,13 @@ export function stepBases(
     frigate.shells = Math.min(state.settings.shells, frigate.shells + state.settings.shells * fractionPerSecond);
     frigate.torpedoes = Math.min(state.settings.torpedoes, frigate.torpedoes + state.settings.torpedoes * fractionPerSecond);
     frigate.hp = Math.min(
-      GAME_CONFIG.player.maxHp,
-      frigate.hp + GAME_CONFIG.player.maxHp * fractionPerSecond,
+      frigate.maxHp,
+      frigate.hp + frigate.maxHp * fractionPerSecond,
     );
     frigate.resupplying = frigate.fuel < maxFuel
       || frigate.shells < state.settings.shells
       || frigate.torpedoes < state.settings.torpedoes
-      || frigate.hp < GAME_CONFIG.player.maxHp;
+      || frigate.hp < frigate.maxHp;
   }
 }
 
@@ -767,6 +871,9 @@ function sinkFrigate(
   if (sourceId === frigate.playerId) {
     if (victimScore) victimScore.score -= 1;
   } else if (killer) killer.score += 1;
+  if (sourceId && sourceId !== frigate.playerId) {
+    awardMoney(state, sourceId, GAME_CONFIG.economy.rewards.sink, frigate.x, frigate.y);
+  }
   const killerName = sourceId ? state.scores[sourceId]?.name ?? (state.frigates[sourceId]?.name ?? "Unknown") : "the sea";
   const displayName = sourceLabel ?? killerName;
   state.events.push({
@@ -855,7 +962,8 @@ function fireTorpedoes(state: GameState, frigate: Frigate, now: number, settings
       y: frigate.y,
       angle: centre + offset,
       elapsed: 0,
-      speed: GAME_CONFIG.torpedo.speed * settings.torpedoSpeedPct / 100,
+      speed: GAME_CONFIG.torpedo.speed * settings.torpedoSpeedPct / 100
+        * (settings.treasures ? 1 + (state.scores[frigate.playerId]?.upgrades.torpedoSpeed ?? 0) * GAME_CONFIG.economy.upgrades.torpedoSpeedPct / 100 : 1),
     });
   }
   frigate.torpedoReadyAt = now + settings.torpedoReload;
@@ -929,7 +1037,8 @@ export function stepGame(state: GameState, inputs: Record<string, FrigateInput |
     const input = inputs[frigate.playerId] ?? { seq: 0, keys: 0, throttle: 0, fireCannon: false, fireTorpedo: false };
     if (frigate.status === "alive") {
       const previousHp = frigate.hp;
-      const updated = applyFrigateInput(frigate, input, dt, state.world, now, state.settings);
+      const upgrades = state.settings.treasures ? state.scores[frigate.playerId]?.upgrades : undefined;
+      const updated = applyFrigateInput(frigate, input, dt, state.world, now, state.settings, upgrades);
       Object.assign(frigate, updated);
       if (frigate.hp < previousHp) {
         state.events.push({
@@ -964,6 +1073,23 @@ export function stepGame(state: GameState, inputs: Record<string, FrigateInput |
     }
   }
 
+  if (state.settings.treasures) {
+    for (const frigate of Object.values(state.frigates)) {
+      if (frigate.status !== "alive") continue;
+      const collected = state.treasures.findIndex((treasure) =>
+        GAME_CONFIG.frigate.collisionCircleOffsets.some((offset) => {
+          const x = frigate.x + Math.cos(frigate.heading) * offset;
+          const y = frigate.y + Math.sin(frigate.heading) * offset;
+          return Math.hypot(x - treasure.x, y - treasure.y) <= GAME_CONFIG.economy.treasure.radius + GAME_CONFIG.frigate.beam / 2;
+        }),
+      );
+      if (collected < 0) continue;
+      const treasure = state.treasures.splice(collected, 1)[0]!;
+      awardMoney(state, frigate.playerId, GAME_CONFIG.economy.rewards.treasure, treasure.x, treasure.y);
+    }
+    refillTreasures(state);
+  }
+
   resolveFrigateCollisions(Object.values(state.frigates));
   stepTurrets(state, now);
 
@@ -990,7 +1116,9 @@ export function stepGame(state: GameState, inputs: Record<string, FrigateInput |
           damageFrigate(
             state,
             target,
-            GAME_CONFIG.cannon.damage,
+            GAME_CONFIG.cannon.damage + (shell.turretBaseId || !state.settings.treasures
+              ? 0
+              : (state.scores[shell.ownerId]?.upgrades.cannonDamage ?? 0) * GAME_CONFIG.economy.upgrades.cannonDamage),
             shell.ownerId,
             now,
             sourceLabel,
@@ -1069,7 +1197,10 @@ export function stepGame(state: GameState, inputs: Record<string, FrigateInput |
         if (segmentHitsHull(oldX, oldY, x, y, target)) {
           const shooterTeam = state.scores[torpedo.ownerId]?.team ?? state.frigates[torpedo.ownerId]?.team;
           if (target.playerId === torpedo.ownerId || target.team !== shooterTeam) {
-            damageFrigate(state, target, GAME_CONFIG.torpedo.damage, torpedo.ownerId, now, undefined, "torpedo", torpedo.shotId);
+            const damage = GAME_CONFIG.torpedo.damage + (state.settings.treasures
+              ? (state.scores[torpedo.ownerId]?.upgrades.torpedoDamage ?? 0) * GAME_CONFIG.economy.upgrades.torpedoDamage
+              : 0);
+            damageFrigate(state, target, damage, torpedo.ownerId, now, undefined, "torpedo", torpedo.shotId);
           }
           emitExplosion(state, x, y, "hit", "torpedo");
           exploded = true;
@@ -1096,6 +1227,7 @@ export function regenerateGameWorld(
   random: () => number,
 ): void {
   state.world = world;
+  state.treasures = [];
   state.bases = sites.map((site): Base => {
     const owner = site.kind === "home"
       ? Object.values(state.scores).find((score) => score.team === site.homeTeam)
@@ -1141,6 +1273,7 @@ export function regenerateGameWorld(
       score.connected = connected;
     }
   }
+  refillTreasures(state);
 }
 
 function createSeededRandom(seed: number): () => number {

@@ -2,14 +2,16 @@ import { GAME_CONFIG } from "../shared/config.js";
 import { hullInsideHarbour, type Base } from "../shared/bases.js";
 import {
   INPUT_KEYS,
+  purchaseUpgrade,
   type Frigate,
   type FrigateInput,
   type GameState,
+  type UpgradeTrack,
 } from "../shared/sim.js";
 import { isLandAt, type World } from "../shared/world.js";
 
 type Point = { x: number; y: number };
-type BotMode = "resupply" | "engage" | "assault" | "patrol";
+type BotMode = "resupply" | "engage" | "assault" | "patrol" | "treasure";
 type BotTarget = {
   id: string;
   x: number;
@@ -393,7 +395,7 @@ function allStoresFull(frigate: Frigate, state: GameState): boolean {
   const maxFuel = state.settings.fuelCrossings
     * GAME_CONFIG.world.mapSizes[state.settings.mapSize]!.columns
     * GAME_CONFIG.world.tileSize;
-  return frigate.hp >= GAME_CONFIG.player.maxHp
+  return frigate.hp >= frigate.maxHp
     && frigate.fuel >= maxFuel
     && frigate.shells >= state.settings.shells
     && frigate.torpedoes >= state.settings.torpedoes;
@@ -403,7 +405,7 @@ function needsResupply(frigate: Frigate, state: GameState): boolean {
   const maxFuel = state.settings.fuelCrossings
     * GAME_CONFIG.world.mapSizes[state.settings.mapSize]!.columns
     * GAME_CONFIG.world.tileSize;
-  return frigate.hp < GAME_CONFIG.player.maxHp * GAME_CONFIG.bots.resupplyHullFraction
+  return frigate.hp < frigate.maxHp * GAME_CONFIG.bots.resupplyHullFraction
     || frigate.shells < state.settings.shells * GAME_CONFIG.bots.resupplyShellFraction
     || frigate.fuel < maxFuel * GAME_CONFIG.bots.resupplyFuelFraction;
 }
@@ -437,6 +439,7 @@ function chooseMode(
   playerId: string,
   now: number,
   random: () => number,
+  profile: BotSkillProfile,
 ): void {
   const bases = ownedBases(state, frigate.team);
   const targetBase = memory.assaultBaseId
@@ -468,6 +471,18 @@ function chooseMode(
     memory.targetId = enemy.playerId;
     memory.modeChosenAt = now;
     return;
+  }
+  if (profile.torpedoes) {
+    const treasure = state.treasures
+      .map((candidate) => ({ treasure: candidate, distance: Math.hypot(candidate.x - frigate.x, candidate.y - frigate.y) }))
+      .filter(({ distance }) => distance <= 500)
+      .sort((a, b) => a.distance - b.distance)[0]?.treasure;
+    if (treasure) {
+      memory.mode = "treasure";
+      memory.targetId = treasure.id;
+      memory.modeChosenAt = now;
+      return;
+    }
   }
   const target = nearestBase(
     state.bases.filter((base) => base.active && base.ownerTeam !== frigate.team),
@@ -584,6 +599,10 @@ function setMissionGoal(
       setGoal(memory, `engage-hold:${target.playerId}`, null);
       return { throttleOverride: 0, movementKeys: 0, noPath: false };
     }
+  } else if (memory.mode === "treasure") {
+    const treasure = state.treasures.find((candidate) => candidate.id === memory.targetId);
+    if (!treasure) return { throttleOverride: 0, movementKeys: 0, noPath: false };
+    setGoal(memory, `treasure:${treasure.id}`, { x: treasure.x, y: treasure.y });
   } else if (memory.mode === "assault") {
     const base = state.bases.find((candidate) => candidate.id === memory.assaultBaseId && candidate.active);
     if (!base) return { throttleOverride: null, movementKeys: 0, noPath: false };
@@ -918,7 +937,15 @@ export function createBotBrain(
         now >= memory.modeChosenAt + profile.reactionInterval
         || (memory.mode === "engage" && !visibleEnemies(state, frigate, playerId, now).some((enemy) => enemy.playerId === memory.targetId))
         || (memory.mode === "assault" && !state.bases.some((base) => base.id === memory.assaultBaseId && base.active))
-      ) chooseMode(memory, state, frigate, playerId, now, random);
+      ) chooseMode(memory, state, frigate, playerId, now, random, profile);
+
+      const supplyBase = state.bases.find((base) => base.id === memory.targetId && base.active && base.ownerTeam === frigate.team);
+      if (memory.mode === "resupply" && supplyBase && hullInsideHarbour(frigate, supplyBase)) {
+        const purchaseOrder: UpgradeTrack[] = ["hull", "cannonDamage", "cannonRange", "speed", "torpedoDamage", "torpedoSpeed"];
+        for (const track of purchaseOrder) {
+          if (purchaseUpgrade(state, playerId, track)) break;
+        }
+      }
 
       const mission = setMissionGoal(memory, state, frigate, now, random, profile);
       let throttle = mission.throttleOverride ?? 0;

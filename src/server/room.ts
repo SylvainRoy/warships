@@ -9,7 +9,10 @@ import { createBotBrain } from "./bot.js";
 import {
   createGameState,
   createSeededRandom,
+  emptyUpgrades,
   fuelCapacity,
+  purchaseUpgrade,
+  refillTreasures,
   regenerateGameWorld,
   spawnPlayerFrigate,
   stepGame,
@@ -43,6 +46,7 @@ interface PlayerSession {
   lastInput: FrigateInput;
   ackSeq: number;
   lastBasesJson: string | null;
+  lastEconomyJson: string | null;
   lastTeamSwitchAt: number | null;
   teamSwitchRespawnAt: number | null;
   bot?: true;
@@ -152,6 +156,10 @@ export class Room {
       this.switchTeam(session, message.team);
       return;
     }
+    if (message.type === "upgrade") {
+      if (!purchaseUpgrade(this.game, session.id, message.track)) this.send(session.socket!, { type: "error", code: "invalid_action" });
+      return;
+    }
     if (message.type === "host") this.performHostAction(session, message);
   }
 
@@ -228,6 +236,7 @@ export class Room {
         lastInput: { ...EMPTY_INPUT },
         ackSeq: 0,
         lastBasesJson: null,
+        lastEconomyJson: null,
         lastTeamSwitchAt: null,
         teamSwitchRespawnAt: null,
       };
@@ -363,6 +372,7 @@ export class Room {
   private sendWelcome(socket: WebSocket, session: PlayerSession, now: number): void {
     this.sessionBySocket.set(socket, session);
     session.lastBasesJson = null;
+    session.lastEconomyJson = null;
     this.send(socket, {
       type: "welcome",
       playerId: session.id,
@@ -388,6 +398,7 @@ export class Room {
   }
 
   private scoreRecord(session: PlayerSession) {
+    const previous = this.game.scores[session.id];
     return {
       playerId: session.id,
       name: session.name,
@@ -397,6 +408,9 @@ export class Room {
       sunk: session.sunk,
       host: session.host,
       connected: session.bot === true || session.socket !== null,
+      money: this.game.settings.treasures ? previous?.money ?? 0 : 0,
+      moneyEarned: this.game.settings.treasures ? previous?.moneyEarned ?? 0 : 0,
+      upgrades: this.game.settings.treasures ? previous?.upgrades ?? emptyUpgrades() : emptyUpgrades(),
     };
   }
 
@@ -449,7 +463,26 @@ export class Room {
       const previousIncomeInterval = this.game.settings.baseIncomeInterval;
       const previousRoundMinutes = this.game.settings.roundMinutes;
       const inIntermission = this.roundState.phase === "over";
+      const economyToggled = this.game.settings.treasures !== settings.treasures;
       this.game.settings = settings;
+      if (economyToggled) {
+        if (settings.treasures) {
+          refillTreasures(this.game);
+        } else {
+          this.game.treasures = [];
+          for (const score of Object.values(this.game.scores)) {
+            score.money = 0;
+            score.moneyEarned = 0;
+            score.upgrades = emptyUpgrades();
+          }
+          for (const frigate of Object.values(this.game.frigates)) {
+            frigate.maxHp = GAME_CONFIG.player.maxHp;
+            frigate.hp = Math.min(frigate.hp, frigate.maxHp);
+            frigate.cannonRange = Math.min(frigate.cannonRange, GAME_CONFIG.cannon.maxRange);
+          }
+        }
+        for (const player of this.sessions.values()) player.lastEconomyJson = null;
+      }
       if (this.roundState.phase === "playing" && previousRoundMinutes !== settings.roundMinutes) {
         this.roundState = this.playingRound(now);
         this.broadcastJoined({ type: "round", round: this.roundState });
@@ -495,7 +528,10 @@ export class Room {
       mapDimensions(this.game.settings.mapSize),
     );
     regenerateGameWorld(this.game, generated.world, generated.sites, now, this.random);
-    for (const player of this.sessions.values()) player.lastBasesJson = null;
+    for (const player of this.sessions.values()) {
+      player.lastBasesJson = null;
+      player.lastEconomyJson = null;
+    }
     for (const player of this.sessions.values()) {
       const frigate = this.game.frigates[player.id];
       if (frigate) frigate.name = player.name;
@@ -631,6 +667,7 @@ export class Room {
       shots: session.shots,
       hits: session.hits,
       bases: this.game.bases.filter((base) => base.active && base.ownerTeam === session.team).length,
+      moneyEarned: this.game.settings.treasures ? this.game.scores[session.id]?.moneyEarned ?? 0 : 0,
     })).sort((a, b) => b.score - a.score || b.sinks - a.sinks || a.deaths - b.deaths);
     const teamScores = this.currentTeamScores();
     const occupiedTeams = [...new Set([...this.sessions.values()].map((session) => session.team))];
@@ -660,7 +697,14 @@ export class Room {
       session.sinks = 0;
       session.shots = 0;
       session.hits = 0;
+      const score = this.game.scores[session.id];
+      if (score) {
+        score.money = 0;
+        score.moneyEarned = 0;
+        score.upgrades = emptyUpgrades();
+      }
       this.game.scores[session.id] = this.scoreRecord(session);
+      session.lastEconomyJson = null;
     }
     this.game.teamBonus.fill(0);
     for (const base of this.game.bases) base.heldFor = 0;
@@ -676,6 +720,7 @@ export class Room {
     regenerateGameWorld(this.game, generated.world, generated.sites, now, this.random);
     for (const player of this.sessions.values()) {
       player.lastBasesJson = null;
+      player.lastEconomyJson = null;
       const frigate = this.game.frigates[player.id];
       if (frigate) frigate.name = player.name;
     }
@@ -712,6 +757,12 @@ export class Room {
 
   private broadcastSnapshots(now: number): void {
     const players = [...this.sessions.values()].map((session) => this.scoreRecord(session));
+    const snapshotPlayers = players.map(({ money: _money, moneyEarned: _moneyEarned, upgrades: _upgrades, ...player }) => player);
+    const economy = {
+      players: players.map(({ playerId, money, moneyEarned, upgrades }) => ({ playerId, money, moneyEarned, upgrades })),
+      treasures: this.game.treasures,
+    };
+    const economyJson = JSON.stringify(economy);
     const baseSnapshots: BaseSnapshot[] = this.game.bases.map(({
       id,
       active,
@@ -765,9 +816,13 @@ export class Room {
         ackSeq: session.ackSeq,
         serverTime: now,
         frigates,
-        players,
+        players: snapshotPlayers,
         teamBonus: this.game.teamBonus.slice(),
       };
+      if (session.lastEconomyJson !== economyJson) {
+        snapshot.economy = economy;
+        session.lastEconomyJson = economyJson;
+      }
       if (session.lastBasesJson !== basesJson) {
         snapshot.bases = baseSnapshots;
         session.lastBasesJson = basesJson;
@@ -965,6 +1020,7 @@ export class Room {
         lastInput: { ...EMPTY_INPUT },
         ackSeq: 0,
         lastBasesJson: null,
+        lastEconomyJson: null,
         lastTeamSwitchAt: null,
         teamSwitchRespawnAt: null,
         bot: true,

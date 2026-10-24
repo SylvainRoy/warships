@@ -18,6 +18,7 @@ import {
   drawHitFeedback,
   drawReticle,
   drawShell,
+  drawTreasures,
   drawTorpedo,
   drawTorpedoWake,
   drawWakes,
@@ -187,6 +188,7 @@ function renderFrame(now: number): void {
     const visible = snapshot?.frigates ?? [];
     const players = snapshot?.players ?? [];
     drawBases(ctx, client.bases, (team) => colours[team]);
+    if (snapshot?.economy) drawTreasures(snapshot.economy.treasures, now);
     drawWakes(visible, serverNow);
     for (const shell of client.renderedProjectiles.shells) drawShell(shell);
     for (const torpedo of client.renderedProjectiles.torpedoes) {

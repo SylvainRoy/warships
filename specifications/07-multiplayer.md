@@ -34,6 +34,7 @@ A spawn point is valid only when no land tile lies within 60 u of the frigate hu
     - **Resupply time**, **Capture time**, and **Repair time**: each 1–30 s, step 1 s, default 5 s (Q95–Q97).
     - **Base income**: Off or every 30–180 s, step 30 s, default every 60 s. Changing a nonzero interval preserves each base's progress as a fraction; Off resets timers and stops payouts (Q176).
     - **Bots**: 0–3, step 1, default 2. **Bot skill**: Easy, Normal, or Hard, default Normal. Bots are server-controlled captains; the host changes their count or skill in Settings (Q182, Q184).
+    - **Treasures & upgrades**: On by default. Off clears treasures and resets wallets and upgrade levels, and disables money awards, purchases, effects, and economy UI (Q248).
     - Fuel and ammunition setting changes apply immediately; current amounts MUST be clamped to the new maximum (Q107). A time-setting change applies immediately to an action in progress, preserving progress as a fraction of that action (Q119).
 - Enter confirms a pending action; Esc cancels it or returns from kick selection.
 - All players see a notification in the event feed when the host performs an action.
@@ -60,6 +61,8 @@ The server fills available berths with bots up to the configured count while at 
 Bots are ordinary `PlayerSession`s with no socket. Their inputs pass through the same simulation and they receive no physics or scoring exceptions. Per-session network sends skip them. They use deterministic brains seeded from the room's random source and act only on public information: enemy frigates within 900 u and public base ownership/positions (Q185–Q186).
 
 At each skill's reaction interval, the bot chooses in order: resupply at the nearest owned active harbour when hull, shells, or fuel is low; engage the nearest visible, alive, unprotected enemy within its skill's derived band; assault the nearest active base it does not own, first shelling an active enemy turret from its skill's standoff band; otherwise patrol toward a random reachable point at least 400 u away. Weapons fire whenever a firing solution exists.
+
+Normal and Hard bots, but not Easy bots, may detour to the nearest treasure within 500 u when no enemy is visible and they are not resupplying. At an owned harbour, bots purchase at most one affordable upgrade per think tick in the order hull, cannon damage, cannon range, speed, torpedo damage, torpedo speed (Q247).
 
 | Skill | Bearing error | Range error | Reaction | Lead | Torpedoes | Cannon fire range | Torpedo range | Cruise / combat throttle | Dodge | Engage band | Turret standoff |
 |---|---:|---:|---:|---|---|---:|---:|---:|---|---:|---:|

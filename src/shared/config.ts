@@ -36,6 +36,12 @@ export const GAME_CONFIG = {
     feedbackFontSize: 14,
     coinGain: 0.3,
   },
+  economy: {
+    rewards: { sink: 100, capture: 50, homeCapture: 100, treasure: 25 },
+    treasure: { counts: [10, 20, 40], radius: 6, landClearance: 40, boatClearance: 200, harbourClearance: 200, placementAttempts: 100 },
+    upgrades: { maxLevel: 3, costs: [100, 200, 400], speedPct: 10, cannonRange: 100, hull: 25, cannonDamage: 3, torpedoSpeedPct: 20, torpedoDamage: 5 },
+    feedback: { gold: "#f3c94e" },
+  },
   frigate: {
     length: 30,
     beam: 10,

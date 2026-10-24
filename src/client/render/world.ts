@@ -246,10 +246,33 @@ export function drawFrigate(frigate: SnapshotFrigate, now: number, debug: boolea
   ctx.textBaseline = "bottom";
   ctx.fillText(frigate.name, frigate.x, frigate.y - 12);
   if (frigate.playerId !== client.ownId) {
+    const economy = client.latestSnapshot?.economy?.players.find((player) => player.playerId === frigate.playerId);
+    const hullLevel = client.gameSettings.treasures ? economy?.upgrades.hull ?? 0 : 0;
+    const maxHp = frigate.maxHp ?? GAME_CONFIG.player.maxHp + hullLevel * GAME_CONFIG.economy.upgrades.hull;
     ctx.fillStyle = "rgba(5, 20, 25, .78)";
     ctx.fillRect(frigate.x - 21, frigate.y + 10, 42, 4);
     ctx.fillStyle = frigate.hp > 35 ? "#62d3b2" : "#ff776c";
-    ctx.fillRect(frigate.x - 21, frigate.y + 10, 42 * Math.max(0, frigate.hp / GAME_CONFIG.player.maxHp), 4);
+    ctx.fillRect(frigate.x - 21, frigate.y + 10, 42 * Math.max(0, frigate.hp / maxHp), 4);
+  }
+}
+
+export function drawTreasures(treasures: readonly { id: string; x: number; y: number }[], now: number): void {
+  for (const treasure of treasures) {
+    ctx.save();
+    ctx.translate(treasure.x, treasure.y);
+    ctx.fillStyle = "#f3c94e";
+    ctx.strokeStyle = "#704e17";
+    ctx.lineWidth = 1;
+    ctx.fillRect(-5, -4, 10, 8);
+    ctx.strokeRect(-5, -4, 10, 8);
+    ctx.fillStyle = "#ffe88b";
+    ctx.fillRect(-5, -5, 10, 2);
+    ctx.globalAlpha = .5 + (Math.sin(now / 180 + treasure.x) + 1) * .15;
+    ctx.fillStyle = "#fff2ad";
+    ctx.beginPath();
+    ctx.arc(0, -8, 1.2, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
   }
 }
 
@@ -486,11 +509,11 @@ export function drawHitFeedback(now: number): void {
     );
     ctx.save();
     ctx.globalAlpha = style.alpha;
-    ctx.fillStyle = colours[number.team] ?? "#fff";
+    ctx.fillStyle = number.money ? GAME_CONFIG.economy.feedback.gold : colours[number.team] ?? "#fff";
     ctx.font = `700 ${GAME_CONFIG.baseIncome.feedbackFontSize}px Manrope, sans-serif`;
     ctx.textAlign = "center";
     ctx.textBaseline = "middle";
-    ctx.fillText(`+${number.amount}`, number.x, number.y - style.offset);
+    ctx.fillText(`${number.money ? "+$" : "+"}${number.amount}`, number.x, number.y - style.offset);
     ctx.restore();
   }
 }

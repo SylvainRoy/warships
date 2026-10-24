@@ -4,6 +4,8 @@ All notable changes to Warships are recorded here. Versions follow semantic vers
 
 ## [Unreleased]
 
+- Added personal money, treasure pickups, boat upgrades, and the host's Treasures & upgrades setting (Q238–Q249).
+
 ## [3.0.0] — 2026-10-20
 
 Third major release. It implements specification v2.14. Teams, timed rounds, bots and new difficulty levels change how a game is played and scored, hence the major version.

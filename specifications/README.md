@@ -1,6 +1,6 @@
 # Warships — Specifications
 
-**Status: APPROVED v2.14** (2026-10-20) — game release v3.0.0 implements spec v2.14; release v2.0.0 implemented spec v2.5; release v1.0.0 implemented spec v1.18.
+**Status: APPROVED v2.15** (2026-10-20) — game release v3.0.0 implements spec v2.14; release v2.0.0 implemented spec v2.5; release v1.0.0 implemented spec v1.18.
 
 | # | Document | Content |
 |---|----------|---------|
@@ -13,6 +13,7 @@
 | 07 | [Multiplayer & host](07-multiplayer.md) | Joining, berths, teams, host privileges |
 | 08 | [Technical architecture](08-architecture.md) | Stack, networking, deployment, performance |
 | 09 | [Bases](09-bases.md) | Home and neutral bases, harbours, capture, and turrets |
+| 10 | [Economy](10-economy.md) | Personal money, treasures, and boat upgrades |
 | — | [Decisions](open-questions.md) | Q&A log of design decisions |
 
 ## Conventions
@@ -23,6 +24,7 @@
 
 ## Changelog
 
+- v2.15 — personal money, treasure pickups, and boat upgrades (Q238–Q249).
 - v2.14 — base turrets follow the host's Bot skill setting (Q233–Q237).
 - v2.13 — rebalance bot skill levels; Hard plays like the former Normal (Q228–Q232).
 - v2.12 — enemy fire interrupts boat resupply and turret rebuilding until the boat leaves and returns (Q222–Q227).

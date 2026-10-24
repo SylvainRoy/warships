@@ -4,7 +4,7 @@ import { hullInsideHarbour, type BaseSite } from "../src/shared/bases.js";
 import { createEmptyWorld, type World } from "../src/shared/world.js";
 import { DEFAULT_SETTINGS } from "../src/shared/settings.js";
 import { createBotBrain } from "../src/server/bot.js";
-import { createFrigate, createGameState, INPUT_KEYS, stepGame, type FrigateInput, type GameState } from "../src/shared/sim.js";
+import { createFrigate, createGameState, emptyUpgrades, INPUT_KEYS, stepGame, type FrigateInput, type GameState } from "../src/shared/sim.js";
 import { mulberry32 } from "../src/shared/rng.js";
 
 const dt = 0.05;
@@ -245,6 +245,8 @@ describe("server bot brain", () => {
   it("captures a neutral base on open water", () => {
     const neutral = site("neutral", "neutral", 1300, 1000);
     const state = makeState(makeWorld(), [neutral]);
+    state.settings.treasures = false;
+    state.treasures = [];
     state.settings.captureTime = 1;
     const base = state.bases[0]!;
     const bot = addFrigate(state, "bot", 800, 1000);
@@ -301,5 +303,61 @@ describe("server bot brain", () => {
       stepGame(firstState, { bot: firstInput }, dt, now);
       stepGame(secondState, { bot: secondInput }, dt, now);
     }
+  });
+});
+
+describe("bot economy", () => {
+  it("buys upgrades at a resupply harbour in the specified order", () => {
+    const state = makeState(makeWorld(), [site("h0", "home", 800, 1280)]);
+    const base = state.bases[0]!;
+    base.active = true;
+    base.ownerTeam = 0;
+    const bot = addFrigate(state, "bot", base.harbourX, base.harbourY);
+    bot.shells = 0;
+    state.scores.bot = {
+      playerId: "bot",
+      name: "bot",
+      slot: 1,
+      team: 0,
+      score: 0,
+      sunk: 0,
+      host: false,
+      connected: true,
+      money: 5000,
+      moneyEarned: 0,
+      upgrades: emptyUpgrades(),
+    };
+    const brain = createBotBrain("bot", 1, () => 0.75);
+    const order: string[] = [];
+    let previous = { ...state.scores.bot.upgrades };
+    for (let tick = 1; tick <= 18; tick += 1) {
+      brain.think(state, tick, dt);
+      const next = state.scores.bot!.upgrades;
+      const changed = Object.keys(next).find((track) => next[track as keyof typeof next] > previous[track as keyof typeof previous]);
+      if (changed) order.push(changed);
+      previous = { ...next };
+    }
+    expect(order).toEqual([
+      "hull", "hull", "hull",
+      "cannonDamage", "cannonDamage", "cannonDamage",
+      "cannonRange", "cannonRange", "cannonRange",
+      "speed", "speed", "speed",
+      "torpedoDamage", "torpedoDamage", "torpedoDamage",
+      "torpedoSpeed", "torpedoSpeed", "torpedoSpeed",
+    ]);
+  });
+
+  it("detours Normal toward a nearby treasure while Easy keeps its patrol goal", () => {
+    const inputFor = (skill: number, hasTreasure = true) => {
+      const state = makeState();
+      addFrigate(state, "bot", 800, 1280);
+      state.treasures = hasTreasure ? [{ id: "nearby", x: 1150, y: 1000 }] : [];
+      return createBotBrain("bot", skill, () => 0.75).think(state, 1, dt);
+    };
+    const normal = inputFor(1);
+    const easy = inputFor(0, true);
+    const easyWithoutTreasure = inputFor(0, false);
+    expect(normal.keys & INPUT_KEYS.turnLeft).not.toBe(0);
+    expect(easy).toEqual(easyWithoutTreasure);
   });
 });

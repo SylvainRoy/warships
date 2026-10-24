@@ -8,6 +8,7 @@ import { drawFullScoreboard } from "./scoreboard.js";
 import { drawMenu } from "../menu.js";
 import { RADAR } from "../radar.js";
 import { client, type Snapshot } from "../state.js";
+import { drawUpgradePanel } from "../upgradePanel.js";
 
 export function drawConsoleDial(
   centerX: number,
@@ -187,7 +188,7 @@ export function drawHud(snapshot: Snapshot, frigate: Frigate | undefined, now: n
     const weaponsX = fuelX + 78 + 14;
     const throttleX = weaponsX + 150 + 14;
     const dialY = consolePanelY + 12;
-    const hullFraction = Math.max(0, Math.min(1, frigate.hp / GAME_CONFIG.player.maxHp));
+    const hullFraction = Math.max(0, Math.min(1, frigate.hp / frigate.maxHp));
     const hullColor = frigate.hp <= 35 ? "#ff776c" : "#62d3b2";
     drawConsoleDial(
       hullX + 39,
@@ -255,7 +256,16 @@ export function drawHud(snapshot: Snapshot, frigate: Frigate | undefined, now: n
     ctx.restore();
     ctx.textAlign = "left";
     ctx.textBaseline = "top";
+    if (client.gameSettings.treasures) {
+      const money = snapshot.economy?.players.find((player) => player.playerId === client.ownId)?.money ?? 0;
+      ctx.textAlign = "right";
+      ctx.fillStyle = GAME_CONFIG.economy.feedback.gold;
+      ctx.font = "700 13px DM Mono, monospace";
+      ctx.fillText(`$ ${money}`, consolePanelX + 425, consolePanelY - 18);
+      ctx.textAlign = "left";
+    }
   }
+  if (client.upgradeMenuOpen && frigate && client.round?.phase === "playing") drawUpgradePanel(frigate, logicalHeight);
   const feedNow = performance.now();
   const visibleFeed = feed.filter((entry) => feedNow - entry.at < 5000).slice(-5);
   ctx.textAlign = "left";
@@ -298,7 +308,8 @@ export function drawHud(snapshot: Snapshot, frigate: Frigate | undefined, now: n
       : winnerNames.length === 0
         ? "Draw"
         : `${winnerNames.length > 1 ? `${winnerNames.slice(0, -1).join(", ")} and ` : ""}${winnerNames.at(-1)} ${winnerNames.length === 1 ? "wins" : "win"}!`;
-    const panelWidth = Math.min(900, logicalWidth - 48);
+    const hasEconomy = client.gameSettings.treasures;
+    const panelWidth = Math.min(hasEconomy ? 970 : 900, logicalWidth - 48);
     const left = (logicalWidth - panelWidth) / 2;
     const top = logicalHeight / 2 - 230;
     ctx.fillStyle = "rgba(2, 12, 18, .84)";
@@ -310,8 +321,12 @@ export function drawHud(snapshot: Snapshot, frigate: Frigate | undefined, now: n
     ctx.fillStyle = "#f3f7f6";
     ctx.font = "700 18px Manrope, sans-serif";
     ctx.fillText(winnerLine, logicalWidth / 2, top + 62);
-    const columns = [left + 38, left + 490, left + 560, left + 630, left + 750, left + 850];
-    const headers = ["CAPTAIN", "SCORE", "SINKS", "DEATHS", "ACCURACY", "BASES"];
+    const columns = hasEconomy
+      ? [left + 38, left + 440, left + 510, left + 580, left + 650, left + 760, left + 920]
+      : [left + 38, left + 490, left + 560, left + 630, left + 750, left + 850];
+    const headers = hasEconomy
+      ? ["CAPTAIN", "SCORE", "SINKS", "DEATHS", "ACCURACY", "BASES", "$ EARNED"]
+      : ["CAPTAIN", "SCORE", "SINKS", "DEATHS", "ACCURACY", "BASES"];
     ctx.font = "500 10px DM Mono, monospace";
     ctx.fillStyle = "#9bb6bf";
     headers.forEach((header, index) => {
@@ -327,7 +342,14 @@ export function drawHud(snapshot: Snapshot, frigate: Frigate | undefined, now: n
       ctx.fillStyle = colours[result.team] ?? "#fff";
       ctx.font = "600 13px Manrope, sans-serif";
       ctx.fillText(result.name, columns[0] ?? left, y);
-      const values = [score, result.sinks, result.deaths, result.shots ? `${Math.round(result.hits / result.shots * 100)}%` : "—", result.bases];
+      const values = [
+        score,
+        result.sinks,
+        result.deaths,
+        result.shots ? `${Math.round(result.hits / result.shots * 100)}%` : "—",
+        result.bases,
+        ...(hasEconomy ? [`$${result.moneyEarned}`] : []),
+      ];
       ctx.fillStyle = "#e5f1f2";
       ctx.font = "12px DM Mono, monospace";
       values.forEach((value, valueIndex) => {

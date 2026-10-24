@@ -178,6 +178,18 @@ export function handleGameEvent(event: GameEvent, at: number): void {
     if (event.team !== undefined && event.team === ownTeam) {
       audio.play("coin", { own: true, gain: GAME_CONFIG.baseIncome.coinGain });
     }
+  } else if (event.type === "money" && event.playerId === client.ownId) {
+    if (event.x !== undefined && event.y !== undefined) {
+      incomeNumbers.push({
+        x: event.x,
+        y: event.y,
+        team: client.latestSnapshot?.players.find((player) => player.playerId === client.ownId)?.team ?? 0,
+        amount: event.amount ?? 0,
+        startedAt: at,
+        money: true,
+      });
+    }
+    audio.play("coin", { own: true, gain: GAME_CONFIG.baseIncome.coinGain });
   } else if (event.playerId === client.ownId && event.type === "capture") {
     audio.play("chime", { own: true });
   } else if (event.playerId === client.ownId && event.type === "turret" && /installed|repaired/i.test(event.message ?? "")) {

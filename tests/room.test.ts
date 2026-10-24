@@ -124,10 +124,14 @@ describe("multiplayer room", () => {
     room.game.teamBonus[0] = 8;
     room.sessions.get(id)!.score = 7;
     room.game.scores[id]!.score = 7;
+    room.game.scores[id]!.money = 30;
+    room.game.scores[id]!.moneyEarned = 100;
+    room.game.scores[id]!.upgrades.hull = 1;
 
     send(room, socket, { type: "team", team: 1 });
     expect(socket.last("error")?.code).toBeUndefined();
     expect(room.sessions.get(id)).toMatchObject({ team: 1, score: 7, sunk: 0 });
+    expect(room.game.scores[id]).toMatchObject({ money: 30, moneyEarned: 100, upgrades: { hull: 1 } });
     expect(room.game.frigates[id]).toBeUndefined();
     expect(room.game.bases.find((base) => base.kind === "home" && base.homeTeam === 0)).toMatchObject({
       active: false,
@@ -147,6 +151,7 @@ describe("multiplayer room", () => {
       x: newHome.harbourX,
       y: newHome.harbourY,
       status: "alive",
+      maxHp: GAME_CONFIG.player.maxHp + GAME_CONFIG.economy.upgrades.hull,
     });
     expect(room.sessions.get(id)?.sunk).toBe(0);
   });
@@ -557,6 +562,79 @@ describe("multiplayer room", () => {
     for (const socket of [host, guest]) {
       expect(socket.messages.filter((message) => message.type === "projectiles" && !message.reset)).toHaveLength(1);
     }
+  });
+
+  it("accepts eligible upgrade requests and rejects unaffordable purchases", () => {
+    const room = roomWithoutBots(11, () => 0, openWorld, fixtureSites);
+    const socket = connect(room);
+    join(room, socket, "Harbor");
+    const playerId = welcome(socket).playerId;
+    const frigate = room.game.frigates[playerId]!;
+    const base = room.game.bases.find((candidate) => candidate.active && candidate.ownerTeam === frigate.team)!;
+    frigate.x = base.harbourX;
+    frigate.y = base.harbourY;
+    room.game.scores[playerId]!.money = 100;
+
+    send(room, socket, { type: "upgrade", track: "speed" });
+    expect(room.game.scores[playerId]).toMatchObject({ money: 0, upgrades: { speed: 1 } });
+
+    send(room, socket, { type: "upgrade", track: "speed" });
+    expect(socket.last("error")?.code).toBe("invalid_action");
+  });
+
+  it("sends economy and treasure data only when that payload changes", () => {
+    const { room } = setup();
+    const socket = connect(room);
+    join(room, socket, "Harbor");
+    const playerId = welcome(socket).playerId;
+
+    room.advanceTick();
+    room.advanceTick();
+    expect(socket.last("snapshot")?.economy).toBeDefined();
+    room.advanceTick();
+    room.advanceTick();
+    expect(socket.last("snapshot")?.economy).toBeUndefined();
+
+    room.game.scores[playerId]!.money = 25;
+    room.advanceTick();
+    room.advanceTick();
+    expect(socket.last("snapshot")?.economy?.players.find((player) => player.playerId === playerId)?.money).toBe(25);
+  });
+
+  it("clears economy on setting Off and resets it on Reset scores", () => {
+    const { room } = setup();
+    const socket = connect(room);
+    join(room, socket, "Harbor");
+    const playerId = welcome(socket).playerId;
+    const score = room.game.scores[playerId]!;
+    score.money = 150;
+    score.moneyEarned = 250;
+    score.upgrades.hull = 1;
+    room.game.frigates[playerId]!.maxHp += 25;
+
+    send(room, socket, {
+      type: "host",
+      action: "settings",
+      settings: { ...room.game.settings, treasures: false },
+    });
+    expect(score).toMatchObject({ money: 0, moneyEarned: 0, upgrades: { hull: 0 } });
+    expect(room.game.treasures).toEqual([]);
+
+    send(room, socket, {
+      type: "host",
+      action: "settings",
+      settings: { ...room.game.settings, treasures: true },
+    });
+    expect(room.game.treasures).toHaveLength(GAME_CONFIG.economy.treasure.counts[room.game.settings.mapSize] ?? 0);
+    score.money = 250;
+    score.moneyEarned = 500;
+    score.upgrades.speed = 2;
+    send(room, socket, { type: "host", action: "resetScores" });
+    expect(room.game.scores[playerId]).toMatchObject({
+      money: 0,
+      moneyEarned: 0,
+      upgrades: { speed: 0, hull: 0 },
+    });
   });
 
   it("includes commanded throttle for non-own frigates in snapshots", () => {

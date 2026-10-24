@@ -1,4 +1,5 @@
 import { GAME_CONFIG } from "../shared/config.js";
+import { hullInsideHarbour } from "../shared/bases.js";
 import { INPUT_KEYS, applyFrigateInput, type FrigateInput } from "../shared/sim.js";
 import { createEmptyWorld, mapDimensions } from "../shared/world.js";
 import {
@@ -17,6 +18,7 @@ import {
 } from "./controls.js";
 import { renderLobbyControlsHelp } from "./lobby.js";
 import { audio } from "./gameEvents.js";
+import { sendUpgrade } from "./net.js";
 import { client } from "./state.js";
 
 export function storedBindings(): string | null {
@@ -106,6 +108,13 @@ export function nextInput(): FrigateInput {
 }
 
 export function simulationTick(): void {
+  if (client.upgradeMenuOpen) {
+    const own = client.predictedOwn;
+    if (!client.gameSettings.treasures || client.round?.phase !== "playing" || !own || own.status !== "alive"
+      || !client.bases.some((base) => base.active && base.ownerTeam === own.team && hullInsideHarbour(own, base))) {
+      client.upgradeMenuOpen = false;
+    }
+  }
   if (!client.joined || client.socket?.readyState !== WebSocket.OPEN || !client.world) {
     client.cannonFirePending = false;
     client.torpedoFirePending = false;
@@ -128,6 +137,7 @@ export function simulationTick(): void {
       client.world,
       performance.now() / 1000 + client.serverTimeOffset,
       client.gameSettings,
+      client.latestSnapshot?.economy?.players.find((player) => player.playerId === client.ownId)?.upgrades,
     );
   }
   client.pendingInputs.push({ input, sentAt: performance.now() });
@@ -189,6 +199,12 @@ window.addEventListener("keydown", (event) => {
     return;
   }
   if (event.code === "Escape" && !event.repeat) {
+    if (client.upgradeMenuOpen) {
+      client.upgradeMenuOpen = false;
+      event.preventDefault();
+      event.stopImmediatePropagation();
+      return;
+    }
     if (client.menuPending) {
       client.menuPending = null;
       return;
@@ -201,9 +217,28 @@ window.addEventListener("keydown", (event) => {
     }
     return;
   }
+  const upgradeDigit = client.upgradeMenuOpen ? /^(?:Digit|Numpad)([1-6])$/.exec(event.code) : null;
+  if (upgradeDigit) {
+    const tracks = ["speed", "cannonRange", "hull", "cannonDamage", "torpedoSpeed", "torpedoDamage"] as const;
+    const track = tracks[Number(upgradeDigit[1]) - 1];
+    if (track) sendUpgrade(track);
+    event.preventDefault();
+    return;
+  }
   if (!client.gameCodes.has(event.code) || client.menuOpen) return;
   if (event.repeat) return;
   const action = actionForCode(client.bindings, event.code);
+  if (action === "upgradeMenu") {
+    if (client.upgradeMenuOpen) {
+      client.upgradeMenuOpen = false;
+    } else {
+      const own = client.predictedOwn;
+      client.upgradeMenuOpen = client.gameSettings.treasures === true
+        && own?.status === "alive"
+        && client.bases.some((base) => base.active && base.ownerTeam === own.team && hullInsideHarbour(own, base));
+    }
+    return;
+  }
   if (action === "throttleUp") {
     client.throttleLevel = Math.min(3, client.throttleLevel + 1);
     if (client.predictedOwn?.status === "alive") client.predictedOwn.throttle = client.throttleLevel;

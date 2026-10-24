@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { generateWorldWithBases, hullInsideHarbour, placeBases, restoreHome } from "../src/shared/bases.js";
 import { GAME_CONFIG } from "../src/shared/config.js";
-import { createGameState, createFrigate, stepBases, stepGame, type Frigate } from "../src/shared/sim.js";
+import { createGameState, createFrigate, emptyUpgrades, stepBases, stepGame, type Frigate } from "../src/shared/sim.js";
 import { DEFAULT_SETTINGS } from "../src/shared/settings.js";
 import { createEmptyWorld, generateWorld, mapDimensions, type World } from "../src/shared/world.js";
 
@@ -160,6 +160,7 @@ describe("base capture", () => {
     state.frigates[captain.playerId] = captain;
     state.scores[captain.playerId] = {
       playerId: captain.playerId, name: captain.name, slot: captain.slot, team: captain.team, score: 0, sunk: 0, host: false, connected: true,
+      money: 0, moneyEarned: 0, upgrades: emptyUpgrades(),
     };
     stepGame(state, {}, 1, 0);
     expect(state.bases[0]?.captureProgress).toBe(0.5);

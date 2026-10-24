@@ -27,6 +27,8 @@ A frigate spawns when a player joins, after being sunk, after switching teams, a
 - Sinking yourself (own shell / torpedo, or running into land): no point gained, **−1 point**.
 - No points for damage that does not sink.
 - Personal scores are kept for as long as a player stays connected; a player leaving loses their score. Team score is the sum of members' personal scores plus the team's bonus pool; the pool resets when the team becomes empty, on score reset, and on a new round.
+- When enabled, each player also has a private wallet, separate from score. Sink rewards go to the final-damage player; captures award $50, enemy-home captures $100, and treasure pickups $25. Base income remains score points only. Wallet and upgrade levels survive sinking and team switches, and reset on leaving, Reset scores, and a new round (Q238–Q239, Q245).
+- Treasures & upgrades defaults On. Off clears treasures, disables money awards and purchases, resets all wallets/upgrades, and removes economy UI. Upgrade effects apply only while enabled (Q248).
 - The full (Tab) scoreboard also shows the number of times each player was sunk.
 - The team with the highest team score wins; if all non-empty teams tie, the round is a draw. The host may reset scores (see [07-multiplayer.md](07-multiplayer.md)).
 
