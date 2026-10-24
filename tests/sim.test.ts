@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { GAME_CONFIG } from "../src/shared/config.js";
 import { mulberry32 } from "../src/shared/rng.js";
-import { applyFrigateInput, createGameState, createFrigate, createSeededRandom, fuelCapacity, INPUT_KEYS, pointToHullDistance, regenerateGameWorld, refillSupplies, spawnFrigate, spawnPlayerFrigate, stepBases, stepGame, stepTurrets, type Frigate, type FrigateInput } from "../src/shared/sim.js";
+import { applyFrigateInput, createGameState, createFrigate, createSeededRandom, fuelCapacity, INPUT_KEYS, pointToHullDistance, regenerateGameWorld, refillSupplies, spawnFrigate, spawnPlayerFrigate, stepBases, stepGame, stepTurrets, turretSkill, type Frigate, type FrigateInput } from "../src/shared/sim.js";
 import { DEFAULT_SETTINGS, type GameSettings } from "../src/shared/settings.js";
 import { createEmptyWorld, generateWorld, isLandAt, mapDimensions, type World } from "../src/shared/world.js";
 import { generateWorldWithBases } from "../src/shared/bases.js";
@@ -48,6 +48,31 @@ function ownedHarbourState() {
   base.turret = "active";
   base.turretHp = GAME_CONFIG.bases.turretHp;
   return { state, base };
+}
+
+function turretState(skill: number, targetDistance: number) {
+  const { state, base } = ownedHarbourState();
+  state.settings.botSkill = skill;
+  const owner = frigate("owner", base.cityX, base.cityY);
+  const enemy = frigate("enemy", base.cityX + targetDistance, base.cityY);
+  state.frigates = { owner, enemy };
+  state.scores = scores(owner, enemy);
+  return { state, base, owner, enemy };
+}
+
+function repeatedTurretShots(skill: number, count = 5) {
+  const { state, base } = ownedHarbourState();
+  state.settings.botSkill = skill;
+  state.tick = 37;
+  const owner = frigate("owner", base.cityX, base.cityY);
+  const enemy = frigate("enemy", base.cityX + 250, base.cityY + 73);
+  state.frigates = { owner, enemy };
+  state.scores = scores(owner, enemy);
+  for (let shot = 0; shot < count; shot += 1) {
+    base.turretReadyAt = 0;
+    stepTurrets(state, shot);
+  }
+  return { shells: state.shells, target: { x: enemy.x, y: enemy.y } };
 }
 
 function shellAt(owner: Frigate, id: string, x: number, y: number) {
@@ -889,6 +914,66 @@ describe("torpedoes and scoring", () => {
 });
 
 describe("turrets", () => {
+  it("uses the configured turret profiles for Easy, Normal, and Hard", () => {
+    expect(GAME_CONFIG.bots.skill.map((profile) => ({
+      range: profile.turretRange,
+      reload: profile.turretReload,
+      bearingSigmaDegrees: profile.turretBearingSigmaDegrees,
+      rangeSigmaPercent: profile.turretRangeSigmaPercent,
+    }))).toEqual([
+      { range: 400, reload: 5, bearingSigmaDegrees: 8, rangeSigmaPercent: 12 },
+      { range: 500, reload: 4, bearingSigmaDegrees: 5, rangeSigmaPercent: 8 },
+      { range: 600, reload: 3, bearingSigmaDegrees: 0, rangeSigmaPercent: 0 },
+    ]);
+    expect(turretSkill({ ...DEFAULT_SETTINGS, botSkill: 9 })).toBe(GAME_CONFIG.bots.skill[2]);
+    expect(turretSkill({ ...DEFAULT_SETTINGS, botSkill: -1 })).toBe(GAME_CONFIG.bots.skill[0]);
+  });
+
+  it("uses the selected turret range for Easy, Normal, and Hard", () => {
+    const shotCount = (skill: number, distance: number) => {
+      const { state } = turretState(skill, distance);
+      stepTurrets(state, 0);
+      return state.shells.length;
+    };
+    expect(shotCount(0, 450)).toBe(0);
+    expect(shotCount(1, 450)).toBe(1);
+    expect(shotCount(1, 550)).toBe(0);
+    expect(shotCount(2, 550)).toBe(1);
+  });
+
+  it("uses each skill's turret reload interval", () => {
+    for (const [skill, reload] of [[0, 5], [1, 4], [2, 3]] as const) {
+      const { state, base } = turretState(skill, 200);
+      stepTurrets(state, 10);
+      expect(base.turretReadyAt).toBe(10 + reload);
+    }
+  });
+
+  it("uses deterministic skill aim error and keeps Hard aim exact", () => {
+    const hard = repeatedTurretShots(2);
+    expect(hard.shells.map(({ impactX, impactY }) => [impactX, impactY]))
+      .toEqual(Array.from({ length: 5 }, () => [hard.target.x, hard.target.y]));
+
+    for (const skill of [0, 1]) {
+      const first = repeatedTurretShots(skill);
+      const repeated = repeatedTurretShots(skill);
+      const impacts = first.shells.map(({ impactX, impactY }) => [impactX, impactY]);
+      expect(impacts).toEqual(repeated.shells.map(({ impactX, impactY }) => [impactX, impactY]));
+      expect(impacts.some(([x, y]) => x !== first.target.x || y !== first.target.y)).toBe(true);
+      for (const shell of first.shells) {
+        const impactDistance = Math.hypot(shell.impactX - shell.startX, shell.impactY - shell.startY);
+        expect(shell.duration).toBeCloseTo(impactDistance / GAME_CONFIG.cannon.shellSpeed);
+      }
+    }
+  });
+
+  it("applies Easy range to a turret owned by a human-only team", () => {
+    const { state } = turretState(0, 450);
+    expect(Object.values(state.scores).filter((score) => score.team === 0)).toHaveLength(1);
+    stepTurrets(state, 0);
+    expect(state.shells).toHaveLength(0);
+  });
+
   it("fires at the nearest eligible enemy in range and reloads after three seconds", () => {
     const state = createGameState(openWorld(), [homeSite()]);
     const base = state.bases[0]!;
@@ -896,7 +981,7 @@ describe("turrets", () => {
     base.ownerTeam = 0;
     base.turret = "active";
     base.turretHp = GAME_CONFIG.bases.turretHp;
-    state.settings = { ...DEFAULT_SETTINGS, shellSpeedPct: 200 };
+    state.settings = { ...DEFAULT_SETTINGS, shellSpeedPct: 200, botSkill: 2 };
     const owner = frigate("owner", base.cityX, base.cityY);
     const nearest = frigate("nearest", base.cityX + 200, base.cityY);
     const farther = frigate("farther", base.cityX + 500, base.cityY);
@@ -928,7 +1013,7 @@ describe("turrets", () => {
     });
     expect(state.shells[0]).not.toHaveProperty("shotId");
     expect(state.shells[0]?.duration).toBeCloseTo(200 / (GAME_CONFIG.cannon.shellSpeed * 2));
-    expect(base.turretReadyAt).toBe(2 + GAME_CONFIG.bases.turretReload);
+    expect(base.turretReadyAt).toBe(2 + turretSkill(state.settings).turretReload);
 
     stepTurrets(state, 4);
     expect(state.shells).toHaveLength(1);
@@ -943,8 +1028,9 @@ describe("turrets", () => {
     base.ownerTeam = 0;
     base.turret = "active";
     base.turretHp = GAME_CONFIG.bases.turretHp;
+    state.settings.botSkill = 2;
     const owner = frigate("owner", base.cityX, base.cityY);
-    const distant = frigate("distant", base.cityX + GAME_CONFIG.bases.turretRange + 1, base.cityY);
+    const distant = frigate("distant", base.cityX + turretSkill(state.settings).turretRange + 1, base.cityY);
     const protectedEnemy = frigate("protected", base.cityX + 200, base.cityY);
     protectedEnemy.spawnProtectedUntil = 4;
     state.frigates = { owner, distant, protected: protectedEnemy };

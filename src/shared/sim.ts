@@ -433,17 +433,29 @@ export function createGameState(world: World, sites: readonly BaseSite[] = []): 
   };
 }
 
+export function turretSkill(settings: GameSettings) {
+  const index = Math.max(0, Math.min(GAME_CONFIG.bots.skill.length - 1, Math.round(settings.botSkill)));
+  return GAME_CONFIG.bots.skill[index]!;
+}
+
+function gaussian(random: () => number): number {
+  const first = Math.max(Number.EPSILON, random());
+  const second = random();
+  return Math.sqrt(-2 * Math.log(first)) * Math.cos(Math.PI * 2 * second);
+}
+
 function playerName(state: GameState, playerId: string): string {
   return state.scores[playerId]?.name ?? state.frigates[playerId]?.name ?? "Unknown";
 }
 
 export function stepTurrets(state: GameState, now: number): void {
+  const profile = turretSkill(state.settings);
   for (const base of state.bases) {
     if (!base.active || base.ownerTeam === null || base.turret !== "active" || now < base.turretReadyAt) continue;
     const owner = Object.values(state.scores).find((score) => score.team === base.ownerTeam);
     if (!owner) continue;
     let target: Frigate | undefined;
-    let nearestDistance: number = GAME_CONFIG.bases.turretRange;
+    let nearestDistance: number = profile.turretRange;
     for (const frigate of Object.values(state.frigates)) {
       if (
         frigate.status !== "alive"
@@ -461,18 +473,28 @@ export function stepTurrets(state: GameState, now: number): void {
     if (!target) continue;
     const distance = Math.hypot(target.x - base.cityX, target.y - base.cityY);
     const shellSpeed = GAME_CONFIG.cannon.shellSpeed * state.settings.shellSpeedPct / 100;
+    const exactAim = profile.turretBearingSigmaDegrees === 0 && profile.turretRangeSigmaPercent === 0;
+    let impactDistance = distance;
+    let bearing = Math.atan2(target.y - base.cityY, target.x - base.cityX);
+    if (!exactAim) {
+      const random = mulberry32((state.tick * 7919 + state.nextProjectileId * 104729) >>> 0);
+      bearing += gaussian(random) * profile.turretBearingSigmaDegrees * Math.PI / 180;
+      impactDistance = Math.max(0, distance * (1 + gaussian(random) * profile.turretRangeSigmaPercent / 100));
+    }
+    const impactX = exactAim ? target.x : base.cityX + Math.cos(bearing) * impactDistance;
+    const impactY = exactAim ? target.y : base.cityY + Math.sin(bearing) * impactDistance;
     state.shells.push({
       id: `s${state.nextProjectileId++}`,
       ownerId: owner.playerId,
       turretBaseId: base.id,
       startX: base.cityX,
       startY: base.cityY,
-      impactX: target.x,
-      impactY: target.y,
+      impactX,
+      impactY,
       elapsed: 0,
-      duration: distance / shellSpeed,
+      duration: impactDistance / shellSpeed,
     });
-    base.turretReadyAt = now + GAME_CONFIG.bases.turretReload;
+    base.turretReadyAt = now + profile.turretReload;
   }
 }
 

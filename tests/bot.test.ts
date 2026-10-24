@@ -79,9 +79,9 @@ function firesWithinRange(skill: number, range: number, weapon: "cannon" | "torp
 describe("server bot brain", () => {
   it("uses the configured Easy, Normal, and Hard profiles", () => {
     expect(GAME_CONFIG.bots.skill).toEqual([
-      { bearingSigmaDegrees: 8, rangeSigmaPercent: 12, reactionInterval: 1, lead: false, torpedoes: false, cannonRange: 450, torpedoRange: 0, cruiseThrottle: 2, combatThrottle: 1, dodge: false },
-      { bearingSigmaDegrees: 5, rangeSigmaPercent: 8, reactionInterval: 0.7, lead: true, torpedoes: true, cannonRange: 600, torpedoRange: 400, cruiseThrottle: 2, combatThrottle: 1, dodge: true },
-      { bearingSigmaDegrees: 3, rangeSigmaPercent: 5, reactionInterval: 0.5, lead: true, torpedoes: true, cannonRange: 800, torpedoRange: 500, cruiseThrottle: 3, combatThrottle: 2, dodge: true },
+      { bearingSigmaDegrees: 8, rangeSigmaPercent: 12, reactionInterval: 1, lead: false, torpedoes: false, cannonRange: 450, torpedoRange: 0, cruiseThrottle: 2, combatThrottle: 1, dodge: false, turretRange: 400, turretReload: 5, turretBearingSigmaDegrees: 8, turretRangeSigmaPercent: 12 },
+      { bearingSigmaDegrees: 5, rangeSigmaPercent: 8, reactionInterval: 0.7, lead: true, torpedoes: true, cannonRange: 600, torpedoRange: 400, cruiseThrottle: 2, combatThrottle: 1, dodge: true, turretRange: 500, turretReload: 4, turretBearingSigmaDegrees: 5, turretRangeSigmaPercent: 8 },
+      { bearingSigmaDegrees: 3, rangeSigmaPercent: 5, reactionInterval: 0.5, lead: true, torpedoes: true, cannonRange: 800, torpedoRange: 500, cruiseThrottle: 3, combatThrottle: 2, dodge: true, turretRange: 600, turretReload: 3, turretBearingSigmaDegrees: 0, turretRangeSigmaPercent: 0 },
     ]);
     expect(GAME_CONFIG.bots.skill[2]!.cannonRange).toBe(GAME_CONFIG.cannon.maxRange);
   });

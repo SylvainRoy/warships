@@ -67,7 +67,7 @@ At each skill's reaction interval, the bot chooses in order: resupply at the nea
 | Normal | 5° | 8% | 0.7 s | Yes | Yes | 600 u | 400 u | 2 / 1 | Yes | 350–550 u | 450–550 u |
 | Hard | 3° | 5% | 0.5 s | Yes | Yes | 800 u | 500 u | 3 / 2 | Yes | 350–600 u | 650–750 u |
 
-The engage band is `350 u` to `min(600 u, cannon fire range − 50 u)`; turret standoff is `cannon fire range − 150 u` to `cannon fire range − 50 u`. Hard uses the former Normal behaviour; the former Hard profile is removed (Q228–Q231). These skill changes affect bots only: base turrets keep their existing behaviour, and the Bots count setting is unchanged (Q232).
+The engage band is `350 u` to `min(600 u, cannon fire range − 50 u)`; turret standoff is `cannon fire range − 150 u` to `cannon fire range − 50 u`. Hard uses the former Normal bot behaviour; the former Hard profile is removed (Q228–Q231). Bot skill also sets range, reload, and aim difficulty for every base turret regardless of its owner's team (see [09-bases.md](09-bases.md), Q233–Q236); bot turret standoff bands remain unchanged (Q237). The Bots count setting remains separate and unchanged.
 
 Navigation uses A* on an 8-neighbour, 40 u grid. A cell is passable only if its centre and eight points on a 20 u ring are water. Paths are cached per world, replanned every 2 s or after a goal moves more than 200 u, and string-pulled to the furthest directly visible waypoint. If stuck, a bot reverses with the opposite turn for 1.5 s before repathing. World regeneration clears bot paths and targets; bots respawn by the ordinary respawn rules, and score reset clears their scores (Q189–Q190).
 

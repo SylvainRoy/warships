@@ -44,7 +44,7 @@ The action times are host settings; their ranges, steps, and defaults are specif
 
 ## Turrets
 
-- An active turret MUST have a range of **600 u** and fire one cannon shell every **3 s** at the nearest enemy boat in range. It aims at the boat's current position without leading.
+- Every active turret MUST follow the host's Bot skill setting, regardless of its owner's team: Easy has a **400 u** range, **5 s** reload, **8°** bearing error, and **12%** range error; Normal has **500 u**, **4 s**, **5°**, and **8%**; Hard has **600 u**, **3 s**, and exact aim. Turrets never lead; Hard preserves the former turret behaviour (Q233–Q236).
 - A turret MUST ignore spawn-protected boats and boats belonging to its own team. Neutral bases and inactive home sites MUST NOT have turrets.
 - Turret shells use the cannon shell's **60 u** blast radius and **10 damage**.
 - A turret has **60 HP** and is destroyed by six direct shell hits. Only shells damage turrets; a team's shells MUST NOT damage that team's turrets.
