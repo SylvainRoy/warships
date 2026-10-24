@@ -40,6 +40,29 @@ function scores(...ships: Frigate[]) {
   }]));
 }
 
+function ownedHarbourState() {
+  const state = createGameState(openWorld(), [homeSite()]);
+  const base = state.bases[0]!;
+  base.active = true;
+  base.ownerTeam = 0;
+  base.turret = "active";
+  base.turretHp = GAME_CONFIG.bases.turretHp;
+  return { state, base };
+}
+
+function shellAt(owner: Frigate, id: string, x: number, y: number) {
+  return {
+    id,
+    ownerId: owner.playerId,
+    startX: owner.x,
+    startY: owner.y,
+    impactX: x,
+    impactY: y,
+    elapsed: 0,
+    duration: 0,
+  };
+}
+
 function turnedAfterOneSecond(settings: GameSettings, keys: number): Frigate {
   const state = createGameState(openWorld());
   const ship = frigate("captain");
@@ -592,6 +615,186 @@ describe("damage events", () => {
     });
     expect(protectedTarget.hp).toBe(maxHp);
     expect(state.events.filter((event) => event.type === "damage" && event.targetId === protectedTarget.playerId)).toEqual([]);
+  });
+});
+
+describe("repair interruption", () => {
+  it("stops resupply after an enemy shell hit and keeps fuel and hull flat while locked", () => {
+    const { state, base } = ownedHarbourState();
+    state.settings = { ...DEFAULT_SETTINGS, resupplyTime: 1 };
+    const owner = frigate("owner", base.harbourX, base.harbourY);
+    const shooter = frigate("shooter", 8000, 8000);
+    owner.fuel = fuelCapacity(state.settings) / 2;
+    owner.hp = maxHp / 2;
+    state.frigates = { owner, shooter };
+    state.scores = scores(owner, shooter);
+    stepBases(state, 0.1, 0);
+    expect(owner.resupplying).toBe(true);
+
+    state.shells.push(shellAt(shooter, "harbour-hit", owner.x, owner.y));
+    stepGame(state, {}, dt, 1);
+
+    expect(owner.repairLockBaseId).toBe(base.id);
+    expect(owner.resupplying).toBe(false);
+    const fuelAfterHit = owner.fuel;
+    const hpAfterHit = owner.hp;
+    for (let tick = 1; tick <= GAME_CONFIG.network.tickRate * 3; tick += 1) {
+      stepGame(state, {}, dt, 1 + tick * dt);
+    }
+    expect(owner.fuel).toBe(fuelAfterHit);
+    expect(owner.hp).toBe(hpAfterHit);
+  });
+
+  it("resumes resupply after the centre leaves and returns, retaining hull restored before the hit", () => {
+    const { state, base } = ownedHarbourState();
+    state.settings = { ...DEFAULT_SETTINGS, resupplyTime: 1 };
+    const owner = frigate("owner", base.harbourX, base.harbourY);
+    const shooter = frigate("shooter", 8000, 8000);
+    owner.fuel = fuelCapacity(state.settings) / 2;
+    owner.hp = maxHp / 2;
+    state.frigates = { owner, shooter };
+    state.scores = scores(owner, shooter);
+    stepBases(state, 0.1, 0);
+    const hpBeforeHit = owner.hp;
+    expect(owner.resupplying).toBe(true);
+
+    state.shells.push(shellAt(shooter, "harbour-hit", owner.x, owner.y));
+    stepGame(state, {}, dt, 1);
+    const hpAfterHit = owner.hp;
+    expect(hpAfterHit).toBe(hpBeforeHit - GAME_CONFIG.cannon.damage);
+
+    owner.x = base.harbourX + 31;
+    stepGame(state, {}, dt, 2);
+    expect(owner.repairLockBaseId).toBeNull();
+    expect(owner.hp).toBe(hpAfterHit);
+    owner.x = base.harbourX;
+    stepGame(state, {}, dt, 3);
+
+    expect(owner.hp).toBeGreaterThan(hpAfterHit);
+    expect(owner.hp).toBeLessThanOrEqual(maxHp);
+    expect(owner.resupplying).toBe(true);
+  });
+
+  it("does not lock a boat for land damage in its harbour", () => {
+    const { state, base } = ownedHarbourState();
+    const world = state.world;
+    const owner = frigate("owner", base.harbourX, base.harbourY);
+    owner.speed = GAME_CONFIG.frigate.maxForwardSpeed;
+    state.frigates.owner = owner;
+    state.scores = scores(owner);
+    const column = Math.floor(owner.x / GAME_CONFIG.world.tileSize);
+    const row = Math.floor(owner.y / GAME_CONFIG.world.tileSize);
+    world.grid[row * world.columns + column] = 1;
+
+    stepGame(state, { owner: { ...quietInput, throttle: 3 } }, dt, 1);
+
+    expect(state.events).toContainEqual(expect.objectContaining({ type: "damage", cause: "land" }));
+    expect(owner.repairLockBaseId).toBeNull();
+  });
+
+  it("allows resupply after enemy damage taken outside a harbour", () => {
+    const { state, base } = ownedHarbourState();
+    state.settings = { ...DEFAULT_SETTINGS, resupplyTime: 1 };
+    const owner = frigate("owner", 7000, 7000);
+    const shooter = frigate("shooter", 8000, 8000);
+    owner.fuel = fuelCapacity(state.settings) / 2;
+    state.frigates = { owner, shooter };
+    state.scores = scores(owner, shooter);
+    state.shells.push(shellAt(shooter, "outside-hit", owner.x, owner.y));
+
+    stepGame(state, {}, dt, 1);
+
+    expect(owner.repairLockBaseId).toBeNull();
+    const fuelAfterHit = owner.fuel;
+    owner.x = base.harbourX;
+    owner.y = base.harbourY;
+    stepGame(state, {}, 0.1, 2);
+
+    expect(owner.fuel).toBeGreaterThan(fuelAfterHit);
+    expect(owner.resupplying).toBe(true);
+  });
+
+  it("interrupts a turret rebuild and waits for the repairer to leave and return", () => {
+    const { state, base } = ownedHarbourState();
+    state.settings = { ...DEFAULT_SETTINGS, repairTime: 2 };
+    base.turret = "destroyed";
+    base.repairBy = 0;
+    base.repairProgress = 0.6;
+    const owner = frigate("owner", base.harbourX, base.harbourY);
+    const teammate = frigate("captain", base.harbourX + 10, base.harbourY);
+    teammate.spawnProtectedUntil = 10;
+    const shooter = frigate("shooter", 8000, 8000);
+    state.frigates = { owner, captain: teammate, shooter };
+    state.scores = scores(owner, teammate, shooter);
+    state.shells.push(shellAt(shooter, "rebuild-hit", base.cityX, base.cityY));
+
+    stepGame(state, {}, dt, 1);
+
+    expect(base.repairBy).toBeNull();
+    expect(base.repairProgress).toBe(0);
+    expect(owner.repairLockBaseId).toBe(base.id);
+    expect(teammate.repairLockBaseId).toBe(base.id);
+    stepGame(state, {}, 0.5, 1.5);
+    expect(base.repairProgress).toBe(0);
+
+    owner.x = base.harbourX + 31;
+    stepGame(state, {}, dt, 2);
+    expect(owner.repairLockBaseId).toBeNull();
+    expect(base.repairProgress).toBe(0);
+    owner.x = base.harbourX;
+    stepGame(state, {}, 0.5, 3);
+    expect(base.repairProgress).toBeCloseTo(0.25);
+  });
+
+  it("lets an unhit teammate resupply and repair after a boat-only hit", () => {
+    const { state, base } = ownedHarbourState();
+    state.settings = { ...DEFAULT_SETTINGS, resupplyTime: 1, repairTime: 2 };
+    base.turret = "destroyed";
+    const owner = frigate("owner", base.harbourX - 30, base.harbourY - 30);
+    const teammate = frigate("captain", base.harbourX + 15, base.harbourY + 25);
+    teammate.spawnProtectedUntil = 10;
+    teammate.fuel = fuelCapacity(state.settings) / 2;
+    teammate.hp = maxHp / 2;
+    const shooter = frigate("shooter", 8000, 8000);
+    state.frigates = { owner, captain: teammate, shooter };
+    state.scores = scores(owner, teammate, shooter);
+    state.shells.push(shellAt(shooter, "boat-only-hit", owner.x, owner.y));
+
+    stepGame(state, {}, dt, 1);
+
+    expect(owner.repairLockBaseId).toBe(base.id);
+    expect(teammate.repairLockBaseId).toBeNull();
+    expect(teammate.resupplying).toBe(true);
+    expect(teammate.fuel).toBeGreaterThan(fuelCapacity(state.settings) / 2);
+    expect(base.repairBy).toBe(0);
+    expect(base.repairProgress).toBeGreaterThan(0);
+  });
+
+  it("emits one interruption event per lock", () => {
+    const { state, base } = ownedHarbourState();
+    const owner = frigate("owner", base.harbourX, base.harbourY);
+    const shooter = frigate("shooter", 8000, 8000);
+    state.frigates = { owner, shooter };
+    state.scores = scores(owner, shooter);
+    const interruptionEvents: typeof state.events = [];
+    const fire = (id: string, now: number) => {
+      state.shells.push(shellAt(shooter, id, owner.x, owner.y));
+      stepGame(state, {}, dt, now);
+      interruptionEvents.push(...state.events.filter((event) => event.type === "repairInterrupted"));
+    };
+
+    fire("first", 1);
+    fire("second", 2);
+    expect(interruptionEvents).toHaveLength(1);
+
+    owner.x = base.harbourX + 31;
+    stepGame(state, {}, dt, 3);
+    owner.x = base.harbourX;
+    fire("third", 4);
+    expect(interruptionEvents).toHaveLength(2);
+    expect(interruptionEvents.every((event) =>
+      event.type === "repairInterrupted" && event.playerId === owner.playerId && event.baseId === base.id,
+    )).toBe(true);
   });
 });
 

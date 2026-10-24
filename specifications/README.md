@@ -1,6 +1,6 @@
 # Warships — Specifications
 
-**Status: APPROVED v2.11** (2026-10-20) — game release v2.0.0 implements spec v2.5; release v1.0.0 implemented spec v1.18.
+**Status: APPROVED v2.12** (2026-10-20) — game release v2.0.0 implements spec v2.5; release v1.0.0 implemented spec v1.18.
 
 | # | Document | Content |
 |---|----------|---------|
@@ -23,6 +23,7 @@
 
 ## Changelog
 
+- v2.12 — enemy fire interrupts boat resupply and turret rebuilding until the boat leaves and returns (Q222–Q227).
 - v2.11 — still throttle-dependent white wave arcs on all boats (Q216–Q221).
 - v2.10 — four-team play, shared team bases and scoring, friendly-fire prevention, and team round results (Q203–Q215).
 - v2.9 — timed rounds with an intermission, results and an Endless option (Q193–Q202).

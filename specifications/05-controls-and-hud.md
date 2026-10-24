@@ -70,7 +70,7 @@ The own boat is a white 6 u triangle pointing along its heading. When the sweep 
 - Bottom-left: a 440 × 140 u console MUST show hull and fuel dials, cannon and torpedo tiles with current/max counts, status and reload bars, and a vertical throttle telegraph with the selected stop highlighted. Normal arcs and ready bars MUST be green; numbers MUST be white when normal, orange below 20% of capacity, and red when empty; the hull arc and number MUST be red at ≤35 HP (Q108, Q130, Q142).
 - A progress ring around the own boat MUST prioritize `Repairing turret` (or `Installing turret` when the base has no turret yet), then `Capturing <time>`, then `Resupplying`. The resupply ring MUST show the least-full of fuel, shells, torpedoes, and hull, and disappear when all are full (Q98, Q129, Q173).
 - The server MUST send fuel and ammunition only for the receiving player's own boat; other players' amounts MUST remain hidden (Q131).
-- Event feed (top-left): short messages "Alice sank Bob", "Carol joined", "World regenerated", fading after 5 s.
+- Event feed (top-left): short messages "Alice sank Bob", "Carol joined", "World regenerated", and, when enemy fire interrupts your own boat's repairs, "Repairs interrupted — leave the harbour and come back", fading after 5 s.
 - The Tab scoreboard MUST show each player's active team-owned base count, including home bases, in a `Bases` column after score (Q178).
 - Death screen: "Sunk by *X*" + respawn countdown.
 - Round timer: a top-centre `mm:ss` countdown in the top band, orange below 60 s and red below 10 s; hidden in Endless and during intermission.

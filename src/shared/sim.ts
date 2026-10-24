@@ -1,6 +1,6 @@
 import { GAME_CONFIG } from "./config.js";
 import { mulberry32 } from "./rng.js";
-import { hullInsideHarbour, restoreHome, type Base, type BaseSite } from "./bases.js";
+import { hullInsideHarbour, pointInsideHarbour, restoreHome, type Base, type BaseSite } from "./bases.js";
 import { DEFAULT_SETTINGS, type GameSettings } from "./settings.js";
 import { isLandAt, mapDimensions, type World } from "./world.js";
 
@@ -40,6 +40,7 @@ export interface Frigate {
   torpedoes: number;
   throttle: number;
   resupplying: boolean;
+  repairLockBaseId: string | null;
   hp: number;
   status: FrigateStatus;
   sinkingStartedAt: number;
@@ -93,7 +94,7 @@ export interface PlayerScore {
 }
 
 export interface GameEvent {
-  type: "explosion" | "sank" | "join" | "leave" | "host" | "capture" | "turret" | "damage" | "income";
+  type: "explosion" | "sank" | "join" | "leave" | "host" | "capture" | "turret" | "damage" | "income" | "repairInterrupted";
   x?: number;
   y?: number;
   kind?: ExplosionKind;
@@ -283,6 +284,7 @@ export function createFrigate(
   return {
     playerId, name, slot, team, x, y, heading, speed: 0, hp: GAME_CONFIG.player.maxHp, status: "alive",
     fuel: fuelCapacity(settings), shells: settings.shells, torpedoes: settings.torpedoes, throttle: 0, resupplying: false,
+    repairLockBaseId: null,
     sinkingStartedAt: 0, respawnAt: 0, spawnProtectedUntil: now + GAME_CONFIG.player.spawnProtection,
     cannonBearing: 0, cannonRange: GAME_CONFIG.cannon.minRange, cannonReadyAt: 0,
     torpedoBearing: 0, torpedoReadyAt: 0, landContact: false, lastLandDamageAt: now,
@@ -480,12 +482,49 @@ function distanceToCity(base: Base, x: number, y: number): number {
   return Math.hypot(dx, dy);
 }
 
+function lockFrigateToBase(state: GameState, frigate: Frigate, base: Base): void {
+  if (frigate.repairLockBaseId === base.id) {
+    frigate.resupplying = false;
+    return;
+  }
+  frigate.repairLockBaseId = base.id;
+  frigate.resupplying = false;
+  state.events.push({
+    type: "repairInterrupted",
+    playerId: frigate.playerId,
+    baseId: base.id,
+  });
+}
+
+function lockTeamBoatsInHarbour(state: GameState, team: number, base: Base): void {
+  for (const frigate of Object.values(state.frigates)) {
+    if (
+      frigate.status === "alive"
+      && frigate.team === team
+      && pointInsideHarbour(frigate.x, frigate.y, base)
+    ) lockFrigateToBase(state, frigate, base);
+  }
+}
+
 export function stepBases(
   state: GameState,
   dt: number,
   now: number,
   firedPlayers: ReadonlySet<string> = new Set(),
 ): void {
+  for (const frigate of Object.values(state.frigates)) {
+    if (frigate.status !== "alive") {
+      frigate.repairLockBaseId = null;
+      frigate.resupplying = false;
+      continue;
+    }
+    if (
+      frigate.repairLockBaseId !== null
+      && !state.bases.some((base) =>
+        base.id === frigate.repairLockBaseId && pointInsideHarbour(frigate.x, frigate.y, base),
+      )
+    ) frigate.repairLockBaseId = null;
+  }
   for (const base of state.bases) {
     let ownershipChanged = false;
     if (base.kind === "home" && base.returnAt !== null && now >= base.returnAt) {
@@ -606,6 +645,7 @@ export function stepBases(
     const repairer = Object.values(state.frigates).find((frigate) =>
       frigate.team === ownerTeam
       && frigate.status === "alive"
+      && frigate.repairLockBaseId === null
       && hullInsideHarbour(frigate, base)
       && !firedPlayers.has(frigate.playerId),
     );
@@ -636,6 +676,7 @@ export function stepBases(
   }
   for (const frigate of Object.values(state.frigates)) {
     const canResupply = frigate.status === "alive"
+      && frigate.repairLockBaseId === null
       && frigate.throttle === 0
       && state.bases.some((base) =>
         base.active && base.ownerTeam === frigate.team && hullInsideHarbour(frigate, base),
@@ -693,6 +734,8 @@ function sinkFrigate(
 ): void {
   if (frigate.status !== "alive") return;
   frigate.status = "sinking";
+  frigate.repairLockBaseId = null;
+  frigate.resupplying = false;
   frigate.sinkingStartedAt = now;
   frigate.respawnAt = now + GAME_CONFIG.player.respawnDelay;
   frigate.speed = 0;
@@ -740,6 +783,17 @@ function damageFrigate(
     cause,
     ...(shotId ? { shotId } : {}),
   });
+  const sourceTeam = sourceId
+    ? state.scores[sourceId]?.team ?? state.frigates[sourceId]?.team
+    : undefined;
+  if (sourceTeam !== undefined && sourceTeam !== target.team) {
+    const base = state.bases.find((candidate) =>
+      candidate.active
+      && candidate.ownerTeam === target.team
+      && pointInsideHarbour(target.x, target.y, candidate),
+    );
+    if (base) lockFrigateToBase(state, target, base);
+  }
   if (target.hp === 0) sinkFrigate(state, target, sourceId, now, sourceLabel);
 }
 
@@ -927,11 +981,19 @@ export function stepGame(state: GameState, inputs: Record<string, FrigateInput |
     }
     for (const base of state.bases) {
       if (
-        base.turret !== "active"
-        || base.ownerTeam === null
+        base.ownerTeam === null
         || base.ownerTeam === shooterTeam
         || distanceToCity(base, shell.impactX, shell.impactY) > GAME_CONFIG.cannon.damageRadius
       ) continue;
+      if (base.turret !== "active") {
+        if (base.repairProgress > 0) {
+          const ownerTeam = base.ownerTeam;
+          base.repairBy = null;
+          base.repairProgress = 0;
+          lockTeamBoatsInHarbour(state, ownerTeam, base);
+        }
+        continue;
+      }
       const previousHp = base.turretHp;
       base.turretHp = Math.max(0, base.turretHp - GAME_CONFIG.cannon.damage);
       state.events.push({

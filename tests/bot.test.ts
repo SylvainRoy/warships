@@ -142,6 +142,34 @@ describe("server bot brain", () => {
     expect(bot.resupplying).toBe(false);
   });
 
+  it("leaves a locked harbour and returns to resupply after the lock clears", () => {
+    const home = site("home", "home", 1000, 1000);
+    const state = makeState(makeWorld(), [home]);
+    const base = state.bases[0]!;
+    base.active = true;
+    base.ownerTeam = 0;
+    base.turret = "active";
+    base.turretHp = GAME_CONFIG.bases.turretHp;
+    const bot = addFrigate(state, "bot", base.harbourX, base.harbourY);
+    bot.hp = 30;
+    bot.repairLockBaseId = base.id;
+    const brain = createBotBrain("bot", 1, mulberry32(78));
+    let leftHarbour = false;
+    let resuppliedAfterReturn = false;
+
+    runBrain(state, "bot", brain, 30, {}, () => {
+      leftHarbour ||= Math.abs(bot.x - base.harbourX) > 30 || Math.abs(bot.y - base.harbourY) > 30;
+      resuppliedAfterReturn ||= bot.repairLockBaseId === null
+        && bot.resupplying
+        && hullInsideHarbour(bot, base)
+        && bot.hp > 30;
+    });
+
+    expect(leftHarbour).toBe(true);
+    expect(resuppliedAfterReturn).toBe(true);
+    expect(bot.hp).toBe(GAME_CONFIG.player.maxHp);
+  });
+
   it("captures a neutral base on open water", () => {
     const neutral = site("neutral", "neutral", 1300, 1000);
     const state = makeState(makeWorld(), [neutral]);

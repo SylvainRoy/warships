@@ -108,7 +108,16 @@ export function drawBases(
 
 export function drawCaptureProgress(
   ctx: CanvasRenderingContext2D,
-  frigate: { x: number; y: number; fuel: number; shells: number; torpedoes: number; hp: number; resupplying: boolean },
+  frigate: {
+    x: number;
+    y: number;
+    fuel: number;
+    shells: number;
+    torpedoes: number;
+    hp: number;
+    resupplying: boolean;
+    repairLockBaseId?: string | null;
+  },
   bases: readonly BasePublic[],
   team: number,
   captureTime: number,
@@ -120,7 +129,7 @@ export function drawCaptureProgress(
   const base = repairBase ?? captureBase;
   const repairing = Boolean(repairBase);
   const capturing = !repairing && Boolean(captureBase);
-  if (!base && !frigate.resupplying) return;
+  if (!base && (!frigate.resupplying || frigate.repairLockBaseId)) return;
   const progress = repairing
     ? base?.repairProgress ?? 0
     : capturing

@@ -515,6 +515,22 @@ function setMissionGoal(
   now: number,
   random: () => number,
 ): { throttleOverride: number | null; movementKeys: number; noPath: boolean } {
+  const lockedBase = frigate.repairLockBaseId
+    ? state.bases.find((candidate) => candidate.id === frigate.repairLockBaseId)
+    : undefined;
+  const installingAtLockedBase = memory.mode === "assault"
+    && memory.assaultBaseId === lockedBase?.id
+    && lockedBase?.ownerTeam === frigate.team
+    && lockedBase.turret !== "active";
+  if (lockedBase && (memory.mode === "resupply" || installingAtLockedBase)) {
+    const goal = {
+      x: lockedBase.harbourX + Math.cos(lockedBase.facing) * 120,
+      y: lockedBase.harbourY + Math.sin(lockedBase.facing) * 120,
+    };
+    setGoal(memory, `repair-lock:${lockedBase.id}`, goal);
+    const navigation = navigate(memory, state.world, frigate, now);
+    return { throttleOverride: null, movementKeys: navigation.keys, noPath: !navigation.hasPath };
+  }
   if (memory.mode === "resupply") {
     const base = state.bases.find((candidate) => candidate.id === memory.targetId && candidate.active);
     if (!base || base.ownerTeam !== frigate.team) return { throttleOverride: null, movementKeys: 0, noPath: false };

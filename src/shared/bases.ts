@@ -288,13 +288,16 @@ export function hullInsideHarbour(
     for (const localY of [-halfBeam, halfBeam]) {
       const x = frigate.x + localX * cos - localY * sin;
       const y = frigate.y + localX * sin + localY * cos;
-      if (
-        x < base.harbourX - halfHarbour
-        || x > base.harbourX + halfHarbour
-        || y < base.harbourY - halfHarbour
-        || y > base.harbourY + halfHarbour
-      ) return false;
+      if (!pointInsideHarbour(x, y, base)) return false;
     }
   }
   return true;
+}
+
+export function pointInsideHarbour(x: number, y: number, base: BaseSite): boolean {
+  const halfHarbour = harbourSize / 2;
+  return x >= base.harbourX - halfHarbour
+    && x <= base.harbourX + halfHarbour
+    && y >= base.harbourY - halfHarbour
+    && y <= base.harbourY + halfHarbour;
 }

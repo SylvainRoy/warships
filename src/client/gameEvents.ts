@@ -182,6 +182,8 @@ export function handleGameEvent(event: GameEvent, at: number): void {
     audio.play("chime", { own: true });
   } else if (event.playerId === client.ownId && event.type === "turret" && /installed|repaired/i.test(event.message ?? "")) {
     audio.play("chime", { own: true });
+  } else if (event.playerId === client.ownId && event.type === "repairInterrupted") {
+    addFeed("Repairs interrupted — leave the harbour and come back");
   }
 }
 
