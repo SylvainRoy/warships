@@ -36,6 +36,7 @@ The six tracks are speed (+10% per level), cannon range (+100 u), hull (+25 max 
 - In an owned harbour, a frigate MUST remain without firing for the configured **repair time** to rebuild a destroyed turret or install one on a captured base.
 - Firing, leaving the harbour, or sinking MUST restart the repair timer from zero (Q97, Q113). Turret repair/installation MUST proceed simultaneously with resupply when both actions' conditions are met.
 - A boat repair-locked to the harbour MUST NOT repair or install its turret there. An enemy shell landing within the existing building blast-radius test while a non-active turret has positive repair progress MUST reset `repairBy` and `repairProgress` to zero and lock every alive boat on the owner team whose centre is in the harbour. Progress restarts only after the repairer leaves and returns; active-turret damage is unchanged. A teammate who is not locked remains eligible to repair (Q222–Q224, Q227).
+- The `<name> installed|repaired a turret` feed line MUST be delivered only to the player who completed the repair or installation; teammates and other players see nothing. Turret destruction feed lines remain public (Q250).
 
 The action times are host settings; their ranges, steps, and defaults are specified in [07-multiplayer.md](07-multiplayer.md).
 

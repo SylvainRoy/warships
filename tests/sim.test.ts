@@ -1373,6 +1373,7 @@ describe("home bases and turret repair", () => {
     });
     expect(state.events).toContainEqual(expect.objectContaining({
       type: "turret",
+      audience: "player",
       message: `${owner.name} installed a turret`,
     }));
 
@@ -1383,6 +1384,7 @@ describe("home bases and turret repair", () => {
     expect(base.turret).toBe("active");
     expect(state.events).toContainEqual(expect.objectContaining({
       type: "turret",
+      audience: "player",
       message: `${owner.name} repaired a turret`,
     }));
   });

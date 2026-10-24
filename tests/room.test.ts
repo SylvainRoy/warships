@@ -708,6 +708,68 @@ describe("multiplayer room", () => {
     }
   });
 
+  it("sends turret repair feeds only to the repairer and keeps destruction feeds public", () => {
+    let now = 0;
+    const room = roomWithoutBots(11, () => now, openWorld, fixtureSites);
+    const repairerSocket = connect(room);
+    const teammateSocket = connect(room);
+    const attackerSocket = connect(room);
+    send(room, repairerSocket, { type: "join", name: "Repairer", team: 0 });
+    send(room, teammateSocket, { type: "join", name: "Teammate", team: 0 });
+    send(room, attackerSocket, { type: "join", name: "Attacker", team: 1 });
+    const repairerId = welcome(repairerSocket).playerId;
+    const attackerId = welcome(attackerSocket).playerId;
+    const base = room.game.bases.find((candidate) => candidate.kind === "home" && candidate.homeTeam === 0)!;
+    const repairer = room.game.frigates[repairerId]!;
+    const teammate = room.game.frigates[welcome(teammateSocket).playerId]!;
+    const attacker = room.game.frigates[attackerId]!;
+    Object.assign(repairer, { x: base.harbourX, y: base.harbourY });
+    Object.assign(teammate, { x: 8000, y: 1000 });
+    Object.assign(attacker, { x: 10000, y: 1000 });
+    Object.assign(base, { turret: "destroyed", turretHp: 0, repairBy: null, repairProgress: 0 });
+    room.game.settings.repairTime = 1;
+
+    const dt = 1 / GAME_CONFIG.network.tickRate;
+    for (let tick = 0; tick < 60 && base.turret !== "active"; tick += 1) {
+      now += dt;
+      room.advanceTick();
+    }
+
+    const repairMessage = "Repairer repaired a turret";
+    const repairEvents = (socket: FakeSocket) => socket.messages.filter((message) =>
+      message.type === "event" && message.event.type === "turret" && message.event.message === repairMessage,
+    );
+    const deliveredRepair = repairEvents(repairerSocket);
+    expect(deliveredRepair).toHaveLength(1);
+    expect(deliveredRepair[0]).toMatchObject({
+      type: "event",
+      event: { playerId: repairerId, audience: "player" },
+    });
+    expect(repairEvents(teammateSocket)).toHaveLength(0);
+    expect(repairEvents(attackerSocket)).toHaveLength(0);
+
+    base.turretHp = 10;
+    room.game.shells.push({
+      id: "destroy-turret",
+      ownerId: attackerId,
+      startX: base.cityX,
+      startY: base.cityY,
+      impactX: base.cityX,
+      impactY: base.cityY,
+      elapsed: 0,
+      duration: 0,
+    });
+    now += dt;
+    room.advanceTick();
+
+    const destructionMessage = "Attacker destroyed Repairer's turret";
+    for (const socket of [repairerSocket, teammateSocket, attackerSocket]) {
+      expect(socket.messages.filter((message) =>
+        message.type === "event" && message.event.type === "turret" && message.event.message === destructionMessage,
+      )).toHaveLength(1);
+    }
+  });
+
   it("sends base statuses only when changed and after world regeneration", () => {
     const room = roomWithoutBots(11, () => 0, openWorld, fixtureSites);
     const socket = connect(room);

@@ -23,6 +23,7 @@ The server serves the static client files **and** the WebSocket endpoint on the 
 - `welcome` includes the current `RoundState`; `{ type: "round"; round: RoundState }` broadcasts phase and timer changes. Round times use the same server clock as snapshot `serverTime`; results are computed at round end and are not part of snapshots.
 - Team selection is an optional join field; `{ type: "team"; team }` requests a switch. Team ownership is represented by team indices while berth slots remain capacity identities. Round results include team membership, team scores, and winning teams (Q203–Q215).
 - Game events include `damage` notifications when a frigate loses HP or a shell damages a turret. They identify the target position, amount, cause, and source where applicable; these events carry no feed message. Clients use them for shooter-only hit feedback and own-damage effects.
+- Events are broadcast by default; `audience: "player"` targets only the session identified by `playerId`. Turret repair and installation feed events use this audience, while turret destruction feed lines remain public (Q250).
 - Each base's held-income timer is server-only and is never included in snapshots or base status. Income is broadcast as a change-only game event when a non-home base pays out; base-status JSON remains change-only and cached per session (Q180).
 - Sound synthesis and hit/effects settings are client-only. They do not add assets or network messages; settings persist in localStorage.
 - Messages: JSON for v1; binary encoding only if bandwidth requires it.

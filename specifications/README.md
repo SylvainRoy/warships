@@ -1,6 +1,6 @@
 # Warships — Specifications
 
-**Status: APPROVED v2.15** (2026-10-20) — game release v3.0.0 implements spec v2.14; release v2.0.0 implemented spec v2.5; release v1.0.0 implemented spec v1.18.
+**Status: APPROVED v2.16** (2026-10-20) — game release v3.0.0 implements spec v2.14; release v2.0.0 implemented spec v2.5; release v1.0.0 implemented spec v1.18.
 
 | # | Document | Content |
 |---|----------|---------|

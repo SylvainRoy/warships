@@ -858,7 +858,13 @@ export class Room {
   }
 
   private broadcastEvent(event: GameEvent): void {
-    this.broadcast({ type: "event", event });
+    const message = { type: "event", event } as const;
+    if (event.audience === "player") {
+      const recipient = event.playerId ? this.sessions.get(event.playerId) : undefined;
+      if (recipient?.socket) this.send(recipient.socket, message);
+      return;
+    }
+    this.broadcast(message);
   }
 
   private broadcast(message: ServerMessage): void {

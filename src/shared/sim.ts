@@ -110,6 +110,7 @@ export interface GameEvent {
   y?: number;
   kind?: ExplosionKind;
   playerId?: string;
+  audience?: "player";
   name?: string;
   targetId?: string;
   targetName?: string;
@@ -796,6 +797,7 @@ export function stepBases(
     state.events.push({
       type: "turret",
       playerId: repairer.playerId,
+      audience: "player",
       name,
       message: `${name} ${action} a turret`,
     });
