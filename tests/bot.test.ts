@@ -4,7 +4,7 @@ import { hullInsideHarbour, type BaseSite } from "../src/shared/bases.js";
 import { createEmptyWorld, type World } from "../src/shared/world.js";
 import { DEFAULT_SETTINGS } from "../src/shared/settings.js";
 import { createBotBrain } from "../src/server/bot.js";
-import { createFrigate, createGameState, stepGame, type FrigateInput, type GameState } from "../src/shared/sim.js";
+import { createFrigate, createGameState, INPUT_KEYS, stepGame, type FrigateInput, type GameState } from "../src/shared/sim.js";
 import { mulberry32 } from "../src/shared/rng.js";
 
 const dt = 0.05;
@@ -63,7 +63,79 @@ function runBrain(
   }
 }
 
+function firesWithinRange(skill: number, range: number, weapon: "cannon" | "torpedo"): boolean {
+  const state = makeState();
+  const bot = addFrigate(state, "bot", 800, 1000);
+  addFrigate(state, "target", 800 + range, 1000);
+  bot.cannonRange = range;
+  const brain = createBotBrain("bot", skill, () => 0.25);
+  for (let step = 1; step <= 60; step += 1) {
+    const input = brain.think(state, step * dt, dt);
+    if (weapon === "cannon" ? input.fireCannon : input.fireTorpedo) return true;
+  }
+  return false;
+}
+
 describe("server bot brain", () => {
+  it("uses the configured Easy, Normal, and Hard profiles", () => {
+    expect(GAME_CONFIG.bots.skill).toEqual([
+      { bearingSigmaDegrees: 8, rangeSigmaPercent: 12, reactionInterval: 1, lead: false, torpedoes: false, cannonRange: 450, torpedoRange: 0, cruiseThrottle: 2, combatThrottle: 1, dodge: false },
+      { bearingSigmaDegrees: 5, rangeSigmaPercent: 8, reactionInterval: 0.7, lead: true, torpedoes: true, cannonRange: 600, torpedoRange: 400, cruiseThrottle: 2, combatThrottle: 1, dodge: true },
+      { bearingSigmaDegrees: 3, rangeSigmaPercent: 5, reactionInterval: 0.5, lead: true, torpedoes: true, cannonRange: 800, torpedoRange: 500, cruiseThrottle: 3, combatThrottle: 2, dodge: true },
+    ]);
+    expect(GAME_CONFIG.bots.skill[2]!.cannonRange).toBe(GAME_CONFIG.cannon.maxRange);
+  });
+
+  it("limits cannon fire to each skill's profile range", () => {
+    expect(firesWithinRange(2, 700, "cannon")).toBe(true);
+    expect(firesWithinRange(1, 700, "cannon")).toBe(false);
+    expect(firesWithinRange(0, 700, "cannon")).toBe(false);
+    expect(firesWithinRange(1, 520, "cannon")).toBe(true);
+    expect(firesWithinRange(0, 520, "cannon")).toBe(false);
+  });
+
+  it("limits torpedo fire to each skill's profile range", () => {
+    expect(firesWithinRange(2, 450, "torpedo")).toBe(true);
+    expect(firesWithinRange(1, 450, "torpedo")).toBe(false);
+  });
+
+  it("caps patrol cruise throttle by skill", () => {
+    const maxThrottle = (skill: number) => {
+      const state = makeState();
+      const bot = addFrigate(state, "bot", 800, 1000);
+      const brain = createBotBrain("bot", skill, mulberry32(45));
+      let maximum = 0;
+      runBrain(state, "bot", brain, 12, {}, () => {
+        maximum = Math.max(maximum, bot.throttle);
+      });
+      return maximum;
+    };
+
+    expect(maxThrottle(2)).toBe(3);
+    expect(maxThrottle(1)).toBeLessThanOrEqual(2);
+    expect(maxThrottle(0)).toBeLessThanOrEqual(2);
+  });
+
+  it("uses profile combat throttle and only dodges when enabled", () => {
+    const inputAtCloseRange = (skill: number) => {
+      const state = makeState();
+      addFrigate(state, "bot", 800, 1000);
+      addFrigate(state, "target", 1050, 1000);
+      return createBotBrain("bot", skill, () => 0.25).think(state, 1, dt);
+    };
+    const turnKeys = INPUT_KEYS.turnLeft | INPUT_KEYS.turnRight;
+
+    const hard = inputAtCloseRange(2);
+    expect(hard.throttle).toBe(2);
+    expect(hard.keys & turnKeys).not.toBe(0);
+
+    const normal = inputAtCloseRange(1);
+    expect(normal.throttle).toBe(1);
+    expect(normal.keys & turnKeys).not.toBe(0);
+
+    expect(inputAtCloseRange(0).throttle).toBe(0);
+  });
+
   it("navigates around a land wall to a resupply goal", () => {
     const world = makeWorld(160, 100);
     for (let row = 0; row < 50; row += 1) {

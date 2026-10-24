@@ -81,6 +81,22 @@ function skillProfile(skill: number) {
   return GAME_CONFIG.bots.skill[index]!;
 }
 
+type BotSkillProfile = ReturnType<typeof skillProfile>;
+
+function engageBand(profile: BotSkillProfile): { min: number; max: number } {
+  return {
+    min: GAME_CONFIG.bots.engageMinDistance,
+    max: Math.min(GAME_CONFIG.bots.engageMaxDistance, profile.cannonRange - 50),
+  };
+}
+
+function turretBand(profile: BotSkillProfile): { min: number; max: number } {
+  return {
+    min: profile.cannonRange - 150,
+    max: profile.cannonRange - 50,
+  };
+}
+
 function createNavigationGrid(world: World): NavigationGrid {
   const cellSize = GAME_CONFIG.bots.navigationCellSize;
   const columns = Math.ceil(world.width / cellSize);
@@ -289,6 +305,7 @@ function navigate(
   world: World,
   frigate: Frigate,
   now: number,
+  cruiseThrottle: number,
   goalDistance = goalReachDistance(memory),
 ): { keys: number; throttle: number; turn: number; hasPath: boolean } {
   const goal = memory.navGoal;
@@ -342,7 +359,7 @@ function navigate(
   memory.lastTurn = turn;
   return {
     keys,
-    throttle: Math.abs(error) < 30 * radians && !finalApproach ? 3 : 1,
+    throttle: Math.abs(error) < 30 * radians && !finalApproach ? cruiseThrottle : 1,
     turn,
     hasPath: true,
   };
@@ -485,9 +502,10 @@ function choosePerpendicularGoal(
   world: World,
   frigate: Frigate,
   target: Frigate,
+  profile: BotSkillProfile,
 ): Point {
   const bearing = Math.atan2(target.y - frigate.y, target.x - frigate.x);
-  const distanceToKeep = GAME_CONFIG.bots.engageMaxDistance - 100;
+  const distanceToKeep = engageBand(profile).max - 100;
   const candidates = [bearing + Math.PI / 2, bearing - Math.PI / 2].map((angle) => ({
     x: target.x + Math.cos(angle) * distanceToKeep,
     y: target.y + Math.sin(angle) * distanceToKeep,
@@ -496,9 +514,10 @@ function choosePerpendicularGoal(
   return water[0] ?? candidates[0]!;
 }
 
-function chooseTurretStandoff(world: World, frigate: Frigate, base: Base): Point {
+function chooseTurretStandoff(world: World, frigate: Frigate, base: Base, profile: BotSkillProfile): Point {
   const center = { x: base.cityX, y: base.cityY };
-  const range = (GAME_CONFIG.bots.turretMinDistance + GAME_CONFIG.bots.turretMaxDistance) / 2;
+  const band = turretBand(profile);
+  const range = (band.min + band.max) / 2;
   const towardBase = Math.atan2(center.y - frigate.y, center.x - frigate.x);
   for (let offset = 0; offset < 8; offset += 1) {
     const angle = towardBase + Math.PI + offset * Math.PI / 4;
@@ -514,6 +533,7 @@ function setMissionGoal(
   frigate: Frigate,
   now: number,
   random: () => number,
+  profile: BotSkillProfile,
 ): { throttleOverride: number | null; movementKeys: number; noPath: boolean } {
   const lockedBase = frigate.repairLockBaseId
     ? state.bases.find((candidate) => candidate.id === frigate.repairLockBaseId)
@@ -528,7 +548,7 @@ function setMissionGoal(
       y: lockedBase.harbourY + Math.sin(lockedBase.facing) * 120,
     };
     setGoal(memory, `repair-lock:${lockedBase.id}`, goal);
-    const navigation = navigate(memory, state.world, frigate, now);
+    const navigation = navigate(memory, state.world, frigate, now, profile.cruiseThrottle);
     return { throttleOverride: null, movementKeys: navigation.keys, noPath: !navigation.hasPath };
   }
   if (memory.mode === "resupply") {
@@ -543,14 +563,19 @@ function setMissionGoal(
     const target = state.frigates[memory.targetId ?? ""];
     if (!target || target.status !== "alive") return { throttleOverride: null, movementKeys: 0, noPath: false };
     const range = distance(frigate, target);
-    if (range < GAME_CONFIG.bots.engageMinDistance) {
-      setGoal(memory, `engage-close:${target.playerId}`, choosePerpendicularGoal(state.world, frigate, target));
-      const navigation = navigate(memory, state.world, frigate, now);
-      return { throttleOverride: 2, movementKeys: navigation.keys, noPath: !navigation.hasPath };
+    const band = engageBand(profile);
+    if (range < band.min) {
+      if (!profile.dodge) {
+        setGoal(memory, `engage-hold:${target.playerId}`, null);
+        return { throttleOverride: 0, movementKeys: 0, noPath: false };
+      }
+      setGoal(memory, `engage-close:${target.playerId}`, choosePerpendicularGoal(state.world, frigate, target, profile));
+      const navigation = navigate(memory, state.world, frigate, now, profile.cruiseThrottle);
+      return { throttleOverride: profile.combatThrottle, movementKeys: navigation.keys, noPath: !navigation.hasPath };
     }
-    if (range > GAME_CONFIG.bots.engageMaxDistance) {
+    if (range > band.max) {
       const bearing = Math.atan2(target.y - frigate.y, target.x - frigate.x);
-      const rangeGoal = (GAME_CONFIG.bots.engageMinDistance + GAME_CONFIG.bots.engageMaxDistance) / 2;
+      const rangeGoal = (band.min + band.max) / 2;
       setGoal(memory, `engage-close:${target.playerId}`, {
         x: target.x - Math.cos(bearing) * rangeGoal,
         y: target.y - Math.sin(bearing) * rangeGoal,
@@ -568,11 +593,12 @@ function setMissionGoal(
     }
     if (base.ownerTeam !== null && base.ownerTeam !== frigate.team && base.turret === "active") {
       const range = Math.hypot(frigate.x - base.cityX, frigate.y - base.cityY);
-      if (range >= GAME_CONFIG.bots.turretMinDistance && range <= GAME_CONFIG.bots.turretMaxDistance) {
+      const band = turretBand(profile);
+      if (range >= band.min && range <= band.max) {
         setGoal(memory, `turret:${base.id}`, null);
         return { throttleOverride: 0, movementKeys: 0, noPath: false };
       }
-      setGoal(memory, `turret:${base.id}`, chooseTurretStandoff(state.world, frigate, base));
+      setGoal(memory, `turret:${base.id}`, chooseTurretStandoff(state.world, frigate, base, profile));
     } else if (base.ownerTeam === frigate.team && base.turret !== "active") {
       if (hullInsideHarbour(frigate, base)) {
         setGoal(memory, `install:${base.id}`, null);
@@ -591,7 +617,7 @@ function setMissionGoal(
     const patrol = choosePatrolPoint(memory, state, frigate, random);
     setGoal(memory, `patrol:${memory.patrolId}`, patrol);
   }
-  const navigation = navigate(memory, state.world, frigate, now);
+  const navigation = navigate(memory, state.world, frigate, now, profile.cruiseThrottle);
   if (!navigation.hasPath && memory.mode === "patrol") {
     const patrol = choosePatrolPoint(memory, state, frigate, random);
     setGoal(memory, `patrol:${memory.patrolId}`, patrol);
@@ -606,8 +632,9 @@ function visibleCannonTargets(
   frigate: Frigate,
   playerId: string,
   now: number,
+  profile: BotSkillProfile,
 ): BotTarget[] {
-  const maximumRange = GAME_CONFIG.cannon.maxRange;
+  const maximumRange = profile.cannonRange;
   const enemies = visibleEnemies(state, frigate, playerId, now)
     .filter((enemy) => distance(frigate, enemy) >= GAME_CONFIG.cannon.minRange && distance(frigate, enemy) <= maximumRange)
     .map((enemy): BotTarget => ({
@@ -643,9 +670,10 @@ function visibleTorpedoTargets(
   frigate: Frigate,
   playerId: string,
   now: number,
+  profile: BotSkillProfile,
 ): BotTarget[] {
   return visibleEnemies(state, frigate, playerId, now)
-    .filter((enemy) => distance(frigate, enemy) <= GAME_CONFIG.bots.torpedoRange)
+    .filter((enemy) => distance(frigate, enemy) <= profile.torpedoRange)
     .map((enemy): BotTarget => ({
       id: `frigate:${enemy.playerId}`,
       x: enemy.x,
@@ -728,7 +756,7 @@ function weaponInputs(
   let keys = 0;
   let fireCannon = false;
   let fireTorpedo = false;
-  const cannonTarget = visibleCannonTargets(memory, state, frigate, playerId, now)[0];
+  const cannonTarget = visibleCannonTargets(memory, state, frigate, playerId, now, profile)[0];
   if (!cannonTarget) {
     memory.cannonAim.targetId = null;
   } else {
@@ -758,7 +786,7 @@ function weaponInputs(
       && !frigate.lastFireCannon
       && now - memory.cannonAim.targetSince >= profile.reactionInterval
       && actualDistance >= GAME_CONFIG.cannon.minRange
-      && actualDistance <= GAME_CONFIG.cannon.maxRange
+      && actualDistance <= profile.cannonRange
       && Math.abs(memory.cannonAim.bearingError) < GAME_CONFIG.bots.cannonBearingTolerance
       && Math.abs(bearing.error) < GAME_CONFIG.bots.cannonBearingTolerance
       && rangeError < GAME_CONFIG.bots.cannonRangeTolerance
@@ -771,7 +799,7 @@ function weaponInputs(
   }
 
   const torpedoTarget = profile.torpedoes
-    ? visibleTorpedoTargets(state, frigate, playerId, now)[0]
+    ? visibleTorpedoTargets(state, frigate, playerId, now, profile)[0]
     : undefined;
   if (!torpedoTarget) {
     memory.torpedoAim.targetId = null;
@@ -792,7 +820,7 @@ function weaponInputs(
     fireTorpedo = ready
       && !frigate.lastFireTorpedo
       && now - memory.torpedoAim.targetSince >= profile.reactionInterval
-      && distance(frigate, torpedoTarget) <= GAME_CONFIG.bots.torpedoRange
+      && distance(frigate, torpedoTarget) <= profile.torpedoRange
       && Math.abs(memory.torpedoAim.bearingError) < GAME_CONFIG.bots.torpedoBearingTolerance
       && Math.abs(bearing.error) < GAME_CONFIG.bots.torpedoBearingTolerance
       && torpedoPathIsWater(state.world, frigate, intercept);
@@ -892,11 +920,11 @@ export function createBotBrain(
         || (memory.mode === "assault" && !state.bases.some((base) => base.id === memory.assaultBaseId && base.active))
       ) chooseMode(memory, state, frigate, playerId, now, random);
 
-      const mission = setMissionGoal(memory, state, frigate, now, random);
+      const mission = setMissionGoal(memory, state, frigate, now, random, profile);
       let throttle = mission.throttleOverride ?? 0;
       let movementKeys = mission.movementKeys;
       if (mission.throttleOverride === null) {
-        const movement = navigate(memory, state.world, frigate, now);
+        const movement = navigate(memory, state.world, frigate, now, profile.cruiseThrottle);
         movementKeys = movement.keys;
         throttle = movement.throttle;
       }

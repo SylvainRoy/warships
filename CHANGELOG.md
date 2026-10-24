@@ -4,6 +4,7 @@ All notable changes to Warships are recorded here. Versions follow semantic vers
 
 ## [Unreleased]
 
+- Bot skill levels rebalanced: Hard plays like the former Normal; Normal and Easy bots aim worse, open fire at shorter range and manoeuvre less.
 - Enemy fire interrupts boat resupply and turret rebuilding until the boat leaves the harbour and returns.
 - Still white throttle-wave arcs show commanded throttle on every boat.
 - Four-team play with shared team bases and scoring, team selection, and friendly-fire prevention.

@@ -59,7 +59,15 @@ The server fills available berths with bots up to the configured count while at 
 
 Bots are ordinary `PlayerSession`s with no socket. Their inputs pass through the same simulation and they receive no physics or scoring exceptions. Per-session network sends skip them. They use deterministic brains seeded from the room's random source and act only on public information: enemy frigates within 900 u and public base ownership/positions (Q185–Q186).
 
-At each skill's reaction interval, the bot chooses in order: resupply at the nearest owned active harbour when hull, shells, or fuel is low; engage the nearest visible, alive, unprotected enemy while keeping 350–600 u; assault the nearest active base it does not own, first shelling an active enemy turret from 650–750 u; otherwise patrol toward a random reachable point at least 400 u away. Weapons fire whenever a firing solution exists. Easy/Normal/Hard use 6°/3°/1° bearing error, 10%/5%/2% range error, and 0.8/0.5/0.25 s reaction intervals. Normal and Hard lead targets; only Normal and Hard fire torpedoes (Q187–Q188).
+At each skill's reaction interval, the bot chooses in order: resupply at the nearest owned active harbour when hull, shells, or fuel is low; engage the nearest visible, alive, unprotected enemy within its skill's derived band; assault the nearest active base it does not own, first shelling an active enemy turret from its skill's standoff band; otherwise patrol toward a random reachable point at least 400 u away. Weapons fire whenever a firing solution exists.
+
+| Skill | Bearing error | Range error | Reaction | Lead | Torpedoes | Cannon fire range | Torpedo range | Cruise / combat throttle | Dodge | Engage band | Turret standoff |
+|---|---:|---:|---:|---|---|---:|---:|---:|---|---:|---:|
+| Easy | 8° | 12% | 1.0 s | No | No | 450 u | 0 u | 2 / 1 | No | 350–400 u | 300–400 u |
+| Normal | 5° | 8% | 0.7 s | Yes | Yes | 600 u | 400 u | 2 / 1 | Yes | 350–550 u | 450–550 u |
+| Hard | 3° | 5% | 0.5 s | Yes | Yes | 800 u | 500 u | 3 / 2 | Yes | 350–600 u | 650–750 u |
+
+The engage band is `350 u` to `min(600 u, cannon fire range − 50 u)`; turret standoff is `cannon fire range − 150 u` to `cannon fire range − 50 u`. Hard uses the former Normal behaviour; the former Hard profile is removed (Q228–Q231). These skill changes affect bots only: base turrets keep their existing behaviour, and the Bots count setting is unchanged (Q232).
 
 Navigation uses A* on an 8-neighbour, 40 u grid. A cell is passable only if its centre and eight points on a 20 u ring are water. Paths are cached per world, replanned every 2 s or after a goal moves more than 200 u, and string-pulled to the furthest directly visible waypoint. If stuck, a bot reverses with the opposite turn for 1.5 s before repathing. World regeneration clears bot paths and targets; bots respawn by the ordinary respawn rules, and score reset clears their scores (Q189–Q190).
 
