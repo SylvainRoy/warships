@@ -186,7 +186,7 @@ export function drawFrigate(frigate: SnapshotFrigate, now: number, debug: boolea
   const sinkingProgress = frigate.status === "sinking"
     ? Math.min(1, (now - frigate.sinkingStartedAt) / GAME_CONFIG.player.sinkAnimation)
     : 0;
-  const color = colours[frigate.slot - 1] ?? "#d6e9ee";
+  const color = colours[frigate.team] ?? "#d6e9ee";
   ctx.save();
   ctx.translate(frigate.x, frigate.y);
   ctx.rotate(frigate.heading);
@@ -470,10 +470,9 @@ export function drawHitFeedback(now: number): void {
       GAME_CONFIG.baseIncome.feedbackFade,
       GAME_CONFIG.baseIncome.feedbackRise,
     );
-    const owner = client.latestSnapshot?.players.find((player) => player.playerId === number.playerId);
     ctx.save();
     ctx.globalAlpha = style.alpha;
-    ctx.fillStyle = owner ? colours[owner.slot - 1] ?? "#fff" : "#fff";
+    ctx.fillStyle = colours[number.team] ?? "#fff";
     ctx.font = `700 ${GAME_CONFIG.baseIncome.feedbackFontSize}px Manrope, sans-serif`;
     ctx.textAlign = "center";
     ctx.textBaseline = "middle";

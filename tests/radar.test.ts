@@ -13,6 +13,7 @@ function frigate(
     playerId,
     name: playerId,
     slot,
+    team: slot - 1,
     x,
     y,
     heading: 0,
@@ -23,8 +24,8 @@ function frigate(
   };
 }
 
-const own = { x: 0, y: 0 };
-const colorForSlot = (slot: number) => ["#4b9bff", "#ff6266", "#f3c94e", "#c084fc"][slot - 1] ?? "#fff";
+const own = { x: 0, y: 0, team: 0 };
+const colorForSlot = (team: number) => ["#4b9bff", "#ff6266", "#f3c94e", "#c084fc"][team] ?? "#fff";
 
 describe("radar", () => {
   it("does not paint a boat before the sweep crosses its bearing", () => {

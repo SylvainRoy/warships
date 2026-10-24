@@ -46,11 +46,11 @@ class FakeSocket extends EventEmitter {
 const bigDimensions = mapDimensions(2);
 const openWorld: World = createEmptyWorld(bigDimensions, 11);
 const fixtureSites: BaseSite[] = [
-  { id: "h0", kind: "home", homeSlot: 0, cityX: 1750, cityY: 4500, harbourX: 1800, harbourY: 4500, facing: 0 },
-  { id: "h1", kind: "home", homeSlot: 1, cityX: 4450, cityY: 4500, harbourX: 4500, harbourY: 4500, facing: Math.PI / 2 },
-  { id: "h2", kind: "home", homeSlot: 2, cityX: 7150, cityY: 4500, harbourX: 7200, harbourY: 4500, facing: Math.PI },
-  { id: "h3", kind: "home", homeSlot: 3, cityX: 9850, cityY: 4500, harbourX: 9900, harbourY: 4500, facing: Math.PI * 1.5 },
-  { id: "n0", kind: "neutral", homeSlot: null, cityX: 12550, cityY: 4500, harbourX: 12600, harbourY: 4500, facing: 0 },
+  { id: "h0", kind: "home", homeTeam: 0, cityX: 1750, cityY: 4500, harbourX: 1800, harbourY: 4500, facing: 0 },
+  { id: "h1", kind: "home", homeTeam: 1, cityX: 4450, cityY: 4500, harbourX: 4500, harbourY: 4500, facing: Math.PI / 2 },
+  { id: "h2", kind: "home", homeTeam: 2, cityX: 7150, cityY: 4500, harbourX: 7200, harbourY: 4500, facing: Math.PI },
+  { id: "h3", kind: "home", homeTeam: 3, cityX: 9850, cityY: 4500, harbourX: 9900, harbourY: 4500, facing: Math.PI * 1.5 },
+  { id: "n0", kind: "neutral", homeTeam: null, cityX: 12550, cityY: 4500, harbourX: 12600, harbourY: 4500, facing: 0 },
 ];
 
 function setup() {
@@ -91,6 +91,128 @@ function welcome(socket: FakeSocket) {
 }
 
 describe("multiplayer room", () => {
+  it("assigns default teams in order, honours shared teams, and falls back for invalid teams", () => {
+    const defaults = roomWithoutBots(11, () => 0, openWorld, fixtureSites);
+    const defaultSockets = ["A", "B", "C", "D"].map((name) => {
+      const socket = connect(defaults);
+      join(defaults, socket, name);
+      return socket;
+    });
+    expect(defaultSockets.map((socket) => welcome(socket).team)).toEqual([0, 1, 2, 3]);
+
+    const shared = roomWithoutBots(11, () => 0, openWorld, fixtureSites);
+    const first = connect(shared);
+    const second = connect(shared);
+    const invalidHigh = connect(shared);
+    const invalidLow = connect(shared);
+    send(shared, first, { type: "join", name: "First", team: 2 });
+    send(shared, second, { type: "join", name: "Second", team: 2 });
+    send(shared, invalidHigh, { type: "join", name: "High", team: 7 });
+    send(shared, invalidLow, { type: "join", name: "Low", team: -1 });
+    expect([first, second, invalidHigh, invalidLow].map((socket) => welcome(socket).team)).toEqual([2, 2, 0, 1]);
+  });
+
+  it("switches team after the cooldown and respawns at the new home without a death", () => {
+    let now = 10;
+    const room = roomWithoutBots(11, () => now, openWorld, fixtureSites);
+    const socket = connect(room);
+    join(room, socket, "Alice");
+    const id = welcome(socket).playerId;
+    const neutral = room.game.bases.find((base) => base.kind === "neutral")!;
+    neutral.active = true;
+    neutral.ownerTeam = 0;
+    room.game.teamBonus[0] = 8;
+    room.sessions.get(id)!.score = 7;
+    room.game.scores[id]!.score = 7;
+
+    send(room, socket, { type: "team", team: 1 });
+    expect(socket.last("error")?.code).toBeUndefined();
+    expect(room.sessions.get(id)).toMatchObject({ team: 1, score: 7, sunk: 0 });
+    expect(room.game.frigates[id]).toBeUndefined();
+    expect(room.game.bases.find((base) => base.kind === "home" && base.homeTeam === 0)).toMatchObject({
+      active: false,
+      ownerTeam: null,
+    });
+    expect(neutral.ownerTeam).toBeNull();
+    expect(room.game.teamBonus[0]).toBe(0);
+
+    send(room, socket, { type: "team", team: 2 });
+    expect(socket.last("error")?.code).toBe("cooldown");
+    now += GAME_CONFIG.player.respawnDelay;
+    room.advanceTick();
+    const respawned = room.game.frigates[id];
+    const newHome = room.game.bases.find((base) => base.kind === "home" && base.homeTeam === 1)!;
+    expect(respawned).toMatchObject({
+      team: 1,
+      x: newHome.harbourX,
+      y: newHome.harbourY,
+      status: "alive",
+    });
+    expect(room.sessions.get(id)?.sunk).toBe(0);
+  });
+
+  it("rejects team switching during the round intermission", () => {
+    let now = 0;
+    const room = roomWithoutBots(11, () => now, openWorld, fixtureSites);
+    const socket = connect(room);
+    join(room, socket, "Alice");
+    now = 600;
+    room.advanceTick();
+
+    send(room, socket, { type: "team", team: 1 });
+
+    expect(socket.last("error")?.code).toBe("invalid_action");
+  });
+
+  it("keeps team pools through intermission and resets them on scores and the next round", () => {
+    let now = 0;
+    const room = roomWithoutBots(11, () => now, openWorld, fixtureSites);
+    const socket = connect(room);
+    join(room, socket, "Alice");
+    room.game.teamBonus[0] = 4;
+    send(room, socket, { type: "host", action: "resetScores" });
+    expect(room.game.teamBonus[0]).toBe(0);
+
+    room.game.teamBonus[0] = 6;
+    now = 600;
+    room.advanceTick();
+    expect(room.game.teamBonus[0]).toBe(6);
+    expect(socket.last("round")?.round).toMatchObject({
+      phase: "over",
+      teamScores: [6, 0, 0, 0],
+    });
+
+    now = 610;
+    room.advanceTick();
+    expect(room.game.teamBonus).toEqual([0, 0, 0, 0]);
+  });
+
+  it("sums teammate scores and pool bonuses into team round totals", () => {
+    let now = 0;
+    const room = roomWithoutBots(11, () => now, openWorld, fixtureSites);
+    const alice = connect(room);
+    const bob = connect(room);
+    send(room, alice, { type: "join", name: "Alice", team: 0 });
+    send(room, bob, { type: "join", name: "Bob", team: 0 });
+    const aliceId = welcome(alice).playerId;
+    const bobId = welcome(bob).playerId;
+    room.sessions.get(aliceId)!.score = 2;
+    room.sessions.get(bobId)!.score = 3;
+    room.game.scores[aliceId]!.score = 2;
+    room.game.scores[bobId]!.score = 3;
+    room.game.teamBonus[0] = 4;
+    now = 600;
+
+    room.advanceTick();
+
+    expect(alice.last("round")?.round).toMatchObject({
+      phase: "over",
+      teamScores: [9, 0, 0, 0],
+      winnerTeams: [0],
+      winners: [bobId, aliceId],
+    });
+  });
+
   it("assigns lowest slots and colours, rejects the fifth player and duplicate names, and makes the first joiner host", () => {
     const { room } = setup();
     const sockets = ["Alice", "Bob", "Cara", "Drew"].map(() => connect(room));
@@ -103,7 +225,7 @@ describe("multiplayer room", () => {
     });
     expect(room.sessions.get(welcome(sockets[0]!).playerId)?.host).toBe(true);
     expect(welcome(sockets[0]!).settings).toEqual({ ...DEFAULT_SETTINGS, bots: 0, mapSize: 2 });
-    expect(colours).toEqual(["#3b82f6", "#ef4444", "#facc15", "#a855f7"]);
+    expect(colours).toEqual(["#4b9bff", "#ff6266", "#f3c94e", "#c084fc"]);
     const fifth = connect(room);
     join(room, fifth, "Eve");
     expect(fifth.last("error")?.code).toBe("full");
@@ -149,7 +271,8 @@ describe("multiplayer room", () => {
     expect(room.sessions.has(oldPlayerId)).toBe(false);
     expect(room.game.frigates[oldPlayerId]).toBeUndefined();
     expect(room.game.scores[oldPlayerId]).toBeUndefined();
-    expect(room.game.bases.find((base) => base.kind === "home" && base.homeSlot === 0)?.ownerId).toBe(newPlayerId);
+    expect(room.game.bases.find((base) => base.kind === "home" && base.homeTeam === 0)?.ownerTeam)
+      .toBe(room.sessions.get(newPlayerId)?.team);
     expect(socket.last("lobby")).toMatchObject({
       players: [{ playerId: newPlayerId, name: "B", slot: 1 }],
       freeSlots: 3,
@@ -214,7 +337,7 @@ describe("multiplayer room", () => {
     expect(room.game.frigates[host.playerId]?.status).toBe("alive");
     expect(room.game.frigates[guest.playerId]?.hp).toBe(GAME_CONFIG.player.maxHp);
     const incomeBase = room.game.bases.find((base) => base.kind === "neutral")!;
-    incomeBase.ownerId = host.playerId;
+    incomeBase.ownerTeam = host.team;
     incomeBase.heldFor = 12;
     send(room, hostSocket, { type: "host", action: "resetScores" });
     expect(room.game.scores[host.playerId]?.score).toBe(0);
@@ -281,7 +404,7 @@ describe("multiplayer room", () => {
     join(room, hostSocket, "Harbor");
     const hostId = welcome(hostSocket).playerId;
     const base = room.game.bases.find((candidate) => candidate.kind === "neutral")!;
-    base.ownerId = hostId;
+    base.ownerTeam = room.sessions.get(hostId)!.team;
     base.heldFor = 30;
 
     send(room, hostSocket, {
@@ -307,14 +430,14 @@ describe("multiplayer room", () => {
     join(room, hostSocket, "Harbor");
     const hostId = welcome(hostSocket).playerId;
     const base = room.game.bases.find((candidate) => candidate.kind === "neutral")!;
-    base.ownerId = hostId;
+    base.ownerTeam = room.sessions.get(hostId)!.team;
     base.heldFor = 18;
 
     hostSocket.close();
     now = GAME_CONFIG.network.reconnectGrace + 1;
     room.advanceTick();
 
-    expect(base.ownerId).toBeNull();
+    expect(base.ownerTeam).toBeNull();
     expect(base.heldFor).toBe(0);
   });
 
@@ -508,19 +631,19 @@ describe("multiplayer room", () => {
     frigate.y = neutral.harbourY;
     const capturing = nextSnapshot();
     const capturedStatus = capturing?.bases?.find((base) => base.id === neutral.id);
-    expect(capturedStatus?.captureBy).toBe(playerId);
+    expect(capturedStatus?.captureBy).toBe(room.sessions.get(playerId)?.team);
     expect(capturedStatus?.captureProgress).toBe(Number(neutral.captureProgress.toFixed(2)));
 
-    neutral.ownerId = playerId;
+    neutral.ownerTeam = room.sessions.get(playerId)!.team;
     neutral.turret = "destroyed";
     neutral.turretHp = 0;
     neutral.captureBy = null;
     neutral.captureProgress = 0;
-    neutral.repairBy = playerId;
+    neutral.repairBy = room.sessions.get(playerId)!.team;
     neutral.repairProgress = 0.1234;
     const repairing = nextSnapshot();
     const repairingStatus = repairing?.bases?.find((base) => base.id === neutral.id);
-    expect(repairingStatus?.repairBy).toBe(playerId);
+    expect(repairingStatus?.repairBy).toBe(room.sessions.get(playerId)?.team);
     expect(repairingStatus?.repairProgress).toBe(Number(neutral.repairProgress.toFixed(2)));
 
     send(room, socket, { type: "host", action: "regenerate" });
@@ -665,7 +788,7 @@ describe("multiplayer room", () => {
     const frigate = room.game.frigates[joined.playerId]!;
     expect(home).toMatchObject({
       active: true,
-      ownerId: joined.playerId,
+      ownerTeam: joined.team,
       turret: "active",
       turretHp: GAME_CONFIG.bases.turretHp,
       turretReadyAt: 0,
@@ -683,12 +806,12 @@ describe("multiplayer room", () => {
     expect(joined.bases[0]).toHaveProperty("cityX");
     home.turretHp = 37;
     home.turretReadyAt = 4;
-    room.game.bases.find((base) => base.id === "n0")!.ownerId = joined.playerId;
-    room.game.bases.find((base) => base.id === "n0")!.captureBy = joined.playerId;
+    room.game.bases.find((base) => base.id === "n0")!.ownerTeam = joined.team;
+    room.game.bases.find((base) => base.id === "n0")!.captureBy = joined.team;
     room.game.bases.find((base) => base.id === "n0")!.captureProgress = 0.4;
     room.game.bases.find((base) => base.id === "n0")!.turret = "active";
     room.game.bases.find((base) => base.id === "n0")!.turretHp = 30;
-    room.game.bases.find((base) => base.id === "n0")!.repairBy = joined.playerId;
+    room.game.bases.find((base) => base.id === "n0")!.repairBy = joined.team;
     room.game.bases.find((base) => base.id === "n0")!.repairProgress = 0.3;
     frigate.fuel = 12345.6;
     frigate.shells = 12.34;
@@ -701,13 +824,13 @@ describe("multiplayer room", () => {
     expect(welcome(reconnect).playerId).toBe(joined.playerId);
     expect(room.game.bases.find((base) => base.id === "h0")).toMatchObject({
       active: true,
-      ownerId: joined.playerId,
+      ownerTeam: joined.team,
       turretHp: 37,
       turretReadyAt: 4,
     });
     expect(room.game.bases.find((base) => base.id === "n0")).toMatchObject({
-      ownerId: joined.playerId,
-      captureBy: joined.playerId,
+      ownerTeam: joined.team,
+      captureBy: joined.team,
       captureProgress: 0.4,
     });
     expect(room.game.frigates[joined.playerId]).toMatchObject({
@@ -724,7 +847,7 @@ describe("multiplayer room", () => {
     room.advanceTick();
     expect(room.game.bases.find((base) => base.id === "h0")).toMatchObject({
       active: false,
-      ownerId: null,
+      ownerTeam: null,
       turret: "none",
       turretHp: 0,
       lostFrom: null,
@@ -735,7 +858,7 @@ describe("multiplayer room", () => {
       repairProgress: 0,
     });
     expect(room.game.bases.find((base) => base.id === "n0")).toMatchObject({
-      ownerId: null,
+      ownerTeam: null,
       turret: "none",
       turretHp: 0,
       captureBy: null,
@@ -756,14 +879,14 @@ describe("multiplayer room", () => {
     const originalId = welcome(originalSocket).playerId;
     const holderId = welcome(holderSocket).playerId;
     const home = room.game.bases.find((base) => base.id === "h0")!;
-    home.ownerId = holderId;
-    home.lostFrom = originalId;
+    home.ownerTeam = welcome(holderSocket).team;
+    home.lostFrom = welcome(originalSocket).team;
     home.returnAt = 50;
     home.turret = "destroyed";
     home.turretHp = 0;
-    home.repairBy = holderId;
+    home.repairBy = welcome(holderSocket).team;
     home.repairProgress = 0.5;
-    home.captureBy = holderId;
+    home.captureBy = welcome(holderSocket).team;
     home.captureProgress = 0.4;
 
     holderSocket.close();
@@ -772,7 +895,7 @@ describe("multiplayer room", () => {
 
     expect(room.game.bases.find((base) => base.id === "h0")).toMatchObject({
       active: true,
-      ownerId: originalId,
+      ownerTeam: welcome(originalSocket).team,
       lostFrom: null,
       returnAt: null,
       turret: "active",
@@ -785,7 +908,7 @@ describe("multiplayer room", () => {
     });
     expect(room.game.bases.find((base) => base.id === "h1")).toMatchObject({
       active: false,
-      ownerId: null,
+      ownerTeam: null,
       turret: "none",
       turretHp: 0,
     });
@@ -800,11 +923,11 @@ describe("multiplayer room", () => {
     const socket = connect(room);
     join(room, socket, "Harbor");
     const playerId = welcome(socket).playerId;
-    room.game.bases.find((base) => base.id === "n0")!.ownerId = playerId;
-    room.game.bases.find((base) => base.id === "n0")!.captureBy = playerId;
+    room.game.bases.find((base) => base.id === "n0")!.ownerTeam = welcome(socket).team;
+    room.game.bases.find((base) => base.id === "n0")!.captureBy = welcome(socket).team;
     room.game.bases.find((base) => base.id === "n0")!.captureProgress = 0.6;
     const originalHome = room.game.bases.find((base) => base.id === "h0")!;
-    originalHome.lostFrom = "former-owner";
+    originalHome.lostFrom = 1;
     originalHome.returnAt = 30;
     originalHome.turret = "destroyed";
     originalHome.turretHp = 0;
@@ -815,19 +938,21 @@ describe("multiplayer room", () => {
     expect(room.game.bases).toHaveLength(6);
     expect(room.game.bases.filter((base) => base.kind === "neutral")).toHaveLength(2);
     expect(room.game.bases.filter((base) => base.kind === "neutral").every((base) =>
-      base.active && base.ownerId === null && base.captureBy === null && base.captureProgress === 0
+      base.active && base.ownerTeam === null && base.captureBy === null && base.captureProgress === 0
       && base.turret === "none" && base.turretHp === 0 && base.lostFrom === null && base.returnAt === null,
     )).toBe(true);
-    const home = room.game.bases.find((base) => base.kind === "home" && base.homeSlot === 0)!;
+    const home = room.game.bases.find((base) => base.kind === "home" && base.homeTeam === 0)!;
     expect(home).toMatchObject({
       active: true,
-      ownerId: playerId,
+      ownerTeam: welcome(socket).team,
       turret: "active",
       turretHp: GAME_CONFIG.bases.turretHp,
       lostFrom: null,
       returnAt: null,
     });
-    expect(room.game.frigates[playerId]).toMatchObject({ x: home.harbourX, y: home.harbourY, heading: home.facing });
+    const frigate = room.game.frigates[playerId]!;
+    expect(Math.hypot(frigate.x - home.harbourX, frigate.y - home.harbourY)).toBeLessThanOrEqual(75);
+    expect(frigate.heading).toBe(home.facing);
     expect(socket.last("world")?.bases).toHaveLength(6);
 
     room.advanceTick();
@@ -886,6 +1011,16 @@ describe("multiplayer room", () => {
 });
 
 describe("room bots", () => {
+  it("assigns bots to the least-populated team, breaking ties by team index", () => {
+    const room = new Room(11, () => 0, openWorld, fixtureSites);
+    const socket = connect(room);
+    send(room, socket, { type: "join", name: "Harbor", team: 3 });
+
+    const bots = [...room.sessions.values()].filter((session) => session.bot);
+
+    expect(bots.map((bot) => bot.team)).toEqual([0, 1]);
+  });
+
   it("fills the configured bot roster, reserves its names, exposes lobby flags, and keeps bots out of kicks", () => {
     const room = new Room(11, () => 0, openWorld, fixtureSites);
     const host = connect(room);
@@ -940,7 +1075,8 @@ describe("room bots", () => {
     expect(room.sessions.has(newestBot.id)).toBe(false);
     expect(room.game.frigates[newestBot.id]).toBeUndefined();
     expect(room.game.scores[newestBot.id]).toBeUndefined();
-    expect(room.game.bases.find((base) => base.homeSlot === newestBot.slot - 1)?.ownerId).toBe(guestId);
+    expect(room.game.bases.find((base) => base.homeTeam === newestBot.team)?.ownerTeam)
+      .toBe(room.sessions.get(guestId)?.team);
     expect(host.messages.some((message) =>
       message.type === "event" && message.event.type === "leave" && message.event.playerId === newestBot.id,
     )).toBe(true);
@@ -1006,12 +1142,15 @@ describe("room bots", () => {
     room.game.scores[aliceId]!.score = 5;
     room.sessions.get(bobId)!.score = 2;
     room.game.scores[bobId]!.score = 2;
+    room.game.teamBonus[0] = 3;
     now = 600;
     room.advanceTick();
     expect(alice.last("round")).toMatchObject({
       round: {
         phase: "over",
         winners: [aliceId],
+        teamScores: [8, 2, 0, 0],
+        winnerTeams: [0],
         results: [{ playerId: aliceId, score: 5 }, { playerId: bobId, score: 2 }],
       },
     });
@@ -1127,6 +1266,8 @@ describe("room bots", () => {
     expect(round?.phase).toBe("over");
     if (round?.phase !== "over") return;
     expect(round.winners).toEqual([]);
+    expect(round.winnerTeams).toEqual([]);
+    expect(round.teamScores).toEqual([4, 4, 4, 0]);
     expect(round.results).toHaveLength(3);
     expect(round.results.map((result) => result.score)).toEqual([4, 4, 4]);
   });
@@ -1140,7 +1281,7 @@ describe("room bots", () => {
     join(room, targetSocket, "Target");
     const hostId = welcome(hostSocket).playerId;
     const targetId = welcome(targetSocket).playerId;
-    const base = room.game.bases.find((candidate) => candidate.kind === "home" && candidate.homeSlot === 0)!;
+    const base = room.game.bases.find((candidate) => candidate.kind === "home" && candidate.homeTeam === 0)!;
     const target = room.game.frigates[targetId]!;
     Object.assign(target, { x: base.cityX + 200, y: base.cityY, hp: 10, spawnProtectedUntil: 0 });
     for (let tick = 0; tick < 20 && target.status === "alive"; tick += 1) {

@@ -15,16 +15,17 @@ function openWorld(): World {
 }
 
 function frigate(id: string, x = 5000, y = 4500, heading = 0): Frigate {
-  const ship = createFrigate(id, id, 1, x, y, heading, 0);
+  const teamById: Record<string, number> = { owner: 0, captain: 0, original: 0, defender: 0, shooter: 1, enemy: 1, target: 2, victim: 2, capturer: 1, holder: 1, third: 2, nearest: 1, farther: 2, protected: 3, distant: 1, moving: 1, slider: 1, edge: 1, range: 1, launcher: 1, one: 0, two: 1 };
+  const ship = createFrigate(id, id, 1, x, y, heading, 0, undefined, teamById[id] ?? 0);
   ship.spawnProtectedUntil = 0;
   return ship;
 }
 
-function homeSite(id = "h0", homeSlot = 0) {
+function homeSite(id = "h0", homeTeam = 0) {
   return {
     id,
     kind: "home" as const,
-    homeSlot,
+    homeTeam,
     cityX: 5000,
     cityY: 4500,
     harbourX: 5050,
@@ -35,7 +36,7 @@ function homeSite(id = "h0", homeSlot = 0) {
 
 function scores(...ships: Frigate[]) {
   return Object.fromEntries(ships.map((ship) => [ship.playerId, {
-    playerId: ship.playerId, name: ship.name, slot: ship.slot, score: 0, sunk: 0, host: false, connected: true,
+    playerId: ship.playerId, name: ship.name, slot: ship.slot, team: ship.team, score: 0, sunk: 0, host: false, connected: true,
   }]));
 }
 
@@ -427,6 +428,65 @@ describe("damage events", () => {
     }));
   });
 
+  it("does not damage a teammate with shells or torpedoes", () => {
+    const state = createGameState(openWorld());
+    const shooter = frigate("owner", 5000, 4500);
+    const teammate = frigate("captain", 5020, 4500);
+    state.frigates = { owner: shooter, captain: teammate };
+    state.scores = scores(shooter, teammate);
+    state.shells.push({
+      id: "friendly-shell",
+      ownerId: shooter.playerId,
+      startX: shooter.x,
+      startY: shooter.y,
+      impactX: teammate.x,
+      impactY: teammate.y,
+      elapsed: 0,
+      duration: 0,
+    });
+    state.torpedoes.push({
+      id: "friendly-torpedo",
+      ownerId: shooter.playerId,
+      x: teammate.x - 20,
+      y: teammate.y,
+      angle: 0,
+      elapsed: 1,
+      speed: GAME_CONFIG.torpedo.speed,
+    });
+
+    stepGame(state, {}, dt, 1);
+
+    expect(teammate.hp).toBe(maxHp);
+    expect(state.events.filter((event) => event.type === "damage" && event.targetId === teammate.playerId)).toEqual([]);
+  });
+
+  it("does not damage an own-team turret with a teammate shell", () => {
+    const state = createGameState(openWorld(), [homeSite()]);
+    const base = state.bases[0]!;
+    base.active = true;
+    base.ownerTeam = 0;
+    base.turret = "active";
+    base.turretHp = GAME_CONFIG.bases.turretHp;
+    const shooter = frigate("owner", 8000, 8000);
+    const teammate = frigate("captain", 8100, 8000);
+    state.frigates = { owner: shooter, captain: teammate };
+    state.scores = scores(shooter, teammate);
+    state.shells.push({
+      id: "friendly-turret-shell",
+      ownerId: shooter.playerId,
+      startX: shooter.x,
+      startY: shooter.y,
+      impactX: base.cityX,
+      impactY: base.cityY,
+      elapsed: 0,
+      duration: 0,
+    });
+
+    stepGame(state, {}, dt, 1);
+
+    expect(base.turretHp).toBe(GAME_CONFIG.bases.turretHp);
+  });
+
   it("emits land damage after hull collision and turret-on-frigate damage with the turret owner", () => {
     const world = openWorld();
     const wallColumn = 100;
@@ -455,7 +515,7 @@ describe("damage events", () => {
     const turretState = createGameState(openWorld(), [homeSite()]);
     const base = turretState.bases[0]!;
     base.active = true;
-    base.ownerId = "owner";
+    base.ownerTeam = 0;
     base.turret = "active";
     base.turretReadyAt = 100;
     const owner = frigate("owner", 8000, 8000);
@@ -489,7 +549,7 @@ describe("damage events", () => {
     const state = createGameState(openWorld(), [homeSite()]);
     const base = state.bases[0]!;
     base.active = true;
-    base.ownerId = "defender";
+    base.ownerTeam = 0;
     base.turret = "active";
     base.turretHp = GAME_CONFIG.bases.turretHp;
     base.turretReadyAt = 100;
@@ -630,7 +690,7 @@ describe("turrets", () => {
     const state = createGameState(openWorld(), [homeSite()]);
     const base = state.bases[0]!;
     base.active = true;
-    base.ownerId = "owner";
+    base.ownerTeam = 0;
     base.turret = "active";
     base.turretHp = GAME_CONFIG.bases.turretHp;
     state.settings = { ...DEFAULT_SETTINGS, shellSpeedPct: 200 };
@@ -677,7 +737,7 @@ describe("turrets", () => {
     const state = createGameState(openWorld(), [homeSite()]);
     const base = state.bases[0]!;
     base.active = true;
-    base.ownerId = "owner";
+    base.ownerTeam = 0;
     base.turret = "active";
     base.turretHp = GAME_CONFIG.bases.turretHp;
     const owner = frigate("owner", base.cityX, base.cityY);
@@ -685,6 +745,7 @@ describe("turrets", () => {
     const protectedEnemy = frigate("protected", base.cityX + 200, base.cityY);
     protectedEnemy.spawnProtectedUntil = 4;
     state.frigates = { owner, distant, protected: protectedEnemy };
+    state.scores = scores(owner, distant, protectedEnemy);
 
     stepTurrets(state, 0);
     expect(state.shells).toHaveLength(0);
@@ -696,11 +757,28 @@ describe("turrets", () => {
     expect(state.shells[0]?.impactX).toBe(protectedEnemy.x);
   });
 
+  it("does not fire at another member of its owner team", () => {
+    const state = createGameState(openWorld(), [homeSite()]);
+    const base = state.bases[0]!;
+    base.active = true;
+    base.ownerTeam = 0;
+    base.turret = "active";
+    base.turretHp = GAME_CONFIG.bases.turretHp;
+    const owner = frigate("owner", base.cityX, base.cityY);
+    const teammate = frigate("captain", base.cityX + 200, base.cityY);
+    state.frigates = { owner, captain: teammate };
+    state.scores = scores(owner, teammate);
+
+    stepTurrets(state, 0);
+
+    expect(state.shells).toHaveLength(0);
+  });
+
   it("does not fire from unowned neutral or inactive bases", () => {
     const neutral = createGameState(openWorld(), [{
       ...homeSite(),
       kind: "neutral",
-      homeSlot: null,
+      homeTeam: null,
     }]);
     const neutralBase = neutral.bases[0]!;
     neutral.frigates.enemy = frigate("enemy", neutralBase.cityX + 100, neutralBase.cityY);
@@ -710,7 +788,7 @@ describe("turrets", () => {
     const inactive = createGameState(openWorld(), [homeSite()]);
     const inactiveBase = inactive.bases[0]!;
     inactiveBase.active = false;
-    inactiveBase.ownerId = "owner";
+    inactiveBase.ownerTeam = 0;
     inactiveBase.turret = "active";
     inactive.frigates.enemy = frigate("enemy", inactiveBase.cityX + 100, inactiveBase.cityY);
     stepTurrets(inactive, 0);
@@ -721,7 +799,7 @@ describe("turrets", () => {
     const state = createGameState(openWorld(), [homeSite()]);
     const base = state.bases[0]!;
     base.active = true;
-    base.ownerId = "defender";
+    base.ownerTeam = 0;
     base.turret = "active";
     base.turretHp = GAME_CONFIG.bases.turretHp;
     base.turretReadyAt = 100;
@@ -760,7 +838,7 @@ describe("turrets", () => {
     const state = createGameState(openWorld(), [homeSite()]);
     const base = state.bases[0]!;
     base.active = true;
-    base.ownerId = "owner";
+    base.ownerTeam = 0;
     base.turret = "active";
     base.turretHp = GAME_CONFIG.bases.turretHp;
     base.turretReadyAt = 100;
@@ -798,7 +876,7 @@ describe("turrets", () => {
     const state = createGameState(openWorld(), [homeSite()]);
     const base = state.bases[0]!;
     base.active = true;
-    base.ownerId = "owner";
+    base.ownerTeam = 0;
     base.turret = "active";
     base.turretHp = GAME_CONFIG.bases.turretHp;
     base.turretReadyAt = 100;
@@ -842,7 +920,7 @@ describe("home bases and turret repair", () => {
     state.scores = scores(original, capturer);
     state.settings = { ...DEFAULT_SETTINGS, captureTime: 1 };
     base.active = true;
-    base.ownerId = original.playerId;
+    base.ownerTeam = original.team;
     base.turret = "active";
     base.turretHp = GAME_CONFIG.bases.turretHp;
     base.turretReadyAt = 100;
@@ -852,30 +930,30 @@ describe("home bases and turret repair", () => {
   it("blocks home capture while the turret is active, then scores first loss and returns after 30 seconds", () => {
     const { state, base, original, capturer } = ownedHome();
     stepBases(state, 1, 0);
-    expect(base).toMatchObject({ ownerId: original.playerId, captureBy: null, captureProgress: 0 });
+    expect(base).toMatchObject({ ownerTeam: original.team, captureBy: null, captureProgress: 0 });
 
     base.turret = "destroyed";
     base.turretHp = 0;
     stepBases(state, 1, 1);
     expect(base).toMatchObject({
-      ownerId: capturer.playerId,
-      lostFrom: original.playerId,
+      ownerTeam: capturer.team,
+      lostFrom: original.team,
       returnAt: 1 + GAME_CONFIG.bases.homeReturnDelay,
       turret: "destroyed",
     });
-    expect(state.scores[original.playerId]?.score).toBe(-GAME_CONFIG.bases.homeCapturePoints);
-    expect(state.scores[capturer.playerId]?.score).toBe(GAME_CONFIG.bases.homeCapturePoints);
+    expect(state.teamBonus[original.team]).toBe(-GAME_CONFIG.bases.homeCapturePoints);
+    expect(state.teamBonus[capturer.team]).toBe(GAME_CONFIG.bases.homeCapturePoints);
     expect(state.events).toContainEqual(expect.objectContaining({
       type: "capture",
       message: `${capturer.name} captured ${original.name}'s home base`,
     }));
 
     stepBases(state, 1, 30.999);
-    expect(base.ownerId).toBe(capturer.playerId);
+    expect(base.ownerTeam).toBe(capturer.team);
     stepBases(state, 1, 31);
     expect(base).toMatchObject({
       active: true,
-      ownerId: original.playerId,
+      ownerTeam: original.team,
       lostFrom: null,
       returnAt: null,
       turret: "active",
@@ -888,6 +966,41 @@ describe("home bases and turret repair", () => {
       type: "capture",
       message: `${original.name}'s home base is back`,
     }));
+  });
+
+  it("does not start capture when a teammate occupies its team's home", () => {
+    const state = createGameState(openWorld(), [homeSite()]);
+    const base = state.bases[0]!;
+    base.active = true;
+    base.ownerTeam = 0;
+    base.turret = "destroyed";
+    base.turretHp = 0;
+    const teammate = frigate("captain", base.harbourX, base.harbourY);
+    state.frigates.captain = teammate;
+    state.scores = scores(teammate);
+    state.settings = { ...DEFAULT_SETTINGS, captureTime: 1 };
+
+    stepBases(state, 1, 0);
+
+    expect(base).toMatchObject({ ownerTeam: 0, captureBy: null, captureProgress: 0 });
+  });
+
+  it("blocks capture progress when non-owner occupants belong to different teams", () => {
+    const state = createGameState(openWorld(), [homeSite()]);
+    const base = state.bases[0]!;
+    base.active = true;
+    base.ownerTeam = 0;
+    base.turret = "destroyed";
+    base.turretHp = 0;
+    const capturer = frigate("capturer", base.harbourX, base.harbourY);
+    const third = frigate("third", base.harbourX, base.harbourY);
+    state.frigates = { capturer, third };
+    state.scores = scores(capturer, third);
+    state.settings = { ...DEFAULT_SETTINGS, captureTime: 1 };
+
+    stepBases(state, 1, 0);
+
+    expect(base).toMatchObject({ ownerTeam: 0, captureBy: null, captureProgress: 0 });
   });
 
   it("lets the original owner recapture without points and restores the full home turret", () => {
@@ -904,7 +1017,7 @@ describe("home bases and turret repair", () => {
     stepBases(state, 1, 2);
 
     expect(base).toMatchObject({
-      ownerId: original.playerId,
+      ownerTeam: original.team,
       lostFrom: null,
       returnAt: null,
       turret: "active",
@@ -923,7 +1036,7 @@ describe("home bases and turret repair", () => {
     const third = frigate("third", 9000, 9000);
     state.frigates.third = third;
     state.scores.third = {
-      playerId: third.playerId, name: third.name, slot: third.slot, score: 0, sunk: 0, host: false, connected: true,
+      playerId: third.playerId, name: third.name, slot: third.slot, team: third.team, score: 0, sunk: 0, host: false, connected: true,
     };
     base.turret = "destroyed";
     base.turretHp = 0;
@@ -936,26 +1049,26 @@ describe("home bases and turret repair", () => {
 
     stepBases(state, 1, 2);
 
-    expect(base).toMatchObject({ ownerId: third.playerId, lostFrom: original.playerId, returnAt });
-    expect(state.scores[original.playerId]?.score).toBe(-GAME_CONFIG.bases.homeCapturePoints);
-    expect(state.scores[capturer.playerId]?.score).toBe(GAME_CONFIG.bases.homeCapturePoints);
-    expect(state.scores[third.playerId]?.score).toBe(GAME_CONFIG.bases.homeCapturePoints);
+    expect(base).toMatchObject({ ownerTeam: third.team, lostFrom: original.team, returnAt });
+    expect(state.teamBonus[original.team]).toBe(-GAME_CONFIG.bases.homeCapturePoints);
+    expect(state.teamBonus[capturer.team]).toBe(GAME_CONFIG.bases.homeCapturePoints);
+    expect(state.teamBonus[third.team]).toBe(GAME_CONFIG.bases.homeCapturePoints);
   });
 
   it("installs and repairs turrets after the configured fraction, preserving progress after time changes", () => {
     const state = createGameState(openWorld(), [{
-      id: "n0", kind: "neutral", homeSlot: null, cityX: 5000, cityY: 4500,
+      id: "n0", kind: "neutral", homeTeam: null, cityX: 5000, cityY: 4500,
       harbourX: 5050, harbourY: 4500, facing: 0,
     }]);
     const base = state.bases[0]!;
     const owner = frigate("owner", base.harbourX, base.harbourY);
     state.frigates.owner = owner;
     state.scores = scores(owner);
-    base.ownerId = owner.playerId;
+    base.ownerTeam = owner.team;
     state.settings = { ...DEFAULT_SETTINGS, repairTime: 4 };
 
     stepBases(state, 2, 0);
-    expect(base).toMatchObject({ repairBy: owner.playerId, repairProgress: 0.5, turret: "none" });
+    expect(base).toMatchObject({ repairBy: owner.team, repairProgress: 0.5, turret: "none" });
     state.settings.repairTime = 8;
     stepBases(state, 4, 1);
     expect(base).toMatchObject({
@@ -983,14 +1096,14 @@ describe("home bases and turret repair", () => {
 
   it("resets repair progress when the owner fires, leaves the harbour, or sinks", () => {
     const state = createGameState(openWorld(), [{
-      id: "n0", kind: "neutral", homeSlot: null, cityX: 5000, cityY: 4500,
+      id: "n0", kind: "neutral", homeTeam: null, cityX: 5000, cityY: 4500,
       harbourX: 5050, harbourY: 4500, facing: 0,
     }]);
     const base = state.bases[0]!;
     const owner = frigate("owner", base.harbourX, base.harbourY);
     state.frigates.owner = owner;
     state.scores = scores(owner);
-    base.ownerId = owner.playerId;
+    base.ownerTeam = owner.team;
     state.settings = { ...DEFAULT_SETTINGS, repairTime: 2 };
 
     stepBases(state, 1, 0);
@@ -1018,7 +1131,7 @@ describe("fuel, ammunition, and resupply", () => {
     const state = createGameState(openWorld(), [{
       id: "n0",
       kind: "neutral",
-      homeSlot: null,
+      homeTeam: null,
       cityX: 5000,
       cityY: 4500,
       harbourX: 5050,
@@ -1027,7 +1140,7 @@ describe("fuel, ammunition, and resupply", () => {
     }]);
     const base = state.bases[0]!;
     const owner = frigate("owner", base.harbourX, base.harbourY);
-    base.ownerId = owner.playerId;
+    base.ownerTeam = owner.team;
     state.frigates.owner = owner;
     state.scores = scores(owner);
     return { state, base, owner };
@@ -1114,7 +1227,7 @@ describe("fuel, ammunition, and resupply", () => {
     const blocked = createGameState(openWorld(), [{
       id: "n0",
       kind: "neutral",
-      homeSlot: null,
+      homeTeam: null,
       cityX: 5000,
       cityY: 4500,
       harbourX: 5050,
@@ -1129,8 +1242,8 @@ describe("fuel, ammunition, and resupply", () => {
     owner.spawnProtectedUntil = 99;
     const base = blocked.bases[0]!;
     base.active = true;
-    base.ownerId = owner.playerId;
-    base.repairBy = owner.playerId;
+    base.ownerTeam = owner.team;
+    base.repairBy = owner.team;
     base.repairProgress = 0.4;
     blocked.settings.repairTime = 2;
     blocked.frigates.owner = owner;
@@ -1180,10 +1293,10 @@ describe("fuel, ammunition, and resupply", () => {
   });
 
   it("requires an active owned harbour, a whole hull inside, an alive frigate, and commanded STOP", () => {
-    const excludedCases: Array<(base: { active: boolean; ownerId: string | null }, owner: Frigate) => void> = [
+    const excludedCases: Array<(base: { active: boolean; ownerTeam: number | null }, owner: Frigate) => void> = [
       (base) => { base.active = false; },
-      (base) => { base.ownerId = null; },
-      (base) => { base.ownerId = "enemy"; },
+      (base) => { base.ownerTeam = null; },
+      (base) => { base.ownerTeam = 1; },
       (_base, owner) => { owner.x += 20; },
       (_base, owner) => { owner.status = "sinking"; },
       (_base, owner) => { owner.throttle = 1; },
@@ -1256,13 +1369,39 @@ describe("fuel, ammunition, and resupply", () => {
     expect(owner.hp).toBe(maxHp);
     expect(owner.resupplying).toBe(false);
   });
+
+  it("lets a teammate repair and resupply at a base owned by their team", () => {
+    const state = createGameState(openWorld(), [homeSite()]);
+    const base = state.bases[0]!;
+    base.active = true;
+    base.ownerTeam = 0;
+    base.turret = "active";
+    base.turretHp = GAME_CONFIG.bases.turretHp;
+    const owner = frigate("owner", 8000, 8000);
+    const teammate = frigate("captain", base.harbourX, base.harbourY);
+    teammate.hp = 50;
+    teammate.shells = 0;
+    teammate.torpedoes = 0;
+    teammate.fuel = 0;
+    state.frigates = { owner, captain: teammate };
+    state.scores = scores(owner, teammate);
+    state.settings = { ...DEFAULT_SETTINGS, resupplyTime: 4 };
+
+    stepGame(state, { captain: quietInput }, 1, 0);
+
+    expect(teammate.hp).toBeGreaterThan(50);
+    expect(teammate.shells).toBeGreaterThan(0);
+    expect(teammate.torpedoes).toBeGreaterThan(0);
+    expect(teammate.fuel).toBeGreaterThan(0);
+    expect(teammate.resupplying).toBe(true);
+  });
 });
 
 describe("base income", () => {
   const neutralSite = {
     id: "n0",
     kind: "neutral" as const,
-    homeSlot: null,
+    homeTeam: null,
     cityX: 5000,
     cityY: 4500,
     harbourX: 5050,
@@ -1274,22 +1413,23 @@ describe("base income", () => {
     const state = createGameState(openWorld(), [neutralSite]);
     const base = state.bases[0]!;
     const owner = frigate("owner", base.harbourX, base.harbourY);
-    base.ownerId = owner.playerId;
+    base.ownerTeam = owner.team;
     state.frigates.owner = owner;
     state.scores = scores(owner);
     state.settings = { ...DEFAULT_SETTINGS, baseIncomeInterval: 2 };
 
     stepBases(state, 1, 1);
-    expect(state.scores.owner?.score).toBe(0);
+    expect(state.teamBonus[owner.team]).toBe(0);
     expect(base.heldFor).toBe(1);
     stepBases(state, 1, 2);
 
-    expect(state.scores.owner?.score).toBe(1);
+    expect(state.teamBonus[owner.team]).toBe(1);
     expect(base.heldFor).toBe(0);
     expect(state.events.filter((event) => event.type === "income")).toEqual([{
       type: "income",
       playerId: owner.playerId,
       baseId: base.id,
+      team: owner.team,
       x: base.cityX,
       y: base.cityY,
       amount: 1,
@@ -1300,7 +1440,7 @@ describe("base income", () => {
     const state = createGameState(openWorld(), [neutralSite]);
     const base = state.bases[0]!;
     const owner = frigate("owner");
-    base.ownerId = owner.playerId;
+    base.ownerTeam = owner.team;
     base.heldFor = 15;
     state.scores = scores(owner);
     state.settings = { ...DEFAULT_SETTINGS, baseIncomeInterval: 0 };
@@ -1323,10 +1463,10 @@ describe("base income", () => {
     const ownedHome = state.bases[0]!;
     const lostHome = state.bases[1]!;
     ownedHome.active = true;
-    ownedHome.ownerId = original.playerId;
+    ownedHome.ownerTeam = original.team;
     lostHome.active = true;
-    lostHome.ownerId = holder.playerId;
-    lostHome.lostFrom = original.playerId;
+    lostHome.ownerTeam = holder.team;
+    lostHome.lostFrom = original.team;
     state.scores = scores(original, holder);
     state.settings = { ...DEFAULT_SETTINGS, baseIncomeInterval: 1 };
 
@@ -1343,7 +1483,7 @@ describe("base income", () => {
     const base = state.bases[0]!;
     const owner = frigate("owner", 9000, 9000);
     const capturer = frigate("capturer", base.harbourX, base.harbourY);
-    base.ownerId = owner.playerId;
+    base.ownerTeam = owner.team;
     base.turret = "destroyed";
     base.turretHp = 0;
     base.heldFor = 15;
@@ -1353,7 +1493,7 @@ describe("base income", () => {
     state.settings = { ...DEFAULT_SETTINGS, captureTime: 1, baseIncomeInterval: 1 };
 
     stepBases(state, 1, 1);
-    expect(base.ownerId).toBe(capturer.playerId);
+    expect(base.ownerTeam).toBe(capturer.team);
     expect(base.heldFor).toBe(0);
     expect(state.events.some((event) => event.type === "income")).toBe(false);
 
@@ -1408,11 +1548,22 @@ describe("spawning", () => {
     expect(pointToHullDistance(first.x, first.y, first)).toBe(0);
   });
 
+  it("spawns teammates at their shared home without overlapping", () => {
+    const state = createGameState(openWorld(), [homeSite()]);
+    state.bases[0]!.active = true;
+    state.bases[0]!.ownerTeam = 0;
+    const first = spawnPlayerFrigate("one", "One", 1, state, [], () => 0.25, 0, 0);
+    const second = spawnPlayerFrigate("two", "Two", 2, state, [first], () => 0.25, 0, 0);
+
+    expect({ x: first.x, y: first.y }).toEqual({ x: state.bases[0]!.harbourX, y: state.bases[0]!.harbourY });
+    expect(Math.hypot(first.x - second.x, first.y - second.y)).toBeGreaterThanOrEqual(GAME_CONFIG.frigate.length);
+  });
+
   it("uses another owned base after home loss and falls back to a random spawn", () => {
     const state = createGameState(openWorld(), [
       homeSite(),
       {
-        id: "n0", kind: "neutral", homeSlot: null, cityX: 7000, cityY: 7000,
+        id: "n0", kind: "neutral", homeTeam: null, cityX: 7000, cityY: 7000,
         harbourX: 7050, harbourY: 7000, facing: Math.PI / 2,
       },
     ]);
@@ -1420,11 +1571,11 @@ describe("spawning", () => {
     const other = state.bases[1]!;
     state.settings = { ...DEFAULT_SETTINGS, fuelCrossings: 3, shells: 80, torpedoes: 40 };
     home.active = true;
-    home.ownerId = "holder";
-    home.lostFrom = "player";
+    home.ownerTeam = 1;
+    home.lostFrom = 0;
     home.returnAt = 30;
     home.turret = "destroyed";
-    other.ownerId = "player";
+    other.ownerTeam = 0;
 
     const atOwnedBase = spawnPlayerFrigate("player", "Player", 1, state, [], () => 0.5, 20);
     expect(atOwnedBase).toMatchObject({ x: other.harbourX, y: other.harbourY, heading: other.facing });
@@ -1434,7 +1585,7 @@ describe("spawning", () => {
       torpedoes: state.settings.torpedoes,
     });
 
-    other.ownerId = null;
+    other.ownerTeam = null;
     const randomSpawn = spawnPlayerFrigate("player", "Player", 1, state, [], createSeededRandom(41), 21);
     expect({ x: randomSpawn.x, y: randomSpawn.y }).not.toEqual({ x: home.harbourX, y: home.harbourY });
     expect(randomSpawn.status).toBe("alive");
@@ -1459,6 +1610,7 @@ describe("spawning", () => {
     const ships = [1, 2, 3, 4].map((slot) => {
       const ship = frigate(`p${slot}`, 4000 + slot * 100, 4000);
       ship.slot = slot;
+      ship.team = slot - 1;
       return ship;
     });
     for (const ship of ships) state.frigates[ship.playerId] = ship;
@@ -1486,9 +1638,8 @@ describe("spawning", () => {
     expect(coverage).toBeLessThanOrEqual(0.125);
     const respawned = Object.values(state.frigates);
     for (const ship of respawned) {
-      const home = state.bases.find((base) => base.kind === "home" && base.homeSlot === ship.slot - 1);
-      expect(ship.x).toBe(home?.harbourX);
-      expect(ship.y).toBe(home?.harbourY);
+      const home = state.bases.find((base) => base.kind === "home" && base.homeTeam === ship.team);
+      expect(Math.hypot(ship.x - home!.harbourX, ship.y - home!.harbourY)).toBeLessThanOrEqual(75);
       expect(ship.heading).toBe(home?.facing);
       expect(ship).toMatchObject({
         fuel: fuelCapacity(state.settings),
@@ -1497,7 +1648,7 @@ describe("spawning", () => {
       });
       expect(home).toMatchObject({
         active: true,
-        ownerId: ship.playerId,
+        ownerTeam: ship.team,
         turret: "active",
         turretHp: GAME_CONFIG.bases.turretHp,
         turretReadyAt: 1,

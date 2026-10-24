@@ -20,7 +20,6 @@ import {
 } from "../shared/sim.js";
 import { encodeWorld, mapDimensions, type World } from "../shared/world.js";
 
-const SLOT_COLOURS = ["#3b82f6", "#ef4444", "#facc15", "#a855f7"] as const;
 const EMPTY_INPUT: FrigateInput = { seq: 0, keys: 0, throttle: 0, fireCannon: false, fireTorpedo: false };
 const BOT_NAMES = ["Bot Nelson", "Bot Suffren", "Bot Tromp"] as const;
 const RESERVED_BOT_NAMES = new Set(BOT_NAMES.map((name) => name.toLocaleLowerCase()));
@@ -30,6 +29,7 @@ interface PlayerSession {
   token: string;
   name: string;
   slot: number;
+  team: number;
   score: number;
   sunk: number;
   sinks: number;
@@ -43,6 +43,8 @@ interface PlayerSession {
   lastInput: FrigateInput;
   ackSeq: number;
   lastBasesJson: string | null;
+  lastTeamSwitchAt: number | null;
+  teamSwitchRespawnAt: number | null;
   bot?: true;
   botSkill?: number;
   brain?: ReturnType<typeof createBotBrain>;
@@ -126,7 +128,7 @@ export class Room {
       return;
     }
     if (message.type === "join") {
-      this.join(socket, message.name, message.token);
+      this.join(socket, message.name, message.token, message.team);
       return;
     }
     const session = this.sessionBySocket.get(socket);
@@ -146,10 +148,14 @@ export class Room {
       if (session.inputQueue.length > 6) session.inputQueue.shift();
       return;
     }
+    if (message.type === "team") {
+      this.switchTeam(session, message.team);
+      return;
+    }
     if (message.type === "host") this.performHostAction(session, message);
   }
 
-  private join(socket: WebSocket, rawName: string, token?: string): void {
+  private join(socket: WebSocket, rawName: string, token?: string, requestedTeam?: number): void {
     const name = typeof rawName === "string" ? rawName.trim() : "";
     if (name.length < GAME_CONFIG.name.minLength || name.length > GAME_CONFIG.name.maxLength) {
       this.send(socket, { type: "error", code: "invalid_name" });
@@ -198,11 +204,17 @@ export class Room {
         this.send(socket, { type: "error", code: "full" });
         return;
       }
+      const team = Number.isInteger(requestedTeam)
+        && requestedTeam! >= 0
+        && requestedTeam! < GAME_CONFIG.teams.count
+        ? requestedTeam!
+        : this.leastPopulatedTeam();
       session = {
         id: `p${this.nextPlayerId++}`,
         token: randomBytes(24).toString("hex"),
         name,
         slot,
+        team,
         score: 0,
         sunk: 0,
         sinks: 0,
@@ -216,24 +228,13 @@ export class Room {
         lastInput: { ...EMPTY_INPUT },
         ackSeq: 0,
         lastBasesJson: null,
+        lastTeamSwitchAt: null,
+        teamSwitchRespawnAt: null,
       };
       this.sessions.set(session.id, session);
-      const home = this.game.bases.find((base) => base.kind === "home" && base.homeSlot === slot - 1);
-      if (home) {
-        home.active = true;
-        home.ownerId = session.id;
-        home.turret = "active";
-        home.turretHp = GAME_CONFIG.bases.turretHp;
-        home.turretReadyAt = now;
-        home.lostFrom = null;
-        home.returnAt = null;
-        home.captureBy = null;
-        home.captureProgress = 0;
-        home.repairBy = null;
-        home.repairProgress = 0;
-      }
+      this.activateTeamHome(team, now);
       const others = Object.values(this.game.frigates).filter((frigate) => frigate.status === "alive");
-      const frigate = spawnPlayerFrigate(session.id, name, slot, this.game, others, this.random, now);
+      const frigate = spawnPlayerFrigate(session.id, name, slot, this.game, others, this.random, now, team);
       this.game.frigates[session.id] = frigate;
       this.game.scores[session.id] = this.scoreRecord(session);
       this.game.events.push({ type: "join", playerId: session.id, name, message: `${name} joined` });
@@ -247,6 +248,118 @@ export class Room {
     this.sendWelcome(socket, session, now);
   }
 
+  private teamCount(team: number): number {
+    return [...this.sessions.values()].filter((session) => session.team === team).length;
+  }
+
+  private leastPopulatedTeam(): number {
+    const counts = Array(GAME_CONFIG.teams.count).fill(0) as number[];
+    for (const session of this.sessions.values()) counts[session.team] = (counts[session.team] ?? 0) + 1;
+    let team = 0;
+    for (let candidate = 1; candidate < counts.length; candidate += 1) {
+      if (counts[candidate]! < counts[team]!) team = candidate;
+    }
+    return team;
+  }
+
+  private activateTeamHome(team: number, now: number): void {
+    const home = this.game.bases.find((base) => base.kind === "home" && base.homeTeam === team);
+    if (!home) return;
+    if (home.active && home.ownerTeam === team) return;
+    home.active = true;
+    home.ownerTeam = team;
+    home.turret = "active";
+    home.turretHp = GAME_CONFIG.bases.turretHp;
+    home.turretReadyAt = now;
+    home.lostFrom = null;
+    home.returnAt = null;
+    home.captureBy = null;
+    home.captureProgress = 0;
+    home.repairBy = null;
+    home.repairProgress = 0;
+  }
+
+  private deactivateTeam(team: number, now: number): void {
+    for (const base of this.game.bases) {
+      if (base.kind === "home" && base.homeTeam === team) {
+        base.active = false;
+        base.ownerTeam = null;
+        base.heldFor = 0;
+        base.turret = "none";
+        base.turretHp = 0;
+        base.turretReadyAt = 0;
+        base.lostFrom = null;
+        base.returnAt = null;
+      } else if (base.ownerTeam === team) {
+        if (base.kind === "home" && base.lostFrom !== null && base.lostFrom !== team) {
+          const originalOwner = [...this.sessions.values()].find((session) => session.team === base.lostFrom);
+          restoreHome(base, now);
+          if (originalOwner) {
+            this.broadcastEvent({
+              type: "capture",
+              playerId: originalOwner.id,
+              name: originalOwner.name,
+              message: `${originalOwner.name}'s home base is back`,
+            });
+          }
+        } else {
+          base.ownerTeam = null;
+          base.heldFor = 0;
+          base.turret = "none";
+          base.turretHp = 0;
+          base.turretReadyAt = 0;
+          base.lostFrom = null;
+          base.returnAt = null;
+        }
+      }
+      if (base.captureBy === team) {
+        base.captureBy = null;
+        base.captureProgress = 0;
+      }
+      if (base.repairBy === team) {
+        base.repairBy = null;
+        base.repairProgress = 0;
+      }
+    }
+    this.game.teamBonus[team] = 0;
+  }
+
+  private switchTeam(session: PlayerSession, team: number): void {
+    if (!Number.isInteger(team) || team < 0 || team >= GAME_CONFIG.teams.count || team === session.team) {
+      this.send(session.socket!, { type: "error", code: "invalid_action" });
+      return;
+    }
+    if (this.roundState.phase === "over") {
+      this.send(session.socket!, { type: "error", code: "invalid_action" });
+      return;
+    }
+    const now = this.clock();
+    if (
+      session.lastTeamSwitchAt !== null
+      && now - session.lastTeamSwitchAt < GAME_CONFIG.teams.switchCooldown
+    ) {
+      this.send(session.socket!, { type: "error", code: "cooldown" });
+      return;
+    }
+    const previousTeam = session.team;
+    const activatesHome = this.teamCount(team) === 0;
+    if (activatesHome) this.activateTeamHome(team, now);
+    session.team = team;
+    session.lastTeamSwitchAt = now;
+    session.teamSwitchRespawnAt = now + GAME_CONFIG.player.respawnDelay;
+    delete this.game.frigates[session.id];
+    this.game.scores[session.id] = this.scoreRecord(session);
+    if (this.teamCount(previousTeam) === 0) this.deactivateTeam(previousTeam, now);
+    const teamName = GAME_CONFIG.teams.names[team]!;
+    this.broadcastEvent({
+      type: "join",
+      playerId: session.id,
+      name: session.name,
+      message: `${session.name} joined ${teamName} team`,
+    });
+    this.broadcastLobby();
+  }
+
   private sendWelcome(socket: WebSocket, session: PlayerSession, now: number): void {
     this.sessionBySocket.set(socket, session);
     session.lastBasesJson = null;
@@ -255,6 +368,7 @@ export class Room {
       playerId: session.id,
       token: session.token,
       slot: session.slot,
+      team: session.team,
       world: encodeWorld(this.game.world.grid),
       columns: this.game.world.columns,
       rows: this.game.world.rows,
@@ -278,6 +392,7 @@ export class Room {
       playerId: session.id,
       name: session.name,
       slot: session.slot,
+      team: session.team,
       score: session.score,
       sunk: session.sunk,
       host: session.host,
@@ -497,22 +612,40 @@ export class Room {
     return { phase: "playing", endsAt: this.game.settings.roundMinutes === 0 ? null : now + this.game.settings.roundMinutes * 60 };
   }
 
+  private currentTeamScores(): number[] {
+    const scores = Array(GAME_CONFIG.teams.count).fill(0) as number[];
+    for (const session of this.sessions.values()) scores[session.team]! += session.score;
+    for (let team = 0; team < scores.length; team += 1) scores[team]! += this.game.teamBonus[team] ?? 0;
+    return scores;
+  }
+
   private endRound(now: number): void {
     const results: RoundResult[] = [...this.sessions.values()].map((session) => ({
       playerId: session.id,
       name: session.name,
       slot: session.slot,
+      team: session.team,
       score: session.score,
       sinks: session.sinks,
       deaths: session.sunk,
       shots: session.shots,
       hits: session.hits,
-      bases: this.game.bases.filter((base) => base.active && base.ownerId === session.id).length,
+      bases: this.game.bases.filter((base) => base.active && base.ownerTeam === session.team).length,
     })).sort((a, b) => b.score - a.score || b.sinks - a.sinks || a.deaths - b.deaths);
-    const topScore = results[0]?.score;
-    const top = results.filter((result) => result.score === topScore);
-    const winners = top.length === results.length ? [] : top.map((result) => result.playerId);
-    this.roundState = { phase: "over", results, winners, nextRoundAt: now + GAME_CONFIG.rounds.intermissionSeconds };
+    const teamScores = this.currentTeamScores();
+    const occupiedTeams = [...new Set([...this.sessions.values()].map((session) => session.team))];
+    const topScore = Math.max(...occupiedTeams.map((team) => teamScores[team]!));
+    const winnerTeams = occupiedTeams.filter((team) => teamScores[team] === topScore);
+    const draw = occupiedTeams.length > 1 && winnerTeams.length === occupiedTeams.length;
+    const winners = draw ? [] : results.filter((result) => winnerTeams.includes(result.team)).map((result) => result.playerId);
+    this.roundState = {
+      phase: "over",
+      results,
+      winners,
+      teamScores,
+      winnerTeams: draw ? [] : winnerTeams,
+      nextRoundAt: now + GAME_CONFIG.rounds.intermissionSeconds,
+    };
     this.game.shells = [];
     this.game.torpedoes = [];
     this.sentProjectileIds.clear();
@@ -529,6 +662,7 @@ export class Room {
       session.hits = 0;
       this.game.scores[session.id] = this.scoreRecord(session);
     }
+    this.game.teamBonus.fill(0);
     for (const base of this.game.bases) base.heldFor = 0;
     this.countedShotIds.clear();
     this.hitShotIds.clear();
@@ -559,7 +693,8 @@ export class Room {
   private respawnReady(now: number): void {
     for (const session of this.sessions.values()) {
       const frigate = this.game.frigates[session.id];
-      if (!frigate || frigate.status === "alive" || now < frigate.respawnAt) continue;
+      if (frigate && (frigate.status === "alive" || now < frigate.respawnAt)) continue;
+      if (!frigate && (session.teamSwitchRespawnAt === null || now < session.teamSwitchRespawnAt)) continue;
       const others = Object.values(this.game.frigates).filter((other) => other.playerId !== session.id && other.status === "alive");
       this.game.frigates[session.id] = spawnPlayerFrigate(
         session.id,
@@ -569,7 +704,9 @@ export class Room {
         others,
         this.random,
         now,
+        session.team,
       );
+      session.teamSwitchRespawnAt = null;
     }
   }
 
@@ -578,7 +715,7 @@ export class Room {
     const baseSnapshots: BaseSnapshot[] = this.game.bases.map(({
       id,
       active,
-      ownerId,
+      ownerTeam,
       captureBy,
       captureProgress,
       turret,
@@ -588,7 +725,7 @@ export class Room {
     }) => ({
       id,
       active,
-      ownerId,
+      ownerTeam,
       captureBy,
       captureProgress: Number(captureProgress.toFixed(2)),
       turret,
@@ -611,6 +748,7 @@ export class Room {
               playerId: frigate.playerId,
               name: frigate.name,
               slot: frigate.slot,
+              team: frigate.team,
               x: frigate.x,
               y: frigate.y,
               heading: frigate.heading,
@@ -627,6 +765,7 @@ export class Room {
         serverTime: now,
         frigates,
         players,
+        teamBonus: this.game.teamBonus.slice(),
       };
       if (session.lastBasesJson !== basesJson) {
         snapshot.bases = baseSnapshots;
@@ -694,6 +833,7 @@ export class Room {
       playerId: session.id,
       name: session.name,
       slot: session.slot,
+      team: session.team,
       host: session.host,
       connected: session.bot === true || session.socket !== null,
       ...(session.bot ? { bot: true as const } : {}),
@@ -755,60 +895,11 @@ export class Room {
         if (socket.readyState === 1) socket.close(4000, "Session ended");
       }
     }
-    for (const base of this.game.bases) {
-      const home = base.kind === "home" && base.homeSlot === session.slot - 1;
-      if (home) {
-        base.active = false;
-        base.ownerId = null;
-        base.heldFor = 0;
-        base.turret = "none";
-        base.turretHp = 0;
-        base.turretReadyAt = 0;
-        base.lostFrom = null;
-        base.returnAt = null;
-        base.captureBy = null;
-        base.captureProgress = 0;
-        base.repairBy = null;
-        base.repairProgress = 0;
-      } else if (base.ownerId === session.id) {
-        const originalOwner = base.kind === "home" && base.lostFrom && base.lostFrom !== session.id
-          ? this.sessions.get(base.lostFrom)
-          : undefined;
-        if (originalOwner) {
-          restoreHome(base, this.clock());
-          this.broadcastEvent({
-            type: "capture",
-            playerId: originalOwner.id,
-            name: originalOwner.name,
-            message: `${originalOwner.name}'s home base is back`,
-          });
-        } else {
-          base.ownerId = null;
-          base.heldFor = 0;
-          base.turret = "none";
-          base.turretHp = 0;
-          base.turretReadyAt = 0;
-          base.lostFrom = null;
-          base.returnAt = null;
-          base.repairBy = null;
-          base.repairProgress = 0;
-        }
-        base.captureBy = null;
-        base.captureProgress = 0;
-      } else {
-        if (base.captureBy === session.id) {
-          base.captureBy = null;
-          base.captureProgress = 0;
-        }
-        if (base.repairBy === session.id) {
-          base.repairBy = null;
-          base.repairProgress = 0;
-        }
-      }
-    }
+    const teamWillEmpty = this.teamCount(session.team) === 1;
     this.sessions.delete(session.id);
     delete this.game.frigates[session.id];
     delete this.game.scores[session.id];
+    if (teamWillEmpty) this.deactivateTeam(session.team, this.clock());
     if (session.host) {
       const successor = [...this.sessions.values()]
         .filter((candidate) => !candidate.bot && candidate.socket !== null)
@@ -853,11 +944,13 @@ export class Room {
       );
       if (!name) break;
       const id = `b${this.nextBotId++}`;
+      const team = this.leastPopulatedTeam();
       const bot: PlayerSession = {
         id,
         token: "",
         name,
         slot,
+        team,
         score: 0,
         sunk: 0,
         sinks: 0,
@@ -871,27 +964,16 @@ export class Room {
         lastInput: { ...EMPTY_INPUT },
         ackSeq: 0,
         lastBasesJson: null,
+        lastTeamSwitchAt: null,
+        teamSwitchRespawnAt: null,
         bot: true,
         botSkill: this.game.settings.botSkill,
         brain: createBotBrain(id, this.game.settings.botSkill, this.random),
       };
       this.sessions.set(id, bot);
-      const home = this.game.bases.find((base) => base.kind === "home" && base.homeSlot === slot - 1);
-      if (home) {
-        home.active = true;
-        home.ownerId = id;
-        home.turret = "active";
-        home.turretHp = GAME_CONFIG.bases.turretHp;
-        home.turretReadyAt = now;
-        home.lostFrom = null;
-        home.returnAt = null;
-        home.captureBy = null;
-        home.captureProgress = 0;
-        home.repairBy = null;
-        home.repairProgress = 0;
-      }
+      this.activateTeamHome(team, now);
       const others = Object.values(this.game.frigates).filter((frigate) => frigate.status === "alive");
-      this.game.frigates[id] = spawnPlayerFrigate(id, name, slot, this.game, others, this.random, now);
+      this.game.frigates[id] = spawnPlayerFrigate(id, name, slot, this.game, others, this.random, now, team);
       this.game.scores[id] = this.scoreRecord(bot);
       const joined = { type: "join" as const, playerId: id, name, message: `${name} joined` };
       this.game.events.push(joined);
@@ -906,6 +988,6 @@ export class Room {
   }
 
   getColours(): readonly string[] {
-    return SLOT_COLOURS;
+    return GAME_CONFIG.teams.colours;
   }
 }

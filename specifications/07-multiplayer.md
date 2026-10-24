@@ -3,8 +3,8 @@
 ## Joining
 
 1. The player opens the server URL in a browser.
-2. A lobby screen asks for a **name** (1–16 characters, unique on the server, remembered in the browser's local storage). It shows the current players and free slots.
-3. On "Join", if a slot is free the player is assigned the lowest free slot (which fixes their colour) and spawns immediately at a valid spawn point.
+2. A lobby screen asks for a **name** (1–16 characters, unique on the server, remembered in the browser's local storage) and a team choice. Four colour buttons list current team members; the choice is stored locally.
+3. On "Join", if a berth is free the player is assigned the lowest free slot and requested valid team. Without a valid choice, the server chooses the lowest empty team or least-populated team, lowest index on ties.
 4. If 4 players are already in: the player sees "Server full" and the lobby refreshes automatically; they join as soon as a slot frees up.
 
 ## Spawn validity
@@ -16,7 +16,7 @@ A spawn point is valid only when no land tile lies within 60 u of the frigate hu
 - Closing the tab or losing the connection for more than **10 s** frees the slot: the frigate disappears and its score is dropped.
 - A reconnection within those 10 s with the same name resumes the same frigate and score.
 - If an already-joined connection sends Join again, the server MUST resend the current welcome without creating a session when the name matches case-insensitively; if the name differs, it MUST fully remove the old session without closing the connection before processing the new join (Q143).
-- A player's bases remain theirs during the **10 s** reconnect grace. When the grace expires and the slot is freed, their home site becomes inactive and every other base they held becomes neutral (Q91, Q117).
+- Team bases remain active while any teammate remains, including during reconnect grace. When a team's last session leaves or switches out, its home becomes inactive and its other bases become neutral (Q91, Q117, Q207).
 
 ## Host
 
@@ -40,6 +40,18 @@ A spawn point is valid only when no land tile lies within 60 u of the frigate hu
 - Applying settings broadcasts the new values to every joined player. When at least one value changes, the feed says `Host <name>: <changed settings>` in field order; applying unchanged values does not add an event. Changing Land coverage, Map size, or Neutral bases immediately regenerates the map and respawns all frigates at home, while keeping scores (Q54, Q133). If fewer neutral bases fit than requested, the setting MUST stay unchanged and every player MUST receive `Only N neutral bases fit on this map` (Q136).
 - Settings are kept in server memory across world regeneration, score resets, and host succession. They reset to defaults when the server restarts. In-flight projectiles and reloads already in progress retain their values (Q44, Q46).
 - Host privileges are tied to the session (connection), not to a password.
+
+## Teams
+
+The four teams correspond to Blue, Red, Yellow, and Purple, indexed 0–3. Berth `slot` remains a separate capacity identity. Teams have no size limit beyond the four-player room capacity. Players may switch teams from the Esc menu, with a 30 s server-side cooldown; switching is rejected during intermission and to the current team. The old frigate is removed without a sink or death, personal score is retained, and the player respawns at the new team's home after the ordinary delay. The lobby remembers the selection. Team colour is shared across ships, names, flags, scoreboards, radar, end screen, and feed (Q203–Q206).
+
+Each team has one home site whose site index equals its team index. A home activates when its first member joins or switches in. Teammates spawn at that home with collision-avoiding offsets; if it is lost, the ordinary alternative-base/random fallback applies for the team. When the final member leaves after reconnect grace or switches out, the home deactivates and the team's other bases become neutral (Q207).
+
+Bases are team-owned. Capture, repair, and lost-home identity use team indices; every teammate may resupply, repair hull, or repair/install a turret at a team base. A teammate never captures its own base. Capture progresses only when all non-owner harbour occupants are from one team. Turrets ignore their own team. Shells and torpedoes do not damage teammates or own-team turrets, while spawn protection, self-torpedo arming, and land damage retain their existing rules (Q208–Q209).
+
+Base income and home-capture points go to a four-entry team bonus pool. Team score is the sum of personal scores and the pool. The pool resets when the team empties, on score reset, and on a new round. Snapshots carry the four integer bonuses. Round results rank teams by team score; ties between all non-empty teams are draws. Bots join the least-populated team at creation and treat other teams as enemies (Q211–Q214).
+
+There are no host team controls (Q215).
 
 ## Bots
 

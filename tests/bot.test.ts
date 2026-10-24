@@ -23,7 +23,7 @@ function site(id: string, kind: BaseSite["kind"], x: number, y: number): BaseSit
   return {
     id,
     kind,
-    homeSlot: kind === "home" ? 0 : null,
+    homeTeam: kind === "home" ? 0 : null,
     cityX: x,
     cityY: y,
     harbourX: x,
@@ -39,7 +39,8 @@ function makeState(world = makeWorld(), sites: BaseSite[] = []): GameState {
 }
 
 function addFrigate(state: GameState, id: string, x: number, y: number, heading = 0) {
-  const frigate = createFrigate(id, id, 1, x, y, heading, 0, state.settings);
+  const team = id === "bot" ? 0 : 1;
+  const frigate = createFrigate(id, id, 1, x, y, heading, 0, state.settings, team);
   frigate.spawnProtectedUntil = 0;
   state.frigates[id] = frigate;
   return frigate;
@@ -74,7 +75,7 @@ describe("server bot brain", () => {
     const state = makeState(world, [home]);
     const base = state.bases[0]!;
     base.active = true;
-    base.ownerId = "bot";
+    base.ownerTeam = 0;
     base.turret = "active";
     base.turretHp = GAME_CONFIG.bases.turretHp;
     const bot = addFrigate(state, "bot", 800, 800);
@@ -124,7 +125,7 @@ describe("server bot brain", () => {
     const state = makeState(makeWorld(), [home]);
     const base = state.bases[0]!;
     base.active = true;
-    base.ownerId = "bot";
+    base.ownerTeam = 0;
     base.turret = "active";
     base.turretHp = GAME_CONFIG.bases.turretHp;
     const bot = addFrigate(state, "bot", base.harbourX, base.harbourY);
@@ -151,7 +152,7 @@ describe("server bot brain", () => {
 
     runBrain(state, "bot", brain, 30);
 
-    expect(base.ownerId).toBe("bot");
+    expect(base.ownerTeam).toBe(0);
   });
 
   it("never fires torpedoes at Easy skill", () => {
@@ -163,6 +164,25 @@ describe("server bot brain", () => {
     for (let step = 1; step <= 100; step += 1) {
       expect(brain.think(state, step * dt, dt).fireTorpedo).toBe(false);
     }
+  });
+
+  it("never targets a teammate frigate or its own team's turret", () => {
+    const home = site("home", "home", 1000, 1000);
+    const state = makeState(makeWorld(), [home]);
+    const base = state.bases[0]!;
+    base.active = true;
+    base.ownerTeam = 0;
+    base.turret = "active";
+    base.turretHp = GAME_CONFIG.bases.turretHp;
+    const bot = addFrigate(state, "bot", 800, 1000);
+    const teammate = addFrigate(state, "teammate", 900, 1000);
+    teammate.team = bot.team;
+    const brain = createBotBrain("bot", 1, mulberry32(71));
+
+    const input = brain.think(state, 1, dt);
+
+    expect(input.fireCannon).toBe(false);
+    expect(input.fireTorpedo).toBe(false);
   });
 
   it("produces the same inputs for the same random seed", () => {

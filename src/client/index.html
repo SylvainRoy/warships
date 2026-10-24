@@ -16,6 +16,12 @@
       <form id="join-form">
         <label for="player-name">Captain name</label>
         <input id="player-name" maxlength="16" autocomplete="nickname" placeholder="1–16 characters" />
+        <div class="team-picker" aria-label="Choose a team">
+          <button type="button" class="team-choice" data-team="0">Blue</button>
+          <button type="button" class="team-choice" data-team="1">Red</button>
+          <button type="button" class="team-choice" data-team="2">Yellow</button>
+          <button type="button" class="team-choice" data-team="3">Purple</button>
+        </div>
         <button id="join-button" type="submit">Join the battle <span>→</span></button>
       </form>
       <div id="lobby-error" class="error" aria-live="polite"></div>

@@ -228,9 +228,13 @@ export function sendJoin(): void {
   }
   localStorage.setItem("warships.name", name);
   sessionStorage.setItem("warships.sessionName", name);
+  const storedTeam = Number(localStorage.getItem("warships.team"));
+  const team = Number.isInteger(storedTeam) && storedTeam >= 0 && storedTeam < GAME_CONFIG.teams.count
+    ? storedTeam
+    : undefined;
   if (client.socket?.readyState === WebSocket.OPEN) {
     const token = sessionStorage.getItem("warships.token");
-    client.socket.send(JSON.stringify({ type: "join", name, ...(token ? { token } : {}) }));
+    client.socket.send(JSON.stringify({ type: "join", name, ...(token ? { token } : {}), ...(team === undefined ? {} : { team }) }));
   } else {
     connect();
   }
@@ -244,7 +248,7 @@ export function onSnapshot(snapshot: Snapshot): void {
         bases: client.latestSnapshot?.bases ?? client.bases.map(({
           id,
           active,
-          ownerId,
+          ownerTeam,
           captureBy,
           captureProgress,
           turret,
@@ -254,7 +258,7 @@ export function onSnapshot(snapshot: Snapshot): void {
         }) => ({
           id,
           active,
-          ownerId,
+          ownerTeam,
           captureBy,
           captureProgress,
           turret,
@@ -264,7 +268,7 @@ export function onSnapshot(snapshot: Snapshot): void {
         })),
       };
   client.latestSnapshot = snapshotWithBases;
-  if (!isOwnHost() && client.menuPending && client.menuPending.action !== "controls" && client.menuPending.action !== "effects") client.menuPending = null;
+  if (!isOwnHost() && client.menuPending && client.menuPending.action !== "controls" && client.menuPending.action !== "effects" && client.menuPending.action !== "teamSelect") client.menuPending = null;
   const receivedAt = performance.now();
   client.serverTimeOffset = snapshotWithBases.serverTime - receivedAt / 1000;
   client.hasServerTimeOffset = true;
@@ -302,6 +306,12 @@ export function onSnapshot(snapshot: Snapshot): void {
       );
       localTime += 1 / GAME_CONFIG.network.tickRate;
     }
+  }
+}
+
+export function sendTeam(team: number): void {
+  if (client.socket?.readyState === WebSocket.OPEN) {
+    client.socket.send(JSON.stringify({ type: "team", team }));
   }
 }
 

@@ -348,8 +348,8 @@ function navigate(
   };
 }
 
-function ownedBases(state: GameState, playerId: string): Base[] {
-  return state.bases.filter((base) => base.active && base.ownerId === playerId);
+function ownedBases(state: GameState, team: number): Base[] {
+  return state.bases.filter((base) => base.active && base.ownerTeam === team);
 }
 
 function nearestBase(bases: readonly Base[], point: Point): Base | null {
@@ -364,7 +364,7 @@ function nearestBase(bases: readonly Base[], point: Point): Base | null {
 function visibleEnemies(state: GameState, frigate: Frigate, playerId: string, now: number): Frigate[] {
   return Object.values(state.frigates)
     .filter((other) =>
-      other.playerId !== playerId
+      other.team !== frigate.team
       && other.status === "alive"
       && now >= other.spawnProtectedUntil
       && distance(frigate, other) <= GAME_CONFIG.bots.visionRange,
@@ -421,11 +421,11 @@ function chooseMode(
   now: number,
   random: () => number,
 ): void {
-  const bases = ownedBases(state, playerId);
+  const bases = ownedBases(state, frigate.team);
   const targetBase = memory.assaultBaseId
     ? state.bases.find((base) => base.id === memory.assaultBaseId && base.active)
     : undefined;
-  if (targetBase?.ownerId === playerId && targetBase.turret !== "active") {
+  if (targetBase?.ownerTeam === frigate.team && targetBase.turret !== "active") {
     memory.mode = "assault";
     memory.targetId = targetBase.id;
     memory.modeChosenAt = now;
@@ -453,7 +453,7 @@ function chooseMode(
     return;
   }
   const target = nearestBase(
-    state.bases.filter((base) => base.active && base.ownerId !== playerId),
+    state.bases.filter((base) => base.active && base.ownerTeam !== frigate.team),
     frigate,
   );
   if (target) {
@@ -517,7 +517,7 @@ function setMissionGoal(
 ): { throttleOverride: number | null; movementKeys: number; noPath: boolean } {
   if (memory.mode === "resupply") {
     const base = state.bases.find((candidate) => candidate.id === memory.targetId && candidate.active);
-    if (!base || base.ownerId !== frigate.playerId) return { throttleOverride: null, movementKeys: 0, noPath: false };
+    if (!base || base.ownerTeam !== frigate.team) return { throttleOverride: null, movementKeys: 0, noPath: false };
     if (hullInsideHarbour(frigate, base)) {
       setGoal(memory, `resupply:${base.id}`, null);
       return { throttleOverride: 0, movementKeys: 0, noPath: false };
@@ -546,18 +546,18 @@ function setMissionGoal(
   } else if (memory.mode === "assault") {
     const base = state.bases.find((candidate) => candidate.id === memory.assaultBaseId && candidate.active);
     if (!base) return { throttleOverride: null, movementKeys: 0, noPath: false };
-    if (base.ownerId === frigate.playerId && base.turret === "active") {
+    if (base.ownerTeam === frigate.team && base.turret === "active") {
       memory.assaultBaseId = null;
       return { throttleOverride: null, movementKeys: 0, noPath: false };
     }
-    if (base.ownerId && base.ownerId !== frigate.playerId && base.turret === "active") {
+    if (base.ownerTeam !== null && base.ownerTeam !== frigate.team && base.turret === "active") {
       const range = Math.hypot(frigate.x - base.cityX, frigate.y - base.cityY);
       if (range >= GAME_CONFIG.bots.turretMinDistance && range <= GAME_CONFIG.bots.turretMaxDistance) {
         setGoal(memory, `turret:${base.id}`, null);
         return { throttleOverride: 0, movementKeys: 0, noPath: false };
       }
       setGoal(memory, `turret:${base.id}`, chooseTurretStandoff(state.world, frigate, base));
-    } else if (base.ownerId === frigate.playerId && base.turret !== "active") {
+    } else if (base.ownerTeam === frigate.team && base.turret !== "active") {
       if (hullInsideHarbour(frigate, base)) {
         setGoal(memory, `install:${base.id}`, null);
         return { throttleOverride: 0, movementKeys: 0, noPath: false };
@@ -605,8 +605,8 @@ function visibleCannonTargets(
   const base = state.bases.find((candidate) =>
     candidate.id === memory.assaultBaseId
     && candidate.active
-    && candidate.ownerId !== null
-    && candidate.ownerId !== playerId
+    && candidate.ownerTeam !== null
+    && candidate.ownerTeam !== frigate.team
     && candidate.turret === "active",
   );
   if (base && distance(frigate, { x: base.cityX, y: base.cityY }) <= maximumRange) {

@@ -11,7 +11,7 @@ import {
 import { ctx } from "./dom.js";
 import { saveEffectsSettings } from "./gameEvents.js";
 import { applyBindings, pressed, refreshKeyboardLayout } from "./input.js";
-import { sendHost } from "./net.js";
+import { sendHost, sendTeam } from "./net.js";
 import { client, type Snapshot } from "./state.js";
 
 export const settingsRows: Array<{ key: keyof GameSettings; label: string }> = [
@@ -51,7 +51,7 @@ export function isOwnHost(snapshot: Snapshot | null = client.latestSnapshot): bo
 
 export function drawMenu(snapshot: Snapshot, width: number, height: number): void {
   const host = snapshot.players.find((player) => player.playerId === client.ownId)?.host ?? false;
-  if (!host && client.menuPending && client.menuPending.action !== "controls" && client.menuPending.action !== "effects") client.menuPending = null;
+  if (!host && client.menuPending && client.menuPending.action !== "controls" && client.menuPending.action !== "effects" && client.menuPending.action !== "teamSelect") client.menuPending = null;
   const controlsPending = client.menuPending?.action === "controls" ? client.menuPending : null;
   const effectsPending = client.menuPending?.action === "effects" ? client.menuPending : null;
   const left = width / 2 - 184;
@@ -190,6 +190,13 @@ export function drawMenu(snapshot: Snapshot, width: number, height: number): voi
       );
       ctx.textAlign = "left";
     });
+  } else if (client.menuPending?.action === "teamSelect") {
+    ctx.fillStyle = "#6be0cf";
+    ctx.fillText("Choose a team:", left, centerY - 65);
+    GAME_CONFIG.teams.names.forEach((name, index) => {
+      ctx.fillStyle = GAME_CONFIG.teams.colours[index] ?? "#fff";
+      ctx.fillText(`${index + 1}  ${name}`, left, centerY - 35 + index * 24);
+    });
   } else if (client.menuPending?.action === "kickSelect") {
     ctx.fillStyle = "#e4ad80";
     ctx.fillText("Select a player to kick:", left, centerY - 65);
@@ -216,10 +223,12 @@ export function drawMenu(snapshot: Snapshot, width: number, height: number): voi
     ctx.fillText("S  Settings", left, centerY + 25);
     ctx.fillText("C  Controls", left, centerY + 55);
     ctx.fillText("V  Sound & effects", left, centerY + 85);
+    ctx.fillText("T  Team", left, centerY + 115);
   } else {
     ctx.fillStyle = "#6be0cf";
     ctx.fillText("C  Controls", left, centerY - 65);
     ctx.fillText("V  Sound & effects", left, centerY - 35);
+    ctx.fillText("T  Team", left, centerY - 5);
   }
   ctx.fillStyle = "#8ea9b0";
   ctx.font = "10px DM Mono, monospace";
@@ -242,7 +251,7 @@ window.addEventListener("keydown", (event) => {
   const target = event.target;
   if (!client.joined || target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement || !client.menuOpen) return;
   if (event.code === "Escape") return;
-  if (!isOwnHost() && client.menuPending && client.menuPending.action !== "controls" && client.menuPending.action !== "effects") client.menuPending = null;
+  if (!isOwnHost() && client.menuPending && client.menuPending.action !== "controls" && client.menuPending.action !== "effects" && client.menuPending.action !== "teamSelect") client.menuPending = null;
 
   if (client.menuPending?.action === "effects") {
     const effectsPending = client.menuPending;
@@ -314,6 +323,7 @@ window.addEventListener("keydown", (event) => {
 
   if (event.repeat) return;
   const digit = /^(?:Digit|Numpad)([1-3])$/.exec(event.code);
+  const teamDigit = /^(?:Digit|Numpad)([1-4])$/.exec(event.code);
   const isEnter = event.code === "Enter" || event.code === "NumpadEnter";
   if (isEnter || digit || (settingsPending && event.code === "KeyD")) event.preventDefault();
   if (settingsPending) {
@@ -329,6 +339,12 @@ window.addEventListener("keydown", (event) => {
     return;
   }
   if (client.menuPending) {
+    if (client.menuPending.action === "teamSelect" && teamDigit) {
+      sendTeam(Number(teamDigit[1]) - 1);
+      client.menuPending = null;
+      client.menuOpen = false;
+      return;
+    }
     if (client.menuPending.action === "kickSelect" && digit && client.latestSnapshot) {
       const targetPlayer = kickablePlayers(client.latestSnapshot)[Number(digit[1]) - 1];
       if (targetPlayer) client.menuPending = { action: "kick", playerId: targetPlayer.playerId, name: targetPlayer.name };
@@ -352,6 +368,11 @@ window.addEventListener("keydown", (event) => {
   if (event.code === "KeyV") {
     event.preventDefault();
     client.menuPending = { action: "effects", index: 0 };
+    return;
+  }
+  if (event.code === "KeyT") {
+    event.preventDefault();
+    client.menuPending = { action: "teamSelect" };
     return;
   }
   if (!isOwnHost()) return;

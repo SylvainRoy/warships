@@ -6,6 +6,7 @@ import { feed, incomeNumbers } from "../gameEvents.js";
 import { drawRadar } from "./radarView.js";
 import { drawFullScoreboard } from "./scoreboard.js";
 import { drawMenu } from "../menu.js";
+import { RADAR } from "../radar.js";
 import { client, type Snapshot } from "../state.js";
 
 export function drawConsoleDial(
@@ -121,30 +122,63 @@ export function drawHud(snapshot: Snapshot, frigate: Frigate | undefined, now: n
   ctx.textBaseline = "top";
   ctx.textAlign = "left";
   ctx.fillStyle = "rgba(5, 20, 29, .72)";
-  ctx.fillRect(captainsPanelX, captainsPanelY, 230, Math.min(235, 54 + snapshot.players.length * 34));
+  const teamScores = snapshot.players.reduce((scores, player) => {
+    scores[player.team] = (scores[player.team] ?? 0) + player.score;
+    return scores;
+  }, [...snapshot.teamBonus]);
+  const teams = [...new Set(snapshot.players.map((player) => player.team))]
+    .sort((a, b) => (teamScores[b] ?? 0) - (teamScores[a] ?? 0) || a - b);
+  const grouped = teams.some((team) => snapshot.players.filter((player) => player.team === team).length >= 2);
+  const rowCount = snapshot.players.length + (grouped ? teams.length : 0);
+  const desiredRowHeight = grouped ? 27 : 34;
+  const radarTop = logicalHeight - RADAR.margin - RADAR.radius * 2;
+  const maxPanelHeight = Math.max(48, radarTop - captainsPanelY - 8);
+  const panelHeight = Math.min(38 + rowCount * desiredRowHeight, maxPanelHeight);
+  const rowHeight = (panelHeight - 38) / Math.max(1, rowCount);
+  ctx.fillRect(captainsPanelX, captainsPanelY, 230, panelHeight);
   ctx.fillStyle = "#88a7b0";
   ctx.font = "500 10px DM Mono, monospace";
   ctx.fillText("CAPTAINS", captainsPanelX + 18, captainsPanelY + 11);
-  snapshot.players.slice().sort((a, b) => a.slot - b.slot).forEach((player, index) => {
-    const y = captainsPanelY + 32 + index * 34;
+  let row = 0;
+  const drawCaptain = (player: Snapshot["players"][number]) => {
+    const y = captainsPanelY + 34 + row * rowHeight;
+    row += 1;
     const own = player.playerId === client.ownId;
     if (own) {
       ctx.fillStyle = "rgba(100, 223, 202, .12)";
-      ctx.fillRect(captainsPanelX + 10, y - 5, 210, 29);
+      ctx.fillRect(captainsPanelX + 10, y - 2, 210, Math.max(1, rowHeight - 2));
     }
-    ctx.fillStyle = colours[player.slot - 1] ?? "#fff";
+    ctx.fillStyle = colours[player.team] ?? "#fff";
     ctx.beginPath();
-    ctx.arc(captainsPanelX + 24, y + 5, 4, 0, Math.PI * 2);
+    ctx.arc(captainsPanelX + 24, y + rowHeight / 2, 4, 0, Math.PI * 2);
     ctx.fill();
     const nameColor = own ? "#f0fffa" : "#d7e5e9";
     ctx.fillStyle = nameColor;
     ctx.font = `${own ? 700 : 500} 12px Manrope, sans-serif`;
-    ctx.fillText(`${player.host ? "♛ " : ""}${player.name}`, captainsPanelX + 35, y - 2);
+    ctx.fillText(`${player.host ? "♛ " : ""}${player.name}`, captainsPanelX + 35, y + rowHeight / 2 - 7);
     ctx.textAlign = "right";
     ctx.fillStyle = nameColor;
-    ctx.fillText(`${player.score}`, captainsPanelX + 218, y - 2);
+    ctx.fillText(`${teamScores[player.team] ?? 0}`, captainsPanelX + 218, y + rowHeight / 2 - 7);
     ctx.textAlign = "left";
-  });
+  };
+  if (grouped) {
+    for (const team of teams) {
+      const y = captainsPanelY + 34 + row * rowHeight;
+      row += 1;
+      ctx.fillStyle = colours[team] ?? "#fff";
+      ctx.font = "700 11px DM Mono, monospace";
+      ctx.fillText(`${GAME_CONFIG.teams.names[team]} · ${teamScores[team] ?? 0}`, captainsPanelX + 16, y + rowHeight / 2 - 6);
+      snapshot.players
+        .filter((player) => player.team === team)
+        .sort((a, b) => a.slot - b.slot)
+        .forEach(drawCaptain);
+    }
+  } else {
+    snapshot.players
+      .slice()
+      .sort((a, b) => a.team - b.team || a.slot - b.slot)
+      .forEach(drawCaptain);
+  }
   if (frigate) {
     ctx.fillStyle = "rgba(5, 20, 29, .78)";
     ctx.fillRect(consolePanelX, consolePanelY, 440, consolePanelHeight);
@@ -250,8 +284,20 @@ export function drawHud(snapshot: Snapshot, frigate: Frigate | undefined, now: n
   }
   if (client.round?.phase === "over") {
     const round = client.round;
-    const names = round.winners.map((id) => round.results.find((result) => result.playerId === id)?.name).filter((name): name is string => Boolean(name));
-    const winnerLine = names.length === 0 ? "Draw" : `${names.join(" and ")} ${names.length === 1 ? "wins!" : "win!"}`;
+    const grouped = round.results.some((result) =>
+      round.results.filter((other) => other.team === result.team).length >= 2,
+    );
+    const winningTeams = round.winnerTeams.map((team) => GAME_CONFIG.teams.names[team]).filter((name) => name !== undefined);
+    const winnerNames = round.winners
+      .map((id) => round.results.find((result) => result.playerId === id)?.name)
+      .filter((name): name is string => name !== undefined);
+    const winnerLine = grouped
+      ? winningTeams.length === 0
+        ? "Draw"
+        : `${winningTeams.join(" and ")} team${winningTeams.length === 1 ? "" : "s"} ${winningTeams.length === 1 ? "wins" : "win"}!`
+      : winnerNames.length === 0
+        ? "Draw"
+        : `${winnerNames.length > 1 ? `${winnerNames.slice(0, -1).join(", ")} and ` : ""}${winnerNames.at(-1)} ${winnerNames.length === 1 ? "wins" : "win"}!`;
     const panelWidth = Math.min(900, logicalWidth - 48);
     const left = (logicalWidth - panelWidth) / 2;
     const top = logicalHeight / 2 - 230;
@@ -272,24 +318,47 @@ export function drawHud(snapshot: Snapshot, frigate: Frigate | undefined, now: n
       ctx.textAlign = index === 0 ? "left" : "right";
       ctx.fillText(header, columns[index] ?? left, top + 112);
     });
-    round.results.forEach((result, index) => {
-      const y = top + 143 + index * 48;
+    const drawResult = (result: typeof round.results[number], y: number, score: number) => {
       if (result.playerId === client.ownId) {
         ctx.fillStyle = "rgba(96, 224, 203, .15)";
         ctx.fillRect(left + 24, y - 8, panelWidth - 48, 34);
       }
       ctx.textAlign = "left";
-      ctx.fillStyle = colours[result.slot - 1] ?? "#fff";
+      ctx.fillStyle = colours[result.team] ?? "#fff";
       ctx.font = "600 13px Manrope, sans-serif";
       ctx.fillText(result.name, columns[0] ?? left, y);
-      const values = [result.score, result.sinks, result.deaths, result.shots ? `${Math.round(result.hits / result.shots * 100)}%` : "—", result.bases];
+      const values = [score, result.sinks, result.deaths, result.shots ? `${Math.round(result.hits / result.shots * 100)}%` : "—", result.bases];
       ctx.fillStyle = "#e5f1f2";
       ctx.font = "12px DM Mono, monospace";
       values.forEach((value, valueIndex) => {
         ctx.textAlign = "right";
         ctx.fillText(String(value), columns[valueIndex + 1] ?? left, y);
       });
-    });
+    };
+    if (grouped) {
+      const teams = [...new Set(round.results.map((result) => result.team))]
+        .sort((a, b) => (round.teamScores[b] ?? 0) - (round.teamScores[a] ?? 0) || a - b);
+      let y = top + 143;
+      for (const team of teams) {
+        ctx.textAlign = "left";
+        ctx.fillStyle = colours[team] ?? "#fff";
+        ctx.font = "700 11px DM Mono, monospace";
+        ctx.fillText(`${GAME_CONFIG.teams.names[team]} TEAM · ${round.teamScores[team] ?? 0}`, columns[0] ?? left, y);
+        y += 25;
+        round.results
+          .filter((result) => result.team === team)
+          .sort((a, b) => b.score - a.score || b.sinks - a.sinks || a.deaths - b.deaths)
+          .forEach((result) => {
+            drawResult(result, y, result.score);
+            y += 34;
+          });
+      }
+    } else {
+      round.results
+        .slice()
+        .sort((a, b) => (round.teamScores[b.team] ?? 0) - (round.teamScores[a.team] ?? 0) || b.sinks - a.sinks || a.deaths - b.deaths)
+        .forEach((result, index) => drawResult(result, top + 143 + index * 48, round.teamScores[result.team] ?? 0));
+    }
     ctx.textAlign = "center";
     ctx.fillStyle = "#a4bdc4";
     ctx.font = "500 13px DM Mono, monospace";

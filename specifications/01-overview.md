@@ -8,9 +8,9 @@
 
 | Aspect | Decision |
 |---|---|
-| Players per game | 1 to 4, first come first served |
+| Players per game | 1 to 4, assigned to one of four teams |
 | Games per server | Exactly one, running indefinitely |
-| Mode | Free-for-all deathmatch, no teams |
+| Mode | Team deathmatch in timed rounds (or Endless) |
 | View | 2D top-down, camera follows own frigate |
 | Platform | Desktop web browser, keyboard only. No installation for players |
 | Session control | First connected player is the **host**: can regenerate the world and reset scores |
@@ -18,7 +18,7 @@
 
 ## In scope (v1)
 
-- One persistent game per server, 4 player slots.
+- One persistent game per server, four berths.
 - Procedurally generated world with islands; all water connected.
 - Frigate movement with inertia; cannons; torpedoes; damage; sinking; respawn; scoreboard.
 - Host controls: regenerate world, reset scores.

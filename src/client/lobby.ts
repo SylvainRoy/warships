@@ -1,20 +1,37 @@
+import { GAME_CONFIG } from "../shared/config.js";
 import type { LobbyMessage } from "../shared/protocol.js";
 import { bindingLabel, type ControlAction } from "./controls.js";
 import { colours, freeSlots, fullNote, joinButton, lobby, lobbyFooter, roster } from "./dom.js";
 import { sendJoin } from "./net.js";
 import { client } from "./state.js";
 
+const teamChoices = [...document.querySelectorAll<HTMLButtonElement>(".team-choice")];
+for (const button of teamChoices) {
+  button.addEventListener("click", () => {
+    const team = Number(button.dataset.team);
+    localStorage.setItem("warships.team", String(team));
+    for (const choice of teamChoices) choice.setAttribute("aria-pressed", String(choice === button));
+  });
+}
+
 export function renderLobby(state: LobbyMessage): void {
   if (!client.joined) lobby.hidden = false;
   freeSlots.textContent = `${state.freeSlots} BERTH${state.freeSlots === 1 ? "" : "S"} FREE`;
   fullNote.hidden = !state.full;
   joinButton.disabled = state.full;
+  const selectedTeam = Number(localStorage.getItem("warships.team"));
+  for (const [team, button] of teamChoices.entries()) {
+    const members = state.players.filter((player) => player.team === team).map((player) => `${player.name}${player.bot ? " (bot)" : ""}`);
+    button.style.color = GAME_CONFIG.teams.colours[team] ?? "#fff";
+    button.textContent = `${GAME_CONFIG.teams.names[team]}\n${members.join(", ") || "No captains"}`;
+    button.setAttribute("aria-pressed", String(selectedTeam === team));
+  }
   roster.replaceChildren();
   for (const player of state.players) {
     const line = document.createElement("li");
     const dot = document.createElement("span");
     dot.className = "dot";
-    dot.style.backgroundColor = colours[player.slot - 1] ?? "#fff";
+    dot.style.backgroundColor = colours[player.team] ?? "#fff";
     const name = document.createElement("span");
     name.textContent = player.name;
     if (player.bot) {

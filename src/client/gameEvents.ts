@@ -29,7 +29,7 @@ import {
 export const audio = new SynthAudio();
 
 export const radarSweep = new RadarSweep(
-  (slot) => colours[slot - 1] ?? "#fff",
+  (team) => colours[team] ?? "#fff",
   () => audio.play("radar-ping", { own: true, gain: GAME_CONFIG.audio.radarGain }),
 );
 
@@ -165,16 +165,17 @@ export function handleGameEvent(event: GameEvent, at: number): void {
     }
     handleDamageEvent(event, at);
   } else if (event.type === "income") {
-    if (event.x !== undefined && event.y !== undefined && event.playerId) {
+    const ownTeam = client.latestSnapshot?.players.find((player) => player.playerId === client.ownId)?.team;
+    if (event.x !== undefined && event.y !== undefined && event.team !== undefined && event.team === ownTeam) {
       incomeNumbers.push({
         x: event.x,
         y: event.y,
-        playerId: event.playerId,
+        team: event.team,
         amount: event.amount ?? GAME_CONFIG.baseIncome.payout,
         startedAt: at,
       });
     }
-    if (event.playerId === client.ownId) {
+    if (event.team !== undefined && event.team === ownTeam) {
       audio.play("coin", { own: true, gain: GAME_CONFIG.baseIncome.coinGain });
     }
   } else if (event.playerId === client.ownId && event.type === "capture") {
@@ -218,8 +219,8 @@ export function handleDamageEvent(event: GameEvent, at: number): void {
 
 export function hitFeedLabel(event: GameEvent): string {
   if (event.baseId) {
-    const ownerId = client.bases.find((base) => base.id === event.baseId)?.ownerId;
-    const ownerName = client.latestSnapshot?.players.find((player) => player.playerId === ownerId)?.name ?? "Unknown";
+    const ownerTeam = client.bases.find((base) => base.id === event.baseId)?.ownerTeam;
+    const ownerName = client.latestSnapshot?.players.find((player) => player.team === ownerTeam)?.name ?? "Unknown";
     return `You hit ${ownerName}'s turret`;
   }
   const targetName = client.latestSnapshot?.frigates.find((frigate) => frigate.playerId === event.targetId)?.name

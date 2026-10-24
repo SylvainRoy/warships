@@ -181,8 +181,7 @@ export function drawRadar(snapshot: Snapshot, frigate: Frigate, now: number, log
     const dx = base.harbourX - frigate.x;
     const dy = base.harbourY - frigate.y;
     const distance = Math.hypot(dx, dy);
-    const ownerSlot = snapshot.players.find((player) => player.playerId === base.ownerId)?.slot;
-    ctx.fillStyle = base.ownerId === null ? "#fff" : colours[(ownerSlot ?? 0) - 1] ?? "#fff";
+    ctx.fillStyle = base.ownerTeam === null ? "#fff" : colours[base.ownerTeam] ?? "#fff";
     if (distance <= range) {
       const [radarX, radarY] = worldToRadar(dx, dy, range);
       const markerX = Math.round(centerX + radarX) - 3;
@@ -191,7 +190,7 @@ export function drawRadar(snapshot: Snapshot, frigate: Frigate, now: number, log
       ctx.lineWidth = 1;
       ctx.strokeStyle = RADAR_OUTLINE;
       ctx.strokeRect(markerX - 0.5, markerY - 0.5, 7, 7);
-    } else if (base.ownerId === client.ownId) {
+    } else if (base.ownerTeam === frigate.team) {
       const bearing = radarBearing(frigate.x, frigate.y, base.harbourX, base.harbourY);
       const inner = RADAR.radius - 8;
       const outer = RADAR.radius - 2;

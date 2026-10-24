@@ -4,6 +4,7 @@ All notable changes to Warships are recorded here. Versions follow semantic vers
 
 ## [Unreleased]
 
+- Four-team play with shared team bases and scoring, team selection, and friendly-fire prevention.
 - Timed rounds with a configurable length, countdown, results screen, and automatic new rounds; Endless remains available.
 - Server-side bots fill open berths, navigate, fight, capture bases and resupply; hosts can set their count and skill.
 - Internal: client split into modules (no gameplay change)

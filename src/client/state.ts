@@ -16,14 +16,15 @@ export type HostMenuPending =
   | { action: "resetScores" }
   | { action: "kickSelect" }
   | { action: "kick"; playerId: string; name: string }
-  | { action: "settings"; draft: GameSettings; index: number };
+  | { action: "settings"; draft: GameSettings; index: number }
+  | { action: "teamSelect" };
 export type ControlsMenuPending = { action: "controls"; index: number; capturing: boolean; hint: string };
 export type EffectsMenuPending = { action: "effects"; index: number };
 export type MenuPending = HostMenuPending | ControlsMenuPending | EffectsMenuPending | null;
 export type HitMarker = { x: number; y: number; at: number };
 export type PendingHitFeed = { targetKey: string; targetId?: string; label: string; amount: number; at: number };
 export type PendingSplashSound = { x: number; y: number; timer: number };
-export type IncomeNumber = { x: number; y: number; playerId: string; amount: number; startedAt: number };
+export type IncomeNumber = { x: number; y: number; team: number; amount: number; startedAt: number };
 
 export const client = {
   previousRadarSweepAngle: null as number | null,

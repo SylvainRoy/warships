@@ -135,15 +135,15 @@ describe("procedural world", () => {
     const expected = new Map<number, { grid: string; bases: string }>([
       [1, {
         grid: "f21ab371292be3f014684f2c47b1b43a53028d9efd64ccade58580cc878139fd",
-        bases: "5de7906e5f7c50908425a0e24c33e6dece7b746454c4ca78785df0dc0f917dbc",
+        bases: "3773e2f5f2819e03bfaa2c3b6d776f4720e1511a0da0105acefffe884a5ab29b",
       }],
       [42, {
         grid: "79e6db0904bffc2a23a1250dc2922f00f2c70846685dea521e5ba335afecc59e",
-        bases: "de8b82501889526a8e2bcb0d9c78bf3b83d42cc725a24f0777abe927706b66f9",
+        bases: "7cb08a982db461abc951510a0e3e60e7becb2b1d341c004df732cee174e8ee8f",
       }],
       [12345, {
         grid: "884300b7fb63674791ae7765345c9f10100a0ac5c1d99a568c7b65864b15f768",
-        bases: "5092cd6cc0a4824fee7605413d57352fc27074f200483ec1d30d3ab4f80a6599",
+        bases: "a7d4c6e35bad52fe299ef802b1ed3ad67eee9ab8c08b06a0af6e4f0a05750741",
       }],
     ]);
     for (const seed of [1, 42, 12345]) {

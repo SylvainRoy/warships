@@ -7,7 +7,7 @@ export type BaseKind = "home" | "neutral";
 export interface BaseSite {
   id: string;
   kind: BaseKind;
-  homeSlot: number | null;
+  homeTeam: number | null;
   cityX: number;
   cityY: number;
   harbourX: number;
@@ -20,15 +20,15 @@ export type TurretState = "none" | "active" | "destroyed";
 export interface BaseStatus {
   id: string;
   active: boolean;
-  ownerId: string | null;
-  captureBy: string | null;
+  ownerTeam: number | null;
+  captureBy: number | null;
   captureProgress: number;
   turret: TurretState;
   turretHp: number;
   turretReadyAt: number;
-  repairBy: string | null;
+  repairBy: number | null;
   repairProgress: number;
-  lostFrom: string | null;
+  lostFrom: number | null;
   returnAt: number | null;
 }
 
@@ -36,12 +36,12 @@ export type BasePublic = BaseSite & BaseStatus;
 export type Base = BasePublic & { heldFor: number };
 export type BaseSnapshot = Pick<
   BaseStatus,
-  "id" | "active" | "ownerId" | "captureBy" | "captureProgress" | "turret" | "turretHp" | "repairBy" | "repairProgress"
+  "id" | "active" | "ownerTeam" | "captureBy" | "captureProgress" | "turret" | "turretHp" | "repairBy" | "repairProgress"
 >;
 
 export function restoreHome(base: Base, now: number): void {
   base.active = true;
-  base.ownerId = base.lostFrom ?? base.ownerId;
+  base.ownerTeam = base.lostFrom ?? base.ownerTeam;
   base.heldFor = 0;
   base.lostFrom = null;
   base.returnAt = null;
@@ -54,7 +54,7 @@ export function restoreHome(base: Base, now: number): void {
   base.repairProgress = 0;
 }
 
-type Candidate = Omit<BaseSite, "id" | "kind" | "homeSlot">;
+type Candidate = Omit<BaseSite, "id" | "kind" | "homeTeam">;
 type Rect = { left: number; top: number; right: number; bottom: number };
 
 const { tileSize } = GAME_CONFIG.world;
@@ -236,13 +236,13 @@ export function placeBases(world: World, neutralCount: number): BaseSite[] | nul
       ...candidate,
       id: `h${index}`,
       kind: "home",
-      homeSlot: index,
+      homeTeam: index,
     })),
     ...neutrals.map((candidate, index): BaseSite => ({
       ...candidate,
       id: `n${index}`,
       kind: "neutral",
-      homeSlot: null,
+      homeTeam: null,
     })),
   ];
 }

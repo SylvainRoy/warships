@@ -53,7 +53,7 @@ function neutralSite(id = "n0") {
   return {
     id,
     kind: "neutral" as const,
-    homeSlot: null,
+    homeTeam: null,
     cityX: 5000,
     cityY: 4500,
     harbourX: 5050,
@@ -101,36 +101,36 @@ describe("base placement", () => {
   });
 
   it("starts homes inactive and neutral bases active without turrets", () => {
-    const home = { ...neutralSite(), id: "h0", kind: "home" as const, homeSlot: 0 };
+    const home = { ...neutralSite(), id: "h0", kind: "home" as const, homeTeam: 0 };
     const state = createGameState(openWorld(), [home, neutralSite()]);
 
     expect(state.bases[0]).toMatchObject({
       active: false,
-      ownerId: null,
+      ownerTeam: null,
       turret: "none",
       turretHp: 0,
     });
     expect(state.bases[1]).toMatchObject({
       active: true,
-      ownerId: null,
+      ownerTeam: null,
       turret: "none",
       turretHp: 0,
     });
   });
 
   it("restores a lost home with its original owner, full turret, and cleared actions", () => {
-    const site = { ...neutralSite(), id: "h0", kind: "home" as const, homeSlot: 0 };
+    const site = { ...neutralSite(), id: "h0", kind: "home" as const, homeTeam: 0 };
     const base = createGameState(openWorld(), [site]).bases[0]!;
     Object.assign(base, {
       active: true,
-      ownerId: "holder",
-      lostFrom: "original",
+      ownerTeam: 1,
+      lostFrom: 0,
       returnAt: 30,
       turret: "destroyed",
       turretHp: 0,
-      captureBy: "capturer",
+      captureBy: 2,
       captureProgress: 0.7,
-      repairBy: "holder",
+      repairBy: 1,
       repairProgress: 0.4,
     });
 
@@ -138,7 +138,7 @@ describe("base placement", () => {
 
     expect(base).toMatchObject({
       active: true,
-      ownerId: "original",
+      ownerTeam: 0,
       lostFrom: null,
       returnAt: null,
       turret: "active",
@@ -159,12 +159,12 @@ describe("base capture", () => {
     state.settings = { ...DEFAULT_SETTINGS, captureTime: 2 };
     state.frigates[captain.playerId] = captain;
     state.scores[captain.playerId] = {
-      playerId: captain.playerId, name: captain.name, slot: captain.slot, score: 0, sunk: 0, host: false, connected: true,
+      playerId: captain.playerId, name: captain.name, slot: captain.slot, team: captain.team, score: 0, sunk: 0, host: false, connected: true,
     };
     stepGame(state, {}, 1, 0);
     expect(state.bases[0]?.captureProgress).toBe(0.5);
     stepGame(state, {}, 1, 1);
-    expect(state.bases[0]?.ownerId).toBe(captain.playerId);
+    expect(state.bases[0]?.ownerTeam).toBe(captain.team);
     expect(state.bases[0]?.captureProgress).toBe(0);
     expect(state.events).toContainEqual({
       type: "capture",
@@ -180,7 +180,7 @@ describe("base capture", () => {
     const state = createGameState(openWorld(), [site]);
     const captain = ship("captain");
     state.frigates[captain.playerId] = captain;
-    state.bases[0]!.captureBy = captain.playerId;
+    state.bases[0]!.captureBy = captain.team;
     state.bases[0]!.captureProgress = 0.4;
 
     captain.x += 100;
@@ -188,32 +188,32 @@ describe("base capture", () => {
     expect(state.bases[0]).toMatchObject({ captureBy: null, captureProgress: 0 });
 
     captain.x = site.harbourX;
-    state.bases[0]!.captureBy = captain.playerId;
+    state.bases[0]!.captureBy = captain.team;
     state.bases[0]!.captureProgress = 0.4;
     state.frigates.other = ship("other");
     stepBases(state, 1, 0);
     expect(state.bases[0]).toMatchObject({ captureBy: null, captureProgress: 0 });
     delete state.frigates.other;
 
-    state.bases[0]!.ownerId = captain.playerId;
-    state.bases[0]!.captureBy = captain.playerId;
+    state.bases[0]!.ownerTeam = captain.team;
+    state.bases[0]!.captureBy = captain.team;
     state.bases[0]!.captureProgress = 0.4;
     stepBases(state, 1, 0);
     expect(state.bases[0]).toMatchObject({ captureBy: null, captureProgress: 0 });
-    state.bases[0]!.ownerId = null;
+    state.bases[0]!.ownerTeam = null;
     state.bases[0]!.active = false;
     stepBases(state, 1, 0);
     expect(state.bases[0]).toMatchObject({ captureBy: null, captureProgress: 0 });
 
-    const home = { ...site, id: "h0", kind: "home" as const, homeSlot: 0 };
+    const home = { ...site, id: "h0", kind: "home" as const, homeTeam: 0 };
     const homeState = createGameState(openWorld(), [home]);
     homeState.bases[0]!.active = true;
-    homeState.bases[0]!.ownerId = "homeowner";
+    homeState.bases[0]!.ownerTeam = 1;
     homeState.bases[0]!.turret = "active";
     homeState.bases[0]!.turretHp = GAME_CONFIG.bases.turretHp;
     homeState.frigates.captain = captain;
     stepBases(homeState, 1, 0);
-    expect(homeState.bases[0]).toMatchObject({ captureBy: null, captureProgress: 0, ownerId: "homeowner" });
+    expect(homeState.bases[0]).toMatchObject({ captureBy: null, captureProgress: 0, ownerTeam: 1 });
   });
 
   it("keeps capture progress as a fraction when capture time changes", () => {
@@ -225,6 +225,6 @@ describe("base capture", () => {
     expect(state.bases[0]?.captureProgress).toBe(0.5);
     state.settings.captureTime = 8;
     stepBases(state, 4, 1);
-    expect(state.bases[0]?.ownerId).toBe(captain.playerId);
+    expect(state.bases[0]?.ownerTeam).toBe(captain.team);
   });
 });

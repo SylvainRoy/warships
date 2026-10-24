@@ -21,21 +21,21 @@ export type RadarBlip = {
   alpha: number;
 };
 
-type RadarFrigate = Pick<SnapshotFrigate, "playerId" | "slot" | "x" | "y" | "status">;
+type RadarFrigate = Pick<SnapshotFrigate, "playerId" | "team" | "x" | "y" | "status">;
 type StoredRadarBlip = Omit<RadarBlip, "alpha">;
 
 export class RadarSweep {
   private readonly painted = new Map<string, StoredRadarBlip>();
 
   constructor(
-    private readonly colorForSlot: (slot: number) => string,
+    private readonly colorForTeam: (team: number) => string,
     private readonly onPaint?: (frigate: RadarFrigate) => void,
   ) {}
 
   update(
     prevAngle: number,
     angle: number,
-    own: { x: number; y: number },
+    own: { x: number; y: number; team: number },
     frigates: readonly RadarFrigate[],
     ownId: string,
     now: number,
@@ -50,7 +50,7 @@ export class RadarSweep {
       if (frigate.playerId === ownId || frigate.status !== "alive") continue;
       const bearing = radarBearing(own.x, own.y, frigate.x, frigate.y);
       const bearingOffset = positiveModulo(bearing - startAngle, Math.PI * 2);
-      if (!fullSweep && (bearingOffset === 0 || bearingOffset > sweepSpan)) continue;
+      if (frigate.team !== own.team && !fullSweep && (bearingOffset === 0 || bearingOffset > sweepSpan)) continue;
 
       this.painted.set(frigate.playerId, {
         playerId: frigate.playerId,
@@ -58,7 +58,7 @@ export class RadarSweep {
         x: frigate.x,
         y: frigate.y,
         bearing,
-        color: this.colorForSlot(frigate.slot),
+        color: this.colorForTeam(frigate.team),
         paintedAt: now,
       });
       this.onPaint?.(frigate);

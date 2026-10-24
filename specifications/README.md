@@ -1,6 +1,6 @@
 # Warships — Specifications
 
-**Status: APPROVED v2.9** (2026-10-20) — game release v2.0.0 implements spec v2.5; release v1.0.0 implemented spec v1.18.
+**Status: APPROVED v2.10** (2026-10-21) — game release v2.0.0 implements spec v2.5; release v1.0.0 implemented spec v1.18.
 
 | # | Document | Content |
 |---|----------|---------|
@@ -9,8 +9,8 @@
 | 03 | [Frigate](03-frigate.md) | Dimensions, movement, collisions, hull |
 | 04 | [Weapons](04-weapons.md) | Cannons and torpedoes |
 | 05 | [Controls & HUD](05-controls-and-hud.md) | Key bindings, on-screen indicators |
-| 06 | [Game rules](06-game-rules.md) | Spawning, sinking, scoring |
-| 07 | [Multiplayer & host](07-multiplayer.md) | Joining, player slots, host privileges |
+| 06 | [Game rules](06-game-rules.md) | Spawning, sinking, team scoring, rounds |
+| 07 | [Multiplayer & host](07-multiplayer.md) | Joining, berths, teams, host privileges |
 | 08 | [Technical architecture](08-architecture.md) | Stack, networking, deployment, performance |
 | 09 | [Bases](09-bases.md) | Home and neutral bases, harbours, capture, and turrets |
 | — | [Decisions](open-questions.md) | Q&A log of design decisions |
@@ -23,6 +23,7 @@
 
 ## Changelog
 
+- v2.10 — four-team play, shared team bases and scoring, friendly-fire prevention, and team round results (Q203–Q215).
 - v2.9 — timed rounds with an intermission, results and an Endless option (Q193–Q202).
 - v2.8 — configurable server-side bots with navigation, combat, capture, and resupply (Q182–Q192).
 - v2.7 — hull repair in owned harbours and income from held non-home bases (Q172–Q181).

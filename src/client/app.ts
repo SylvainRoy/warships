@@ -186,10 +186,7 @@ function renderFrame(now: number): void {
     );
     const visible = snapshot?.frigates ?? [];
     const players = snapshot?.players ?? [];
-    drawBases(ctx, client.bases, (ownerId) => {
-      const owner = players.find((player) => player.playerId === ownerId);
-      return owner ? colours[owner.slot - 1] : undefined;
-    });
+    drawBases(ctx, client.bases, (team) => colours[team]);
     drawWakes(visible, serverNow);
     for (const shell of client.renderedProjectiles.shells) drawShell(shell);
     for (const torpedo of client.renderedProjectiles.torpedoes) {
@@ -205,7 +202,7 @@ function renderFrame(now: number): void {
       ctx,
       own,
       client.bases,
-      own.playerId,
+      own.team,
       client.gameSettings.captureTime,
       client.gameSettings.repairTime,
       client.gameSettings,

@@ -30,6 +30,7 @@ export interface Frigate {
   playerId: string;
   name: string;
   slot: number;
+  team: number;
   x: number;
   y: number;
   heading: number;
@@ -84,6 +85,7 @@ export interface PlayerScore {
   playerId: string;
   name: string;
   slot: number;
+  team: number;
   score: number;
   sunk: number;
   host: boolean;
@@ -103,6 +105,7 @@ export interface GameEvent {
   amount?: number;
   cause?: "shell" | "torpedo" | "land" | "turret";
   shotId?: string;
+  team?: number;
   message?: string;
 }
 
@@ -115,6 +118,7 @@ export interface GameState {
   shells: Shell[];
   torpedoes: Torpedo[];
   scores: Record<string, PlayerScore>;
+  teamBonus: number[];
   events: GameEvent[];
   nextProjectileId: number;
   nextShotId: number;
@@ -274,9 +278,10 @@ export function createFrigate(
   heading: number,
   now: number,
   settings: GameSettings = DEFAULT_SETTINGS,
+  team = slot - 1,
 ): Frigate {
   return {
-    playerId, name, slot, x, y, heading, speed: 0, hp: GAME_CONFIG.player.maxHp, status: "alive",
+    playerId, name, slot, team, x, y, heading, speed: 0, hp: GAME_CONFIG.player.maxHp, status: "alive",
     fuel: fuelCapacity(settings), shells: settings.shells, torpedoes: settings.torpedoes, throttle: 0, resupplying: false,
     sinkingStartedAt: 0, respawnAt: 0, spawnProtectedUntil: now + GAME_CONFIG.player.spawnProtection,
     cannonBearing: 0, cannonRange: GAME_CONFIG.cannon.minRange, cannonReadyAt: 0,
@@ -307,6 +312,7 @@ export function spawnFrigate(
   now: number,
   attempts: number = GAME_CONFIG.player.spawnAttempts,
   settings: GameSettings = DEFAULT_SETTINGS,
+  team = slot - 1,
 ): Frigate {
   let best: { x: number; y: number; nearest: number } | undefined;
   const validPoint = (x: number, y: number) => hasSpawnClearance(world, x, y);
@@ -320,7 +326,7 @@ export function spawnFrigate(
       nearest = Math.min(nearest, Math.hypot(other.x - x, other.y - y));
     }
     if (nearest >= GAME_CONFIG.player.spawnDistanceRatio * world.width) {
-      return createFrigate(playerId, name, slot, x, y, random() * Math.PI * 2, now, settings);
+      return createFrigate(playerId, name, slot, x, y, random() * Math.PI * 2, now, settings, team);
     }
     if (!best || nearest > best.nearest) best = { x, y, nearest };
   }
@@ -335,7 +341,7 @@ export function spawnFrigate(
     }
   }
   if (!best) throw new Error("World has no valid spawn point");
-  return createFrigate(playerId, name, slot, best.x, best.y, random() * Math.PI * 2, now, settings);
+  return createFrigate(playerId, name, slot, best.x, best.y, random() * Math.PI * 2, now, settings, team);
 }
 
 export function spawnAtBase(
@@ -345,8 +351,9 @@ export function spawnAtBase(
   base: BaseSite,
   now: number,
   settings: GameSettings = DEFAULT_SETTINGS,
+  team = slot - 1,
 ): Frigate {
-  return createFrigate(playerId, name, slot, base.harbourX, base.harbourY, base.facing, now, settings);
+  return createFrigate(playerId, name, slot, base.harbourX, base.harbourY, base.facing, now, settings, team);
 }
 
 export function spawnPlayerFrigate(
@@ -357,24 +364,40 @@ export function spawnPlayerFrigate(
   others: readonly Frigate[],
   random: () => number,
   now: number,
+  team = slot - 1,
 ): Frigate {
   const home = state.bases.find((base) =>
-    base.kind === "home" && base.homeSlot === slot - 1 && base.ownerId === playerId,
+    base.kind === "home" && base.homeTeam === team && base.ownerTeam === team,
   );
-  const owned = home ?? state.bases.find((base) => base.ownerId === playerId);
-  return owned
-    ? spawnAtBase(playerId, name, slot, owned, now, state.settings)
-    : spawnFrigate(
-        playerId,
-        name,
-        slot,
-        state.world,
-        others,
-        random,
-        now,
-        GAME_CONFIG.player.spawnAttempts,
-        state.settings,
-      );
+  const ownedBases = state.bases.filter((base) => base.active && base.ownerTeam === team);
+  const bases = home ? [home, ...ownedBases.filter((base) => base.id !== home.id)] : ownedBases;
+  for (const base of bases) {
+    for (const radius of [0, 35, 45, 55, 65, 75]) {
+      for (let direction = 0; direction < 16; direction += 1) {
+        const angle = base.facing + direction * Math.PI / 8;
+        const x = base.harbourX + Math.cos(angle) * radius;
+        const y = base.harbourY + Math.sin(angle) * radius;
+        if (!hasSpawnClearance(state.world, x, y)) continue;
+        if (others.some((other) =>
+          other.status === "alive"
+          && pointToHullDistance(x, y, other) < GAME_CONFIG.frigate.length,
+        )) continue;
+        return createFrigate(playerId, name, slot, x, y, base.facing, now, state.settings, team);
+      }
+    }
+  }
+  return spawnFrigate(
+    playerId,
+    name,
+    slot,
+    state.world,
+    others,
+    random,
+    now,
+    GAME_CONFIG.player.spawnAttempts,
+    state.settings,
+    team,
+  );
 }
 
 export function createGameState(world: World, sites: readonly BaseSite[] = []): GameState {
@@ -385,7 +408,7 @@ export function createGameState(world: World, sites: readonly BaseSite[] = []): 
     bases: sites.map((site): Base => ({
       ...site,
       active: site.kind === "neutral",
-      ownerId: null,
+      ownerTeam: null,
       captureBy: null,
       captureProgress: 0,
       turret: "none",
@@ -401,6 +424,7 @@ export function createGameState(world: World, sites: readonly BaseSite[] = []): 
     shells: [],
     torpedoes: [],
     scores: {},
+    teamBonus: Array(GAME_CONFIG.teams.count).fill(0),
     events: [],
     nextProjectileId: 1,
     nextShotId: 1,
@@ -413,13 +437,15 @@ function playerName(state: GameState, playerId: string): string {
 
 export function stepTurrets(state: GameState, now: number): void {
   for (const base of state.bases) {
-    if (!base.active || !base.ownerId || base.turret !== "active" || now < base.turretReadyAt) continue;
+    if (!base.active || base.ownerTeam === null || base.turret !== "active" || now < base.turretReadyAt) continue;
+    const owner = Object.values(state.scores).find((score) => score.team === base.ownerTeam);
+    if (!owner) continue;
     let target: Frigate | undefined;
     let nearestDistance: number = GAME_CONFIG.bases.turretRange;
     for (const frigate of Object.values(state.frigates)) {
       if (
         frigate.status !== "alive"
-        || frigate.playerId === base.ownerId
+        || frigate.team === base.ownerTeam
         || now < frigate.spawnProtectedUntil
       ) continue;
       const distance = Math.hypot(frigate.x - base.cityX, frigate.y - base.cityY);
@@ -435,7 +461,7 @@ export function stepTurrets(state: GameState, now: number): void {
     const shellSpeed = GAME_CONFIG.cannon.shellSpeed * state.settings.shellSpeedPct / 100;
     state.shells.push({
       id: `s${state.nextProjectileId++}`,
-      ownerId: base.ownerId,
+      ownerId: owner.playerId,
       turretBaseId: base.id,
       startX: base.cityX,
       startY: base.cityY,
@@ -463,47 +489,49 @@ export function stepBases(
   for (const base of state.bases) {
     let ownershipChanged = false;
     if (base.kind === "home" && base.returnAt !== null && now >= base.returnAt) {
-      const ownerId = base.lostFrom;
-      const ownerName = ownerId ? playerName(state, ownerId) : null;
+      const ownerTeam = base.lostFrom;
+      const owner = Object.values(state.scores).find((score) => score.team === ownerTeam);
       restoreHome(base, now);
-      if (ownerId && ownerName) {
+      if (owner) {
         state.events.push({
           type: "capture",
-          playerId: ownerId,
-          name: ownerName,
-          message: `${ownerName}'s home base is back`,
+          playerId: owner.playerId,
+          name: owner.name,
+          message: `${owner.name}'s home base is back`,
         });
       }
     }
     const occupants = Object.values(state.frigates).filter((frigate) =>
       frigate.status === "alive" && hullInsideHarbour(frigate, base),
     );
-    const occupant = occupants[0];
+    const capturers = occupants.filter((frigate) => frigate.team !== base.ownerTeam);
+    const captureTeam = capturers[0]?.team;
     if (
       !base.active
-      || occupants.length !== 1
-      || !occupant
-      || occupant.playerId === base.ownerId
+      || captureTeam === undefined
+      || capturers.some((frigate) => frigate.team !== captureTeam)
       || base.turret === "active"
     ) {
       base.captureBy = null;
       base.captureProgress = 0;
     } else {
-      if (base.captureBy !== occupant.playerId) {
-        base.captureBy = occupant.playerId;
+      const capturer = capturers[0]!;
+      if (base.captureBy !== captureTeam) {
+        base.captureBy = captureTeam;
         base.captureProgress = 0;
       }
       base.captureProgress += dt / state.settings.captureTime;
       if (base.captureProgress >= 1) {
-        const previousOwnerId = base.ownerId;
-        const capturerId = occupant.playerId;
+        const previousOwnerTeam = base.ownerTeam;
+        const capturerId = capturer.playerId;
+        const capturerTeam = captureTeam;
         const capturerName = playerName(state, capturerId);
-        base.ownerId = capturerId;
+        base.ownerTeam = capturerTeam;
         base.heldFor = 0;
         ownershipChanged = true;
         base.captureBy = null;
         base.captureProgress = 0;
-        if (base.kind === "home" && base.lostFrom !== null && capturerId === base.lostFrom) {
+        if (base.kind === "home" && base.lostFrom !== null && capturerTeam === base.lostFrom) {
           restoreHome(base, now);
           state.events.push({
             type: "capture",
@@ -511,14 +539,13 @@ export function stepBases(
             name: capturerName,
             message: `${capturerName} took back their home base`,
           });
-        } else if (base.kind === "home" && base.lostFrom === null && previousOwnerId !== null) {
-          const ownerName = playerName(state, previousOwnerId);
-          base.lostFrom = previousOwnerId;
+        } else if (base.kind === "home" && base.lostFrom === null && previousOwnerTeam !== null) {
+          const owner = Object.values(state.scores).find((score) => score.team === previousOwnerTeam);
+          const ownerName = owner?.name ?? "Unknown";
+          base.lostFrom = previousOwnerTeam;
           base.returnAt = now + GAME_CONFIG.bases.homeReturnDelay;
-          const ownerScore = state.scores[previousOwnerId];
-          const capturerScore = state.scores[capturerId];
-          if (ownerScore) ownerScore.score -= GAME_CONFIG.bases.homeCapturePoints;
-          if (capturerScore) capturerScore.score += GAME_CONFIG.bases.homeCapturePoints;
+          state.teamBonus[previousOwnerTeam] = (state.teamBonus[previousOwnerTeam] ?? 0) - GAME_CONFIG.bases.homeCapturePoints;
+          state.teamBonus[capturerTeam] = (state.teamBonus[capturerTeam] ?? 0) + GAME_CONFIG.bases.homeCapturePoints;
           state.events.push({
             type: "capture",
             playerId: capturerId,
@@ -526,9 +553,9 @@ export function stepBases(
             message: `${capturerName} captured ${ownerName}'s home base`,
           });
         } else if (base.kind === "home" && base.lostFrom !== null) {
-          const ownerName = playerName(state, base.lostFrom);
-          const capturerScore = state.scores[capturerId];
-          if (capturerScore) capturerScore.score += GAME_CONFIG.bases.homeCapturePoints;
+          const owner = Object.values(state.scores).find((score) => score.team === base.lostFrom);
+          const ownerName = owner?.name ?? "Unknown";
+          state.teamBonus[capturerTeam] = (state.teamBonus[capturerTeam] ?? 0) + GAME_CONFIG.bases.homeCapturePoints;
           state.events.push({
             type: "capture",
             playerId: capturerId,
@@ -546,21 +573,22 @@ export function stepBases(
       }
     }
 
-    const ownerId = base.ownerId;
+    const ownerTeam = base.ownerTeam;
+    const owner = Object.values(state.scores).find((score) => score.team === ownerTeam);
     const incomeInterval = state.settings.baseIncomeInterval;
-    if (!base.active || !ownerId || incomeInterval === 0) {
+    if (!base.active || ownerTeam === null || incomeInterval === 0) {
       base.heldFor = 0;
     } else if (!ownershipChanged) {
       base.heldFor += dt;
       while (base.heldFor >= incomeInterval) {
         if (base.kind !== "home") {
-          const ownerScore = state.scores[ownerId];
-          if (ownerScore) {
-            ownerScore.score += GAME_CONFIG.baseIncome.payout;
+          state.teamBonus[ownerTeam] = (state.teamBonus[ownerTeam] ?? 0) + GAME_CONFIG.baseIncome.payout;
+          if (owner) {
             state.events.push({
               type: "income",
-              playerId: ownerId,
+              playerId: owner.playerId,
               baseId: base.id,
+              team: ownerTeam,
               x: base.cityX,
               y: base.cityY,
               amount: GAME_CONFIG.baseIncome.payout,
@@ -570,30 +598,30 @@ export function stepBases(
         base.heldFor -= incomeInterval;
       }
     }
-    if (!base.active || !ownerId || base.turret === "active") {
+    if (!base.active || ownerTeam === null || base.turret === "active") {
       base.repairBy = null;
       base.repairProgress = 0;
       continue;
     }
-    const repairer = state.frigates[ownerId];
-    if (
-      !repairer
-      || repairer.status !== "alive"
-      || !hullInsideHarbour(repairer, base)
-      || firedPlayers.has(ownerId)
-    ) {
+    const repairer = Object.values(state.frigates).find((frigate) =>
+      frigate.team === ownerTeam
+      && frigate.status === "alive"
+      && hullInsideHarbour(frigate, base)
+      && !firedPlayers.has(frigate.playerId),
+    );
+    if (!repairer) {
       base.repairBy = null;
       base.repairProgress = 0;
       continue;
     }
-    if (base.repairBy !== ownerId) {
-      base.repairBy = ownerId;
+    if (base.repairBy !== ownerTeam) {
+      base.repairBy = ownerTeam;
       base.repairProgress = 0;
     }
     base.repairProgress += dt / state.settings.repairTime;
     if (base.repairProgress < 1) continue;
     const action = base.turret === "none" ? "installed" : "repaired";
-    const name = playerName(state, ownerId);
+    const name = playerName(state, repairer.playerId);
     base.turret = "active";
     base.turretHp = GAME_CONFIG.bases.turretHp;
     base.turretReadyAt = now;
@@ -601,7 +629,7 @@ export function stepBases(
     base.repairProgress = 0;
     state.events.push({
       type: "turret",
-      playerId: ownerId,
+      playerId: repairer.playerId,
       name,
       message: `${name} ${action} a turret`,
     });
@@ -610,7 +638,7 @@ export function stepBases(
     const canResupply = frigate.status === "alive"
       && frigate.throttle === 0
       && state.bases.some((base) =>
-        base.active && base.ownerId === frigate.playerId && hullInsideHarbour(frigate, base),
+        base.active && base.ownerTeam === frigate.team && hullInsideHarbour(frigate, base),
       );
     if (!canResupply) {
       frigate.resupplying = false;
@@ -874,6 +902,7 @@ export function stepGame(state: GameState, inputs: Record<string, FrigateInput |
     const shellCause = shell.turretBaseId ? "turret" : "shell";
     emitExplosion(state, shell.impactX, shell.impactY, kind, shellCause);
     const shooterName = playerName(state, shell.ownerId);
+    const shooterTeam = state.scores[shell.ownerId]?.team ?? state.frigates[shell.ownerId]?.team;
     const sourceLabel = shell.turretBaseId ? `${shooterName}'s turret` : undefined;
     for (const target of Object.values(state.frigates)) {
       if (
@@ -881,24 +910,26 @@ export function stepGame(state: GameState, inputs: Record<string, FrigateInput |
         && !(shell.turretBaseId && target.playerId === shell.ownerId)
         && pointToHullDistance(shell.impactX, shell.impactY, target) <= GAME_CONFIG.cannon.damageRadius
       ) {
-        damageFrigate(
-          state,
-          target,
-          GAME_CONFIG.cannon.damage,
-          shell.ownerId,
-          now,
-          sourceLabel,
-          shell.turretBaseId ? "turret" : "shell",
-          shell.shotId,
-        );
+        if (target.playerId === shell.ownerId || target.team !== shooterTeam) {
+          damageFrigate(
+            state,
+            target,
+            GAME_CONFIG.cannon.damage,
+            shell.ownerId,
+            now,
+            sourceLabel,
+            shell.turretBaseId ? "turret" : "shell",
+            shell.shotId,
+          );
+        }
         if (target.hp > 0) emitExplosion(state, shell.impactX, shell.impactY, "hit", shellCause);
       }
     }
     for (const base of state.bases) {
       if (
         base.turret !== "active"
-        || !base.ownerId
-        || base.ownerId === shell.ownerId
+        || base.ownerTeam === null
+        || base.ownerTeam === shooterTeam
         || distanceToCity(base, shell.impactX, shell.impactY) > GAME_CONFIG.cannon.damageRadius
       ) continue;
       const previousHp = base.turretHp;
@@ -916,7 +947,8 @@ export function stepGame(state: GameState, inputs: Record<string, FrigateInput |
       if (base.turretHp > 0) continue;
       base.turret = "destroyed";
       emitExplosion(state, base.cityX, base.cityY, "hit", shellCause);
-      const ownerName = base.ownerId ? playerName(state, base.ownerId) : "Unknown";
+      const owner = Object.values(state.scores).find((score) => score.team === base.ownerTeam);
+      const ownerName = owner?.name ?? "Unknown";
       state.events.push({
         type: "turret",
         playerId: shell.ownerId,
@@ -951,7 +983,10 @@ export function stepGame(state: GameState, inputs: Record<string, FrigateInput |
       for (const target of Object.values(state.frigates)) {
         if (target.status !== "alive" || (target.playerId === torpedo.ownerId && torpedo.elapsed < GAME_CONFIG.torpedo.armingTime)) continue;
         if (segmentHitsHull(oldX, oldY, x, y, target)) {
-          damageFrigate(state, target, GAME_CONFIG.torpedo.damage, torpedo.ownerId, now, undefined, "torpedo", torpedo.shotId);
+          const shooterTeam = state.scores[torpedo.ownerId]?.team ?? state.frigates[torpedo.ownerId]?.team;
+          if (target.playerId === torpedo.ownerId || target.team !== shooterTeam) {
+            damageFrigate(state, target, GAME_CONFIG.torpedo.damage, torpedo.ownerId, now, undefined, "torpedo", torpedo.shotId);
+          }
           emitExplosion(state, x, y, "hit", "torpedo");
           exploded = true;
           break;
@@ -979,12 +1014,12 @@ export function regenerateGameWorld(
   state.world = world;
   state.bases = sites.map((site): Base => {
     const owner = site.kind === "home"
-      ? Object.values(state.scores).find((score) => score.slot === (site.homeSlot ?? -1) + 1)
+      ? Object.values(state.scores).find((score) => score.team === site.homeTeam)
       : undefined;
     return {
       ...site,
       active: site.kind === "neutral" || Boolean(owner),
-      ownerId: owner?.playerId ?? null,
+      ownerTeam: owner?.team ?? null,
       captureBy: null,
       captureProgress: 0,
       turret: owner ? "active" : "none",
@@ -1002,20 +1037,16 @@ export function regenerateGameWorld(
   const frigates = Object.values(state.frigates);
   const respawned: Frigate[] = [];
   for (const frigate of frigates) {
-    const home = state.bases.find((base) => base.kind === "home" && base.homeSlot === frigate.slot - 1);
-    const fresh = home
-      ? spawnAtBase(frigate.playerId, frigate.name, frigate.slot, home, now, state.settings)
-      : spawnFrigate(
-          frigate.playerId,
-          frigate.name,
-          frigate.slot,
-          state.world,
-          respawned,
-          random,
-          now,
-          GAME_CONFIG.player.spawnAttempts,
-          state.settings,
-        );
+    const fresh = spawnPlayerFrigate(
+      frigate.playerId,
+      frigate.name,
+      frigate.slot,
+      state,
+      respawned,
+      random,
+      now,
+      frigate.team,
+    );
     const score = state.scores[frigate.playerId];
     const host = score?.host ?? false;
     const connected = score?.connected ?? true;

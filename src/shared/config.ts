@@ -138,5 +138,11 @@ export const GAME_CONFIG = {
     ],
   },
   rounds: { defaultMinutes: 10, intermissionSeconds: 10 },
+  teams: {
+    count: 4,
+    switchCooldown: 30,
+    names: ["Blue", "Red", "Yellow", "Purple"],
+    colours: ["#4b9bff", "#ff6266", "#f3c94e", "#c084fc"],
+  },
   name: { minLength: 1, maxLength: 16 },
 } as const;

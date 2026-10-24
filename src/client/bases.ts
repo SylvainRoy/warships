@@ -7,7 +7,7 @@ import { leastFullResupplyFraction } from "./feedback.js";
 export function drawBases(
   ctx: CanvasRenderingContext2D,
   bases: readonly BasePublic[],
-  colorForOwner: (ownerId: string) => string | undefined,
+  colorForTeam: (team: number) => string | undefined,
 ): void {
   const citySize = GAME_CONFIG.bases.citySize;
   const harbourSize = GAME_CONFIG.bases.harbourSize;
@@ -99,7 +99,7 @@ export function drawBases(
       ctx.moveTo(poleX, poleY + 13);
       ctx.lineTo(poleX, poleY);
       ctx.stroke();
-      ctx.fillStyle = base.ownerId === null ? "#fff" : colorForOwner(base.ownerId) ?? "#fff";
+      ctx.fillStyle = base.ownerTeam === null ? "#fff" : colorForTeam(base.ownerTeam) ?? "#fff";
       ctx.fillRect(poleX + 1, poleY, 9, 6);
     }
     ctx.restore();
@@ -110,13 +110,13 @@ export function drawCaptureProgress(
   ctx: CanvasRenderingContext2D,
   frigate: { x: number; y: number; fuel: number; shells: number; torpedoes: number; hp: number; resupplying: boolean },
   bases: readonly BasePublic[],
-  playerId: string,
+  team: number,
   captureTime: number,
   _repairTime: number,
   settings: Pick<GameSettings, "mapSize" | "fuelCrossings" | "shells" | "torpedoes">,
 ): void {
-  const repairBase = bases.find((candidate) => candidate.repairBy === playerId);
-  const captureBase = bases.find((candidate) => candidate.captureBy === playerId);
+  const repairBase = bases.find((candidate) => candidate.repairBy === team);
+  const captureBase = bases.find((candidate) => candidate.captureBy === team);
   const base = repairBase ?? captureBase;
   const repairing = Boolean(repairBase);
   const capturing = !repairing && Boolean(captureBase);

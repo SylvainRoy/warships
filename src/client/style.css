@@ -63,6 +63,9 @@ button {
   font: 700 13px "Manrope", sans-serif;
 }
 #join-button { width: 100%; margin-top: 12px; padding: 13px 16px; text-align: left; }
+#join-form .team-picker { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px; margin-top: 10px; }
+#join-form .team-choice { min-height: 44px; padding: 6px 9px; border: 1px solid #294958; background: #0b2634; color: #dbe9ed; text-align: left; white-space: pre-line; font: 600 11px "Manrope", sans-serif; }
+#join-form .team-choice[aria-pressed="true"] { outline: 2px solid currentColor; }
 #join-button span { float: right; font-size: 18px; line-height: 14px; }
 #join-button:disabled { cursor: wait; opacity: .55; }
 .error { min-height: 19px; padding-top: 7px; color: #ff9b8f; font-size: 12px; }
