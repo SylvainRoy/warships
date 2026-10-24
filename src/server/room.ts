@@ -756,6 +756,7 @@ export class Room {
               status: frigate.status,
               sinkingStartedAt: frigate.sinkingStartedAt,
               spawnProtectedUntil: frigate.spawnProtectedUntil,
+              throttle: frigate.throttle,
             },
       );
       const snapshot: Extract<ServerMessage, { type: "snapshot" }> = {

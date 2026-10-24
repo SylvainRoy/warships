@@ -559,6 +559,29 @@ describe("multiplayer room", () => {
     }
   });
 
+  it("includes commanded throttle for non-own frigates in snapshots", () => {
+    const room = roomWithoutBots(11, () => 0, openWorld, fixtureSites);
+    const observer = connect(room);
+    const guest = connect(room);
+    join(room, observer, "Harbor");
+    join(room, guest, "Buoy");
+    const guestId = welcome(guest).playerId;
+    send(room, guest, {
+      type: "input",
+      seq: 1,
+      keys: 0,
+      throttle: 2,
+      fireCannon: false,
+      fireTorpedo: false,
+    });
+
+    room.advanceTick();
+    room.advanceTick();
+
+    const snapshot = observer.last("snapshot");
+    expect(snapshot?.frigates.find((frigate) => frigate.playerId === guestId)).toMatchObject({ throttle: 2 });
+  });
+
   it("broadcasts damage events to every joined client without adding a message", () => {
     const room = roomWithoutBots(11, () => 0, openWorld, fixtureSites);
     const shooterSocket = connect(room);

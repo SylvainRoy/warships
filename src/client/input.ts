@@ -206,10 +206,12 @@ window.addEventListener("keydown", (event) => {
   const action = actionForCode(client.bindings, event.code);
   if (action === "throttleUp") {
     client.throttleLevel = Math.min(3, client.throttleLevel + 1);
+    if (client.predictedOwn?.status === "alive") client.predictedOwn.throttle = client.throttleLevel;
     return;
   }
   if (action === "throttleDown") {
     client.throttleLevel = Math.max(-1, client.throttleLevel - 1);
+    if (client.predictedOwn?.status === "alive") client.predictedOwn.throttle = client.throttleLevel;
     return;
   }
   if (action === "fireCannon") client.cannonFirePending = true;

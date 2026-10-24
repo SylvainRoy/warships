@@ -4,6 +4,7 @@ import type { SnapshotFrigate } from "../../shared/protocol.js";
 import { colours, ctx } from "../dom.js";
 import { floatingNumberStyle, type HitNumber } from "../feedback.js";
 import { effects, hitMarkers, hitNumbers, incomeNumbers } from "../gameEvents.js";
+import { throttleWaveOffsets } from "../throttleWaves.js";
 import {
   client,
   type HitMarker,
@@ -191,6 +192,19 @@ export function drawFrigate(frigate: SnapshotFrigate, now: number, debug: boolea
   ctx.translate(frigate.x, frigate.y);
   ctx.rotate(frigate.heading);
   ctx.globalAlpha = 1 - sinkingProgress * 0.8;
+  if (frigate.status === "alive") {
+    const waveStyle = GAME_CONFIG.effects.throttleWave;
+    ctx.strokeStyle = waveStyle.stroke;
+    ctx.lineWidth = waveStyle.lineWidth;
+    ctx.lineCap = "round";
+    for (const offset of throttleWaveOffsets(frigate.throttle)) {
+      const direction = offset < 0 ? -1 : 1;
+      ctx.beginPath();
+      ctx.moveTo(offset, -waveStyle.chord / 2);
+      ctx.quadraticCurveTo(offset + direction * waveStyle.convexity, 0, offset, waveStyle.chord / 2);
+      ctx.stroke();
+    }
+  }
   ctx.fillStyle = "rgba(0, 12, 19, .38)";
   ctx.beginPath();
   ctx.ellipse(-1, 1.5, 15.5, 6, 0, 0, Math.PI * 2);

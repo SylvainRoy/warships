@@ -24,8 +24,8 @@ export type LobbyMessage = {
 
 export type SnapshotFrigate = Pick<
   Frigate,
-  "playerId" | "name" | "slot" | "team" | "x" | "y" | "heading" | "hp" | "status" | "sinkingStartedAt" | "spawnProtectedUntil"
-> & Partial<Omit<Frigate, "playerId" | "name" | "slot" | "team" | "x" | "y" | "heading" | "hp" | "status" | "sinkingStartedAt" | "spawnProtectedUntil">>;
+  "playerId" | "name" | "slot" | "team" | "x" | "y" | "heading" | "hp" | "status" | "sinkingStartedAt" | "spawnProtectedUntil" | "throttle"
+> & Partial<Omit<Frigate, "playerId" | "name" | "slot" | "team" | "x" | "y" | "heading" | "hp" | "status" | "sinkingStartedAt" | "spawnProtectedUntil" | "throttle">>;
 
 export interface RoundResult {
   playerId: string;

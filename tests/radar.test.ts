@@ -17,6 +17,7 @@ function frigate(
     x,
     y,
     heading: 0,
+    throttle: 0,
     hp: 100,
     status,
     sinkingStartedAt: 0,
