@@ -3,8 +3,8 @@
 ## Dimensions and appearance
 
 - Length **30 u**, beam (width) **10 u**. Collision shape: a rotated rectangle (or capsule) of that size.
-- Each player has a distinct colour (slot 1–4: e.g. blue, red, yellow, purple). The colour is used for the hull, the name label and the scoreboard.
-- The player's name is displayed above their frigate. A health bar is displayed under it.
+- Each player has a distinct colour (slot 1–4: e.g. blue, red, yellow, purple). The colour is used for the hull and the scoreboard.
+- The player's name is displayed above their frigate in black, drawn beneath every frigate's hull and throttle waves so the white waves stay readable (Q251). A health bar is displayed under it.
 - Visual style: simple flat vector graphics. Forward movement leaves a V-shaped wake from the stern: its pale arms widen with age and speed around a central churn band, fading over 3 s. Astern movement leaves only a shorter churn band, fading over 1 s. Still, translucent white throttle-wave arcs show the commanded throttle on every alive boat: one, two, or three convex-forward arcs ahead of the bow at throttle 1, 2, or 3; one convex-backward arc behind the stern at throttle −1; none at STOP. The arcs are hidden while sinking or waiting, blink with spawn protection, and never appear on radar (Q216–Q221). A sinking boat's wake fades in place; respawning starts a fresh wake after any position jump over 50 u.
 
 ## Movement model

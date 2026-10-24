@@ -181,9 +181,22 @@ export function drawTorpedoWake(torpedo: Torpedo): void {
   ctx.restore();
 }
 
+function frigateHidden(frigate: SnapshotFrigate, now: number): boolean {
+  if (frigate.status === "waiting") return true;
+  return frigate.status === "alive" && now < frigate.spawnProtectedUntil && Math.floor(now * 8) % 2 === 0;
+}
+
+export function drawFrigateName(frigate: SnapshotFrigate, now: number): void {
+  if (frigateHidden(frigate, now)) return;
+  ctx.fillStyle = "#000000";
+  ctx.font = "600 13px Manrope, sans-serif";
+  ctx.textAlign = "center";
+  ctx.textBaseline = "bottom";
+  ctx.fillText(frigate.name, frigate.x, frigate.y - 12);
+}
+
 export function drawFrigate(frigate: SnapshotFrigate, now: number, debug: boolean): void {
-  if (frigate.status === "waiting") return;
-  if (frigate.status === "alive" && now < frigate.spawnProtectedUntil && Math.floor(now * 8) % 2 === 0) return;
+  if (frigateHidden(frigate, now)) return;
   const sinkingProgress = frigate.status === "sinking"
     ? Math.min(1, (now - frigate.sinkingStartedAt) / GAME_CONFIG.player.sinkAnimation)
     : 0;
@@ -240,11 +253,6 @@ export function drawFrigate(frigate: SnapshotFrigate, now: number, debug: boolea
   }
   ctx.restore();
   ctx.globalAlpha = 1;
-  ctx.fillStyle = "#f3f9f7";
-  ctx.font = "600 13px Manrope, sans-serif";
-  ctx.textAlign = "center";
-  ctx.textBaseline = "bottom";
-  ctx.fillText(frigate.name, frigate.x, frigate.y - 12);
   if (frigate.playerId !== client.ownId) {
     const economy = client.latestSnapshot?.economy?.players.find((player) => player.playerId === frigate.playerId);
     const hullLevel = client.gameSettings.treasures ? economy?.upgrades.hull ?? 0 : 0;

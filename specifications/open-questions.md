@@ -267,3 +267,4 @@ All questions raised during the specification phase are resolved. Each line give
 - **Q248 — Economy setting:** host setting `Treasures & upgrades` defaults On. Off clears treasures, disables money awards and purchases/effects, resets wallets/upgrades, and hides economy UI. Turning On spawns treasures. Decided 2026-10-20.
 - **Q249 — Round earnings:** the end screen shows `$ earned` for the round as information only; it does not affect winner rules. Decided 2026-10-20.
 - **Q250 — Turret repair feed:** `<name> installed|repaired a turret` goes only to the repairing player; other players, including teammates, see nothing. Turret destruction lines stay public. Decided 2026-10-20 after playtest.
+- **Q251 — Name label vs throttle waves:** frigate names are drawn in black, beneath the hull and throttle waves, so the white waves are no longer confused with the white name. Decided 2026-10-20 after playtest.

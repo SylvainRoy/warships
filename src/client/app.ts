@@ -15,6 +15,7 @@ import {
   drawDamageVignette,
   drawExplosion,
   drawFrigate,
+  drawFrigateName,
   drawHitFeedback,
   drawReticle,
   drawShell,
@@ -195,6 +196,8 @@ function renderFrame(now: number): void {
       drawTorpedoWake(torpedo);
       drawTorpedo(torpedo);
     }
+    for (const frigate of visible) if (frigate.playerId !== client.ownId) drawFrigateName(frigate, serverNow);
+    if (own) drawFrigateName(own, serverNow);
     for (const frigate of visible) if (frigate.playerId !== client.ownId) drawFrigate(frigate, serverNow, client.debugVisible);
     if (own) drawFrigate(own, serverNow, client.debugVisible);
     for (const effect of effects) drawExplosion(effect, now);

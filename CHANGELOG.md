@@ -4,6 +4,7 @@ All notable changes to Warships are recorded here. Versions follow semantic vers
 
 ## [Unreleased]
 
+- Changed frigate name labels to black, drawn beneath the hull and throttle waves, so the white throttle waves stand out (Q251).
 - Fixed turret repair and installation feed lines so only the player who completed the repair or installation sees them (Q250).
 - Added personal money, treasure pickups, boat upgrades, and the host's Treasures & upgrades setting (Q238–Q249).
 
