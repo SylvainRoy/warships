@@ -62,6 +62,7 @@ export const client = {
   tabHeld: false,
   menuOpen: false,
   upgradeMenuOpen: false,
+  escapeGuardUntil: 0,
   menuPending: null as MenuPending,
   debugVisible: false,
   cannonFirePending: false,
@@ -78,4 +79,5 @@ export const client = {
   hasServerTimeOffset: false,
   reconnectTimer: undefined as number | undefined,
   reconnectForLobby: false,
+  resuming: false,
 };

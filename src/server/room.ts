@@ -185,10 +185,14 @@ export class Room {
       this.removeSession(currentSession, { closeSocket: false });
     }
     let session = token ? [...this.sessions.values()].find((candidate) => candidate.token === token) : undefined;
-    if (session && (session.disconnectedAt === null || now - session.disconnectedAt > GAME_CONFIG.network.reconnectGrace)) session = undefined;
+    if (session && session.disconnectedAt !== null && now - session.disconnectedAt > GAME_CONFIG.network.reconnectGrace) session = undefined;
     if (session && session.name.toLocaleLowerCase() !== normalized) session = undefined;
     if (session) {
-      if (session.socket) this.disconnect(session.socket);
+      if (session.socket) {
+        const replacedSocket = session.socket;
+        session.socket = socket;
+        replacedSocket.close(4001, "replaced");
+      }
       session.socket = socket;
       session.disconnectedAt = null;
       session.inputQueue = [];

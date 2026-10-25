@@ -4,6 +4,7 @@ All notable changes to Warships are recorded here. Versions follow semantic vers
 
 ## [Unreleased]
 
+- Fixed Escape handling so closing the upgrade panel cannot accidentally open the menu or leave the battle; connection-loss retries continue, and same-token joins can take over a lingering socket (Q252–Q254).
 - Fixed turret repair and installation feed lines so only the player who completed the repair or installation sees them (Q250).
 - Added personal money, treasure pickups, boat upgrades, and the host's Treasures & upgrades setting (Q238–Q249).
 

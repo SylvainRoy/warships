@@ -18,6 +18,7 @@ import {
 } from "./controls.js";
 import { renderLobbyControlsHelp } from "./lobby.js";
 import { audio } from "./gameEvents.js";
+import { ESCAPE_GUARD_MS, escapeAction } from "./escape.js";
 import { sendUpgrade } from "./net.js";
 import { client } from "./state.js";
 
@@ -163,6 +164,7 @@ window.addEventListener("keydown", (event) => {
   const target = event.target;
   const isTyping = target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement;
   if (!client.joined || isTyping) return;
+  if (event.code === "Escape") event.preventDefault();
   if (client.round?.phase === "over" && event.code !== "Escape" && event.code !== "Tab") {
     event.preventDefault();
     event.stopImmediatePropagation();
@@ -198,22 +200,36 @@ window.addEventListener("keydown", (event) => {
     client.tabHeld = true;
     return;
   }
-  if (event.code === "Escape" && !event.repeat) {
-    if (client.upgradeMenuOpen) {
+  if (event.code === "Escape") {
+    const now = performance.now();
+    const action = escapeAction({
+      upgradeMenuOpen: client.upgradeMenuOpen,
+      menuPending: client.menuPending !== null,
+      guardUntil: client.escapeGuardUntil,
+    }, now, event.repeat);
+    if (action === "closeUpgrade") {
       client.upgradeMenuOpen = false;
-      event.preventDefault();
+      client.escapeGuardUntil = now + ESCAPE_GUARD_MS;
       event.stopImmediatePropagation();
       return;
     }
-    if (client.menuPending) {
+    if (action === "ignore") {
+      if (!event.repeat && now < client.escapeGuardUntil) {
+        client.escapeGuardUntil = now + ESCAPE_GUARD_MS;
+      }
+      return;
+    }
+    if (action === "cancelPending") {
       client.menuPending = null;
       return;
     }
-    client.menuOpen = !client.menuOpen;
-    if (client.menuOpen) {
-      pressed.clear();
-      client.cannonFirePending = false;
-      client.torpedoFirePending = false;
+    if (action === "toggleMenu") {
+      client.menuOpen = !client.menuOpen;
+      if (client.menuOpen) {
+        pressed.clear();
+        client.cannonFirePending = false;
+        client.torpedoFirePending = false;
+      }
     }
     return;
   }
