@@ -28,12 +28,14 @@ vi.mock("node:crypto", async (importOriginal) => {
 class FakeSocket extends EventEmitter {
   readyState = 1;
   readonly messages: ServerMessage[] = [];
+  readonly closeCalls: { code: number; reason: string }[] = [];
 
   send(data: string): void {
     this.messages.push(JSON.parse(data) as ServerMessage);
   }
 
-  close(): void {
+  close(code = 1000, reason = ""): void {
+    this.closeCalls.push({ code, reason });
     this.readyState = 3;
     this.emit("close");
   }
@@ -257,6 +259,42 @@ describe("multiplayer room", () => {
     expect(socket.last("error")).toBeUndefined();
     expect(room.sessions.size).toBe(1);
     expect(room.sessions.has(firstWelcome.playerId)).toBe(true);
+  });
+
+  it("takes over a connected session with its same-name token", () => {
+    const room = roomWithoutBots(11, () => 0, openWorld, fixtureSites);
+    const oldSocket = connect(room);
+    join(room, oldSocket, "Alice");
+    const firstWelcome = welcome(oldSocket);
+    expect(oldSocket.readyState).toBe(1);
+
+    const newSocket = connect(room);
+    join(room, newSocket, "alice", firstWelcome.token);
+
+    expect(welcome(newSocket)).toMatchObject({ playerId: firstWelcome.playerId, token: firstWelcome.token });
+    expect(newSocket.last("error")).toBeUndefined();
+    expect(oldSocket.closeCalls).toContainEqual({ code: 4001, reason: "replaced" });
+    expect(room.sessions.size).toBe(1);
+    expect(room.sessions.get(firstWelcome.playerId)?.socket).toBe(newSocket);
+    expect(room.sessions.get(firstWelcome.playerId)?.disconnectedAt).toBeNull();
+    expect(room.game.events.filter((event) => event.type === "leave")).toHaveLength(0);
+  });
+
+  it("keeps rejecting a same-token join with another player's name", () => {
+    const room = roomWithoutBots(11, () => 0, openWorld, fixtureSites);
+    const aliceSocket = connect(room);
+    join(room, aliceSocket, "Alice");
+    const alice = welcome(aliceSocket);
+    const bobSocket = connect(room);
+    join(room, bobSocket, "Bob");
+
+    const wrongNameSocket = connect(room);
+    join(room, wrongNameSocket, "Bob", alice.token);
+
+    expect(wrongNameSocket.last("error")?.code).toBe("name_taken");
+    expect(wrongNameSocket.last("welcome")).toBeUndefined();
+    expect(aliceSocket.readyState).toBe(1);
+    expect(room.sessions.get(alice.playerId)?.socket).toBe(aliceSocket);
   });
 
   it("replaces a session when the same connection joins with a different name", () => {

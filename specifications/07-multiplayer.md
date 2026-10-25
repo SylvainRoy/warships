@@ -15,6 +15,8 @@ A spawn point is valid only when no land tile lies within 60 u of the frigate hu
 
 - Closing the tab or losing the connection for more than **10 s** frees the slot: the frigate disappears and its score is dropped.
 - A reconnection within those 10 s with the same name resumes the same frigate and score.
+- When a joined connection is lost, the client shows the lobby and `Connection lost — reconnecting…`, then retries every 1 s while resuming; a socket still connecting after 5 s is closed so it can retry. A welcome clears the message and stops retries. A join error stops retries and leaves its error visible.
+- A valid token and matching case-insensitive name can take over the same session even while its old socket is still connected. The server closes that socket with code 4001 and reason `replaced`; the old tab shows `This captain joined from another tab.` and does not reconnect. Takeover does not announce a disconnect. Code 4000 retains the kicked behavior and does not reconnect (Q254).
 - If an already-joined connection sends Join again, the server MUST resend the current welcome without creating a session when the name matches case-insensitively; if the name differs, it MUST fully remove the old session without closing the connection before processing the new join (Q143).
 - Team bases remain active while any teammate remains, including during reconnect grace. When a team's last session leaves or switches out, its home becomes inactive and its other bases become neutral (Q91, Q117, Q207).
 

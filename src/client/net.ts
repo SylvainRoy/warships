@@ -25,6 +25,7 @@ import {
 import { pressed } from "./input.js";
 import { renderLobby } from "./lobby.js";
 import { isOwnHost } from "./menu.js";
+import { closeOutcome } from "./reconnect.js";
 import { resetWorldCaches } from "./render/terrain.js";
 import { ProjectileStore } from "./projectiles.js";
 
@@ -34,11 +35,30 @@ export function socketAddress(): string {
   return `${location.protocol === "https:" ? "wss" : "ws"}://${location.host}/ws`;
 }
 
+function clearReconnectTimer(): void {
+  if (client.reconnectTimer !== undefined) {
+    window.clearTimeout(client.reconnectTimer);
+    client.reconnectTimer = undefined;
+  }
+}
+
+function scheduleReconnect(): void {
+  clearReconnectTimer();
+  client.reconnectTimer = window.setTimeout(() => {
+    client.reconnectTimer = undefined;
+    if (client.resuming || client.reconnectForLobby) connect();
+  }, 1000);
+}
+
 export function connect(): void {
   if (client.socket && (client.socket.readyState === WebSocket.OPEN || client.socket.readyState === WebSocket.CONNECTING)) return;
   const connection = new WebSocket(socketAddress());
   client.socket = connection;
+  const connectionTimeout = window.setTimeout(() => {
+    if (connection.readyState === WebSocket.CONNECTING) connection.close();
+  }, 5000);
   connection.addEventListener("open", () => {
+    window.clearTimeout(connectionTimeout);
     client.reconnectForLobby = false;
     connection.send(JSON.stringify({ type: "hello" }));
     const token = sessionStorage.getItem("warships.token");
@@ -54,6 +74,9 @@ export function connect(): void {
       handleMessage(payload);
     } catch (error) {
       console.error(error);
+      client.resuming = false;
+      client.reconnectForLobby = false;
+      clearReconnectTimer();
       client.joined = false;
       client.shouldAutoJoin = false;
       sessionStorage.removeItem("warships.token");
@@ -74,15 +97,26 @@ export function connect(): void {
     }
   });
   connection.addEventListener("close", (event) => {
+    window.clearTimeout(connectionTimeout);
+    const outcome = closeOutcome(event.code, {
+      joined: client.joined,
+      resuming: client.resuming,
+      reconnectForLobby: client.reconnectForLobby,
+    });
     if (client.socket === connection) client.socket = null;
     if (event.code === 4000) showKickedMessage();
-    const shouldReconnect = client.joined || client.reconnectForLobby;
+    client.resuming = outcome.resuming;
     if (client.joined) {
       client.joined = false;
       lobby.hidden = false;
-      addFeed("Connection lost · reconnecting");
+      if (event.code !== 4000 && event.code !== 4001) addFeed("Connection lost · reconnecting");
     }
-    if (shouldReconnect) client.reconnectTimer = window.setTimeout(connect, 1000);
+    if (outcome.resuming || event.code === 4000 || event.code === 4001) {
+      lobby.hidden = false;
+    }
+    if (outcome.message) errorBox.textContent = outcome.message;
+    clearReconnectTimer();
+    if (outcome.reconnect) scheduleReconnect();
   });
   connection.addEventListener("error", () => connection.close());
 }
@@ -108,6 +142,9 @@ export function handleMessage(message: ServerMessage): void {
       sendJoin();
     }
   } else if (message.type === "welcome") {
+    client.resuming = false;
+    clearReconnectTimer();
+    errorBox.textContent = "";
     client.throttleLevel = 0;
     projectileStore.clear();
     client.renderedProjectiles = { shells: [], torpedoes: [] };
@@ -179,6 +216,8 @@ export function handleMessage(message: ServerMessage): void {
       showKickedMessage();
       return;
     }
+    client.resuming = false;
+    clearReconnectTimer();
     const errors: Record<string, string> = {
       name_taken: "That captain name is already in use.",
       full: "Server full · we'll join when a berth opens.",
@@ -193,6 +232,8 @@ export function handleMessage(message: ServerMessage): void {
 }
 
 export function showKickedMessage(): void {
+  client.resuming = false;
+  clearReconnectTimer();
   sessionStorage.removeItem("warships.token");
   client.reconnectForLobby = true;
   client.shouldAutoJoin = false;
